@@ -3,7 +3,7 @@ mod recording;
 
 use recording::AudioRecorder;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -14,6 +14,16 @@ const TRAY_ID: &str = "main";
 
 static RECORDING: AtomicBool = AtomicBool::new(false);
 static LAST_REC_PRESS: Mutex<Option<Instant>> = Mutex::new(None);
+
+struct ShortcutIds {
+    toggle: u32,
+    recording: u32,
+}
+
+static SHORTCUT_IDS: RwLock<ShortcutIds> = RwLock::new(ShortcutIds {
+    toggle: 0,
+    recording: 0,
+});
 
 fn toggle_window(window: &WebviewWindow) {
     if window.is_visible().unwrap_or(false) {
@@ -29,7 +39,7 @@ fn toggle_window(window: &WebviewWindow) {
 fn parse_shortcut(shortcut_str: &str) -> Option<Shortcut> {
     let parts: Vec<&str> = shortcut_str.split('+').collect();
     let mut modifiers = Modifiers::empty();
-    let mut key_code = None;
+    let mut key_code: Option<Code> = None;
 
     for part in &parts {
         match *part {
@@ -37,15 +47,11 @@ fn parse_shortcut(shortcut_str: &str) -> Option<Shortcut> {
             "Shift" => modifiers |= Modifiers::SHIFT,
             "Alt" => modifiers |= Modifiers::ALT,
             "Command" | "Super" => modifiers |= Modifiers::SUPER,
-            "Quote" => key_code = Some(Code::Quote),
-            "Space" => key_code = Some(Code::Space),
-            "KeyN" => key_code = Some(Code::KeyN),
-            "KeyR" => key_code = Some(Code::KeyR),
-            "KeyS" => key_code = Some(Code::KeyS),
-            "KeyQ" => key_code = Some(Code::KeyQ),
-            "Backslash" => key_code = Some(Code::Backslash),
-            "Escape" => key_code = Some(Code::Escape),
-            _ => {}
+            s => {
+                if let Ok(code) = s.parse::<Code>() {
+                    key_code = Some(code);
+                }
+            }
         }
     }
 
@@ -137,6 +143,9 @@ fn update_shortcut(
     let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
     let mut app_config = config::load_config(&app_data_dir);
 
+    let old_toggle = app_config.shortcut.clone();
+    let old_recording = app_config.recording_shortcut.clone();
+
     match shortcut_type.as_str() {
         "toggle" => app_config.shortcut = shortcut,
         "recording" => app_config.recording_shortcut = shortcut,
@@ -145,14 +154,33 @@ fn update_shortcut(
 
     config::save_config(&app_data_dir, &app_config)?;
 
-    // Re-register shortcuts
-    if let Some(sc) = parse_shortcut(&app_config.shortcut) {
-        let _ = app_handle.global_shortcut().unregister(sc.clone());
-        let _ = app_handle.global_shortcut().register(sc);
+    if let Some(sc) = parse_shortcut(&old_toggle) {
+        let _ = app_handle.global_shortcut().unregister(sc);
     }
-    if let Some(sc) = parse_shortcut(&app_config.recording_shortcut) {
-        let _ = app_handle.global_shortcut().unregister(sc.clone());
-        let _ = app_handle.global_shortcut().register(sc);
+    if let Some(sc) = parse_shortcut(&old_recording) {
+        let _ = app_handle.global_shortcut().unregister(sc);
+    }
+
+    let new_toggle = parse_shortcut(&app_config.shortcut);
+    let new_rec = parse_shortcut(&app_config.recording_shortcut);
+
+    {
+        let mut ids = SHORTCUT_IDS.write().unwrap();
+        ids.toggle = new_toggle.map(|s| s.id()).unwrap_or(0);
+        ids.recording = new_rec.map(|s| s.id()).unwrap_or(0);
+    }
+
+    if let Some(sc) = new_toggle {
+        app_handle
+            .global_shortcut()
+            .register(sc)
+            .map_err(|e| e.to_string())?;
+    }
+    if let Some(sc) = new_rec {
+        app_handle
+            .global_shortcut()
+            .register(sc)
+            .map_err(|e| e.to_string())?;
     }
 
     Ok(())
@@ -266,7 +294,13 @@ pub fn run() {
             let rec_shortcut = parse_shortcut(&recording_shortcut_str);
             let esc_shortcut = Shortcut::new(None, Code::Escape);
 
-            let rec_id = rec_shortcut.as_ref().map(|s| s.id());
+            let toggle_id = toggle_shortcut.as_ref().map(|s| s.id()).unwrap_or(0);
+            let rec_id = rec_shortcut.as_ref().map(|s| s.id()).unwrap_or(0);
+            {
+                let mut ids = SHORTCUT_IDS.write().unwrap();
+                ids.toggle = toggle_id;
+                ids.recording = rec_id;
+            }
             let esc_id = esc_shortcut.id();
 
             let app_handle = app.handle().clone();
@@ -280,6 +314,10 @@ pub fn run() {
                             return;
                         }
                         let id = shortcut.id();
+                        let (_current_toggle_id, current_rec_id) = {
+                            let ids = SHORTCUT_IDS.read().unwrap();
+                            (ids.toggle, ids.recording)
+                        };
 
                         if id == esc_id {
                             let is_recording = RECORDING.load(Ordering::Relaxed);
@@ -301,7 +339,7 @@ pub fn run() {
                             return;
                         }
 
-                        if rec_id == Some(id) {
+                        if current_rec_id != 0 && id == current_rec_id {
                             let now = Instant::now();
                             let should_ignore = LAST_REC_PRESS
                                 .lock()
