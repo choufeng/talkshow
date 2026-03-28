@@ -14,5 +14,5 @@ src-tauri/target/
 src-tauri/.build/
 .build/
 
-# Worktrees
 .worktrees/
+.superpowers/
