@@ -38,6 +38,7 @@ fn parse_shortcut(shortcut_str: &str) -> Option<Shortcut> {
             "KeyR" => key_code = Some(Code::KeyR),
             "KeyS" => key_code = Some(Code::KeyS),
             "KeyQ" => key_code = Some(Code::KeyQ),
+            "Backslash" => key_code = Some(Code::Backslash),
             "Escape" => key_code = Some(Code::Escape),
             _ => {}
         }
@@ -104,7 +105,7 @@ pub fn run() {
             let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show_i, &quit_i])?;
 
-            let _tray = TrayIconBuilder::new()
+            let _tray = TrayIconBuilder::with_id("main")
                 .icon(default_icon_owned.clone())
                 .menu(&menu)
                 .show_menu_on_left_click(false)
@@ -156,39 +157,57 @@ pub fn run() {
                             return;
                         }
                         let id = shortcut.id();
+                        eprintln!(
+                            "[DEBUG] Shortcut pressed: id={:?}, rec_id={:?}, esc_id={:?}",
+                            id, rec_id, esc_id
+                        );
 
                         if id == esc_id {
+                            eprintln!("[DEBUG] Escape shortcut pressed");
                             let is_recording = RECORDING.load(Ordering::Relaxed);
+                            eprintln!("[DEBUG] Current recording state: {}", is_recording);
                             if is_recording {
+                                eprintln!("[DEBUG] Cancelling recording...");
                                 stop_recording(
                                     &app_handle,
                                     &recording_start_handler,
                                     "recording:cancel",
                                 );
                                 restore_default_tray(&app_handle, default_icon_owned.clone());
+                                eprintln!("[DEBUG] Recording cancelled, tray restored");
                             }
                             return;
                         }
 
                         if rec_id == Some(id) {
+                            eprintln!("[DEBUG] Recording shortcut pressed (Ctrl+\\)");
                             let is_recording = RECORDING.load(Ordering::Relaxed);
+                            eprintln!("[DEBUG] Current recording state: {}", is_recording);
                             if is_recording {
+                                eprintln!("[DEBUG] Stopping recording...");
                                 stop_recording(
                                     &app_handle,
                                     &recording_start_handler,
                                     "recording:complete",
                                 );
                                 restore_default_tray(&app_handle, default_icon_owned.clone());
+                                eprintln!("[DEBUG] Recording stopped, tray restored");
                             } else {
+                                eprintln!("[DEBUG] Starting recording...");
                                 RECORDING.store(true, Ordering::Relaxed);
                                 *recording_start_handler.lock().unwrap() = Some(Instant::now());
                                 if let Some(tray) = app_handle.tray_by_id("main") {
+                                    eprintln!("[DEBUG] Setting recording icon...");
                                     let _ = tray.set_icon(Some(recording_icon_owned.clone()));
+                                    eprintln!("[DEBUG] Recording icon set");
+                                } else {
+                                    eprintln!("[DEBUG] Tray not found!");
                                 }
                             }
                             return;
                         }
 
+                        eprintln!("[DEBUG] Toggle window shortcut pressed");
                         if let Some(window) = app_handle.get_webview_window("main") {
                             toggle_window(&window);
                         }
@@ -197,12 +216,18 @@ pub fn run() {
             )?;
 
             if let Some(sc) = toggle_shortcut {
-                let _ = app.global_shortcut().register(sc);
+                if let Err(e) = app.global_shortcut().register(sc) {
+                    eprintln!("Failed to register toggle shortcut: {}", e);
+                }
             }
             if let Some(sc) = rec_shortcut {
-                let _ = app.global_shortcut().register(sc);
+                if let Err(e) = app.global_shortcut().register(sc) {
+                    eprintln!("Failed to register recording shortcut: {}", e);
+                }
             }
-            let _ = app.global_shortcut().register(esc_shortcut);
+            if let Err(e) = app.global_shortcut().register(esc_shortcut) {
+                eprintln!("Failed to register escape shortcut: {}", e);
+            }
 
             // --- Tooltip update loop ---
             {
