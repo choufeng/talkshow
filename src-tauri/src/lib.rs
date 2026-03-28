@@ -145,16 +145,17 @@ pub fn run() {
 
             // Toggle main window
             if let Some(shortcut) = parse_shortcut(&shortcut_str) {
-                app.global_shortcut().register(shortcut)?;
                 let app_handle_clone = app.handle().clone();
-                app.global_shortcut()
-                    .on_shortcut(shortcut, move |_app, _shortcut, event| {
-                        if event.state() == ShortcutState::Pressed {
-                            if let Some(window) = app_handle_clone.get_webview_window("main") {
-                                toggle_window(&window);
+                let _ = app.global_shortcut().register(shortcut);
+                let _ =
+                    app.global_shortcut()
+                        .on_shortcut(shortcut, move |_app, _shortcut, event| {
+                            if event.state() == ShortcutState::Pressed {
+                                if let Some(window) = app_handle_clone.get_webview_window("main") {
+                                    toggle_window(&window);
+                                }
                             }
-                        }
-                    })?;
+                        });
             }
 
             // Recording toggle
@@ -164,8 +165,8 @@ pub fn run() {
                 let recording_icon_clone = recording_icon_owned.clone();
                 let app_handle_clone = app.handle().clone();
                 if let Some(rec_shortcut) = parse_shortcut(&recording_shortcut_str) {
-                    app.global_shortcut().register(rec_shortcut)?;
-                    app.global_shortcut().on_shortcut(
+                    let _ = app.global_shortcut().register(rec_shortcut);
+                    let _ = app.global_shortcut().on_shortcut(
                         rec_shortcut,
                         move |_app, _shortcut, event| {
                             if event.state() != ShortcutState::Pressed {
@@ -197,8 +198,8 @@ pub fn run() {
                 let default_icon_clone = default_icon_owned.clone();
                 let app_handle_clone = app.handle().clone();
                 let esc_shortcut = Shortcut::new(None, Code::Escape);
-                app.global_shortcut().register(esc_shortcut)?;
-                app.global_shortcut().on_shortcut(
+                let _ = app.global_shortcut().register(esc_shortcut);
+                let _ = app.global_shortcut().on_shortcut(
                     esc_shortcut,
                     move |_app, _shortcut, event| {
                         if event.state() != ShortcutState::Pressed {
