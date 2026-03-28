@@ -25,10 +25,10 @@ tauri-plugin-notification = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 image = "0.25"
-async-openai = "0.20" # OpenAI API client, compatible with Vertex AI Gemini models via OpenAI-compatible endpoint
+rig-core = "0.33"
+rig-vertexai = "0.3"
+arboard = "3"
 tokio = { version = "1", features = ["full"] }
-# For full Google Cloud support (Vertex AI training, model management, etc.), uncomment the following:
-# google-cloud-rust = "1"
 cpal = "0.15"
 dasp_sample = "0.11"
 hound = "3.5"
