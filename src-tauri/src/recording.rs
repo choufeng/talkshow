@@ -1,3 +1,4 @@
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -14,6 +15,8 @@ pub struct RecordingCancelled {
 }
 
 const RECORDINGS_DIR_NAME: &str = "talkshow";
+const SAMPLE_RATE: u32 = 16000;
+const CHANNELS: u16 = 1;
 
 pub fn recordings_dir() -> PathBuf {
     std::env::temp_dir().join(RECORDINGS_DIR_NAME)
@@ -94,5 +97,188 @@ pub fn wav_to_flac(wav_path: &Path, flac_path: &Path) -> Result<(), String> {
         Err(format!("flac encoding failed: {}", stderr))
     } else {
         Ok(())
+    }
+}
+
+pub enum AudioRecorder {
+    Ready {
+        buffer: Arc<Mutex<Vec<i16>>>,
+        stream: cpal::Stream,
+        start_time: Option<Instant>,
+    },
+    Unavailable(String),
+}
+
+impl AudioRecorder {
+    pub fn new() -> Self {
+        let host = cpal::default_host();
+        let device = match host.default_input_device() {
+            Some(d) => d,
+            None => return AudioRecorder::Unavailable("No microphone device available".into()),
+        };
+
+        let supported_configs = match device.supported_input_configs() {
+            Ok(configs) => configs,
+            Err(e) => {
+                return AudioRecorder::Unavailable(format!(
+                    "Failed to query microphone configs: {}",
+                    e
+                ))
+            }
+        };
+
+        let supported_config =
+            match supported_configs.find(|c| c.sample_format() == cpal::SampleFormat::I16) {
+                Some(c) => c,
+                None => {
+                    return AudioRecorder::Unavailable(
+                        "Microphone does not support 16-bit audio format".into(),
+                    )
+                }
+            };
+
+        let config: cpal::StreamConfig =
+            supported_config.with_sample_rate(cpal::SampleRate(SAMPLE_RATE));
+
+        let buffer: Arc<Mutex<Vec<i16>>> = Arc::new(Mutex::new(Vec::new()));
+        let buffer_clone = buffer.clone();
+
+        let stream = match device.build_input_stream(
+            &config,
+            move |data: &[i16], _: &cpal::InputCallbackInfo| {
+                let mut buf = buffer_clone.lock().unwrap();
+                buf.extend_from_slice(data);
+            },
+            |err| {
+                eprintln!("Audio input error: {}", err);
+            },
+            None,
+        ) {
+            Ok(s) => s,
+            Err(e) => {
+                return AudioRecorder::Unavailable(format!("Failed to create audio stream: {}", e))
+            }
+        };
+
+        AudioRecorder::Ready {
+            buffer,
+            stream,
+            start_time: None,
+        }
+    }
+
+    pub fn start(&mut self) -> Result<(), String> {
+        match self {
+            AudioRecorder::Ready {
+                buffer,
+                stream,
+                start_time,
+            } => {
+                buffer.lock().unwrap().clear();
+                stream
+                    .play()
+                    .map_err(|e| format!("Failed to start recording: {}", e))?;
+                *start_time = Some(Instant::now());
+                Ok(())
+            }
+            AudioRecorder::Unavailable(reason) => Err(reason.clone()),
+        }
+    }
+
+    pub fn stop(&mut self) -> Result<RecordingResult, String> {
+        match self {
+            AudioRecorder::Ready {
+                buffer,
+                stream,
+                start_time,
+            } => {
+                let _ = stream.pause();
+
+                let duration_secs = start_time.map(|t| t.elapsed().as_secs()).unwrap_or(0);
+
+                if duration_secs == 0 {
+                    buffer.lock().unwrap().clear();
+                    *start_time = None;
+                    return Err("Recording too short, discarded".to_string());
+                }
+
+                let audio_data: Vec<i16> = {
+                    let mut buf = buffer.lock().unwrap();
+                    std::mem::take(&mut *buf)
+                };
+                *start_time = None;
+
+                let dir = ensure_recordings_dir()?;
+                let flac_filename = generate_filename();
+                let flac_path = dir.join(&flac_filename);
+
+                let wav_filename = flac_filename.replace(".flac", ".wav");
+                let wav_path = dir.join(&wav_filename);
+
+                let spec = hound::WavSpec {
+                    channels: CHANNELS,
+                    sample_rate: SAMPLE_RATE,
+                    bits_per_sample: 16,
+                    sample_format: hound::SampleFormat::Int,
+                };
+
+                let mut writer = hound::WavWriter::create(&wav_path, spec)
+                    .map_err(|e| format!("Failed to create WAV file: {}", e))?;
+
+                for sample in &audio_data {
+                    writer
+                        .write_sample(*sample)
+                        .map_err(|e| format!("Failed to write WAV sample: {}", e))?;
+                }
+                writer
+                    .finalize()
+                    .map_err(|e| format!("Failed to finalize WAV file: {}", e))?;
+
+                let final_path = match wav_to_flac(&wav_path, &flac_path) {
+                    Ok(()) => {
+                        let _ = std::fs::remove_file(&wav_path);
+                        flac_path
+                    }
+                    Err(_) => {
+                        let final_name = flac_filename.replace(".flac", ".wav");
+                        let final_path = dir.join(&final_name);
+                        if wav_path != final_path {
+                            let _ = std::fs::rename(&wav_path, &final_path);
+                        }
+                        final_path
+                    }
+                };
+
+                Ok(RecordingResult {
+                    path: final_path,
+                    duration_secs,
+                })
+            }
+            AudioRecorder::Unavailable(reason) => Err(reason.clone()),
+        }
+    }
+
+    pub fn cancel(&mut self) -> u64 {
+        match self {
+            AudioRecorder::Ready {
+                buffer,
+                stream,
+                start_time,
+            } => {
+                let _ = stream.pause();
+                let duration_secs = start_time.map(|t| t.elapsed().as_secs()).unwrap_or(0);
+                buffer.lock().unwrap().clear();
+                *start_time = None;
+                duration_secs
+            }
+            AudioRecorder::Unavailable(_) => 0,
+        }
+    }
+
+    pub fn is_recording(&self) -> bool {
+        match self {
+            AudioRecorder::Ready { start_time, .. } => start_time.is_some(),
+            AudioRecorder::Unavailable(_) => false,
+        }
     }
 }
