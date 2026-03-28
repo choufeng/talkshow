@@ -1,0 +1,91 @@
+<h2>快捷键设置交互方式</h2>
+<p class="subtitle">选择快捷键录入的交互体验</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>点击录制模式</h3>
+      <p>点击按钮后进入录制状态，直接按下键盘组合键即可完成设置。简洁直观。</p>
+    </div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>输入框模式</h3>
+      <p>在输入框中按下组合键，实时显示按键名称。类似 VS Code 快捷键设置。</p>
+    </div>
+  </div>
+</div>
+
+<h3>交互预览</h3>
+
+<div class="split">
+  <div class="mockup">
+    <div class="mockup-header">方案 A：点击录制</div>
+    <div class="mockup-body" style="padding: 20px;">
+      <div style="margin-bottom: 20px;">
+        <label style="display: block; margin-bottom: 8px; font-weight: 500;">窗口切换快捷键</label>
+        <div style="display: flex; gap: 12px; align-items: center;">
+          <div style="background: #f0f0f0; padding: 8px 16px; border-radius: 6px; font-family: monospace; min-width: 120px; text-align: center;">
+            ⌃ ⇧ '
+          </div>
+          <button style="padding: 8px 16px; border-radius: 6px; border: 1px solid #ccc; background: white; cursor: pointer;">
+            修改
+          </button>
+        </div>
+      </div>
+      <div style="margin-bottom: 20px;">
+        <label style="display: block; margin-bottom: 8px; font-weight: 500;">录音控制快捷键</label>
+        <div style="display: flex; gap: 12px; align-items: center;">
+          <div style="background: #396cd8; color: white; padding: 8px 16px; border-radius: 6px; font-family: monospace; min-width: 120px; text-align: center;">
+            请按下快捷键...
+          </div>
+          <button style="padding: 8px 16px; border-radius: 6px; border: 1px solid #396cd8; background: #396cd8; color: white; cursor: pointer;">
+            取消
+          </button>
+        </div>
+        <p style="color: #666; font-size: 12px; margin-top: 8px;">按下 Esc 取消录制</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="mockup">
+    <div class="mockup-header">方案 B：输入框</div>
+    <div class="mockup-body" style="padding: 20px;">
+      <div style="margin-bottom: 20px;">
+        <label style="display: block; margin-bottom: 8px; font-weight: 500;">窗口切换快捷键</label>
+        <div style="position: relative;">
+          <input style="width: 100%; padding: 8px 12px; border: 1px solid #ccc; border-radius: 6px; font-family: monospace;" value="Control+Shift+Quote" readonly />
+        </div>
+        <p style="color: #666; font-size: 12px; margin-top: 4px;">点击输入框后按下新的组合键</p>
+      </div>
+      <div style="margin-bottom: 20px;">
+        <label style="display: block; margin-bottom: 8px; font-weight: 500;">录音控制快捷键</label>
+        <div style="position: relative;">
+          <input style="width: 100%; padding: 8px 12px; border: 2px solid #396cd8; border-radius: 6px; font-family: monospace; outline: none;" value="Control + Shift + R" readonly />
+        </div>
+        <p style="color: #396cd8; font-size: 12px; margin-top: 4px;">正在录制中...</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="pros-cons" style="margin-top: 20px;">
+  <div class="pros">
+    <h4>方案 A 优点</h4>
+    <ul>
+      <li>交互更直观，符合用户习惯</li>
+      <li>状态明确，易于理解</li>
+      <li>类似系统偏好设置的体验</li>
+    </ul>
+  </div>
+  <div class="cons">
+    <h4>方案 B 优点</h4>
+    <ul>
+      <li>可以显示原始按键名称</li>
+      <li>适合需要精确控制的场景</li>
+      <li>类似开发者工具的体验</li>
+    </ul>
+  </div>
+</div>

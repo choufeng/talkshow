@@ -1,0 +1,108 @@
+<h2>设定页面布局方案</h2>
+<p class="subtitle">选择一种布局风格来组织设置页面</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>经典侧边栏布局</h3>
+      <p>左侧窄菜单栏 + 右侧主内容区。适合设置项较多的情况，可扩展性强。</p>
+    </div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>顶部标签页布局</h3>
+      <p>顶部标签栏切换不同设置类别。适合设置项较少、类别明确的情况。</p>
+    </div>
+  </div>
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>单页滚动布局</h3>
+      <p>所有设置项在一个页面内分组展示，通过锚点跳转。适合设置项不多的情况。</p>
+    </div>
+  </div>
+</div>
+
+<h3>布局预览</h3>
+
+<div class="cards">
+  <div class="card" data-choice="a-preview" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-body" style="display: flex; height: 300px;">
+          <div class="mock-sidebar" style="width: 120px; padding: 10px;">
+            <div style="padding: 8px; background: #e0e0e0; margin-bottom: 4px; border-radius: 4px;">首页</div>
+            <div style="padding: 8px; margin-bottom: 4px;">设置</div>
+          </div>
+          <div class="mock-content" style="flex: 1; padding: 16px;">
+            <h4 style="margin-top: 0;">快捷键设置</h4>
+            <div style="display: flex; justify-content: space-between; padding: 12px; background: #f5f5f5; margin-bottom: 8px; border-radius: 6px;">
+              <span>窗口切换</span>
+              <span style="background: #e8e8e8; padding: 4px 8px; border-radius: 4px;">⌃⇧'</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding: 12px; background: #f5f5f5; border-radius: 6px;">
+              <span>录音控制</span>
+              <span style="background: #e8e8e8; padding: 4px 8px; border-radius: 4px;">⌃⇧R</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>方案 A</h3>
+      <p>经典侧边栏</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b-preview" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-body" style="height: 300px;">
+          <div style="display: flex; border-bottom: 1px solid #e0e0e0; padding: 0 16px;">
+            <div style="padding: 12px 16px; border-bottom: 2px solid #396cd8; color: #396cd8;">首页</div>
+            <div style="padding: 12px 16px;">设置</div>
+          </div>
+          <div style="padding: 16px;">
+            <h4 style="margin-top: 0;">欢迎使用 TalkShow</h4>
+            <p style="color: #666;">这是一个语音转文字应用</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>方案 B</h3>
+      <p>顶部标签页</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c-preview" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-body" style="height: 300px; padding: 16px;">
+          <h4 style="margin-top: 0;">设置</h4>
+          <div style="background: #f5f5f5; padding: 12px; margin-bottom: 16px; border-radius: 6px;">
+            <h5 style="margin: 0 0 8px 0;">快捷键</h5>
+            <div style="display: flex; justify-content: space-between; padding: 8px; background: white; margin-bottom: 4px; border-radius: 4px;">
+              <span>窗口切换</span>
+              <span style="background: #e8e8e8; padding: 2px 6px; border-radius: 4px;">⌃⇧'</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding: 8px; background: white; border-radius: 4px;">
+              <span>录音控制</span>
+              <span style="background: #e8e8e8; padding: 2px 6px; border-radius: 4px;">⌃⇧R</span>
+            </div>
+          </div>
+          <div style="background: #f5f5f5; padding: 12px; border-radius: 6px;">
+            <h5 style="margin: 0 0 8px 0;">其他设置</h5>
+            <p style="color: #666; margin: 0;">暂无其他设置项</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>方案 C</h3>
+      <p>单页滚动</p>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TalkShow 图标预览</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .section {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .section h2 {
+            margin-top: 0;
+            color: #555;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+        .icon-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 20px;
+            margin-top: 15px;
+        }
+        .icon-item {
+            text-align: center;
+            padding: 15px;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            background: #fafafa;
+        }
+        .icon-item img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 0 auto 10px;
+            image-rendering: pixelated;
+        }
+        .icon-item .name {
+            font-size: 12px;
+            color: #666;
+            word-break: break-all;
+        }
+        .tray-simulation {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            padding: 15px;
+            background: #333;
+            border-radius: 6px;
+            color: white;
+        }
+        .tray-icon {
+            width: 32px;
+            height: 32px;
+            image-rendering: pixelated;
+        }
+        .tray-info {
+            flex: 1;
+        }
+        .tray-tooltip {
+            background: #ffffcc;
+            color: #333;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 14px;
+            display: inline-block;
+            margin-top: 5px;
+        }
+        .main-icons {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            flex-wrap: wrap;
+        }
+        .main-icon {
+            text-align: center;
+            padding: 20px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            background: white;
+        }
+        .main-icon img {
+            width: 64px;
+            height: 64px;
+            image-rendering: pixelated;
+        }
+        .main-icon .label {
+            margin-top: 10px;
+            font-weight: bold;
+            color: #333;
+        }
+        .state-comparison {
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .state-box {
+            text-align: center;
+            padding: 20px;
+            border-radius: 8px;
+            min-width: 200px;
+        }
+        .state-box.idle {
+            background: #e8f5e9;
+            border: 2px solid #4caf50;
+        }
+        .state-box.recording {
+            background: #ffebee;
+            border: 2px solid #f44336;
+        }
+        .state-box img {
+            width: 48px;
+            height: 48px;
+            image-rendering: pixelated;
+        }
+    </style>
+</head>
+<body>
+    <h1>TalkShow 图标预览</h1>
+    
+    <div class="section">
+        <h2>主要图标对比</h2>
+        <div class="main-icons">
+            <div class="main-icon">
+                <img src="src-tauri/icons/icon.png" alt="默认图标">
+                <div class="label">默认图标 (icon.png)</div>
+                <div>应用默认状态</div>
+            </div>
+            <div class="main-icon">
+                <img src="src-tauri/icons/recording.png" alt="录音图标">
+                <div class="label">录音图标 (recording.png)</div>
+                <div>录音进行中</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="section">
+        <h2>系统托盘状态模拟</h2>
+        <div class="state-comparison">
+            <div class="state-box idle">
+                <img src="src-tauri/icons/icon.png" alt="空闲状态">
+                <h3>空闲状态</h3>
+                <p>工具提示: "TalkShow"</p>
+                <div class="tray-tooltip">TalkShow</div>
+            </div>
+            <div class="state-box recording">
+                <img src="src-tauri/icons/recording.png" alt="录音状态">
+                <h3>录音状态</h3>
+                <p>工具提示: "录音中 00:45"</p>
+                <div class="tray-tooltip">录音中 00:45</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="section">
+        <h2>所有尺寸图标</h2>
+        <div class="icon-grid">
+            <div class="icon-item">
+                <img src="src-tauri/icons/32x32.png" alt="32x32">
+                <div class="name">32x32.png</div>
+            </div>
+            <div class="icon-item">
+                <img src="src-tauri/icons/128x128.png" alt="128x128">
+                <div class="name">128x128.png</div>
+            </div>
+            <div class="icon-item">
+                <img src="src-tauri/icons/128x128@2x.png" alt="128x128@2x">
+                <div class="name">128x128@2x.png</div>
+            </div>
+            <div class="icon-item">
+                <img src="src-tauri/icons/icon.png" alt="icon">
+                <div class="name">icon.png</div>
+            </div>
+            <div class="icon-item">
+                <img src="src-tauri/icons/recording.png" alt="recording">
+                <div class="name">recording.png</div>
+            </div>
+            <div class="icon-item">
+                <img src="src-tauri/icons/StoreLogo.png" alt="StoreLogo">
+                <div class="name">StoreLogo.png</div>
+            </div>
+            <div class="icon-item">
+                <img src="src-tauri/icons/Square30x30Logo.png" alt="Square30x30Logo">
+                <div class="name">Square30x30Logo.png</div>
+            </div>
+            <div class="icon-item">
+                <img src="src-tauri/icons/Square44x44Logo.png" alt="Square44x44Logo">
+                <div class="name">Square44x44Logo.png</div>
+            </div>
+            <div class="icon-item">
+                <img src="src-tauri/icons/Square71x71Logo.png" alt="Square71x71Logo">
+                <div class="name">Square71x71Logo.png</div>
+            </div>
+            <div class="icon-item">
+                <img src="src-tauri/icons/Square89x89Logo.png" alt="Square89x89Logo">
+                <div class="name">Square89x89Logo.png</div>
+            </div>
+            <div class="icon-item">
+                <img src="src-tauri/icons/Square107x107Logo.png" alt="Square107x107Logo">
+                <div class="name">Square107x107Logo.png</div>
+            </div>
+            <div class="icon-item">
+                <img src="src-tauri/icons/Square142x142Logo.png" alt="Square142x142Logo">
+                <div class="name">Square142x142Logo.png</div>
+            </div>
+            <div class="icon-item">
+                <img src="src-tauri/icons/Square150x150Logo.png" alt="Square150x150Logo">
+                <div class="name">Square150x150Logo.png</div>
+            </div>
+            <div class="icon-item">
+                <img src="src-tauri/icons/Square284x284Logo.png" alt="Square284x284Logo">
+                <div class="name">Square284x284Logo.png</div>
+            </div>
+            <div class="icon-item">
+                <img src="src-tauri/icons/Square310x310Logo.png" alt="Square310x310Logo">
+                <div class="name">Square310x310Logo.png</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="section">
+        <h2>快捷键说明</h2>
+        <ul>
+            <li><strong>Ctrl + \</strong> - 开始/停止录音</li>
+            <li><strong>Escape</strong> - 取消录音</li>
+            <li><strong>Ctrl + Shift + '</strong> - 显示/隐藏主窗口</li>
+        </ul>
+    </div>
+    
+    <script>
+        // 模拟录音计时器
+        let recording = false;
+        let seconds = 0;
+        let timer = null;
+        
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === '\\') {
+                e.preventDefault();
+                toggleRecording();
+            } else if (e.key === 'Escape' && recording) {
+                e.preventDefault();
+                stopRecording();
+            }
+        });
+        
+        function toggleRecording() {
+            if (recording) {
+                stopRecording();
+            } else {
+                startRecording();
+            }
+        }
+        
+        function startRecording() {
+            recording = true;
+            seconds = 0;
+            updateUI();
+            timer = setInterval(() => {
+                seconds++;
+                updateUI();
+            }, 1000);
+        }
+        
+        function stopRecording() {
+            recording = false;
+            clearInterval(timer);
+            updateUI();
+        }
+        
+        function updateUI() {
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            const timeStr = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+            
+            document.title = recording ? `录音中 ${timeStr} - TalkShow 图标预览` : 'TalkShow 图标预览';
+        }
+    </script>
+</body>
+</html>

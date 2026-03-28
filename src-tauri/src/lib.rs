@@ -75,10 +75,47 @@ fn restore_default_tray(app_handle: &tauri::AppHandle, default_icon: Image) {
     }
 }
 
+#[tauri::command]
+fn get_config(app_handle: tauri::AppHandle) -> config::AppConfig {
+    let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
+    config::load_config(&app_data_dir)
+}
+
+#[tauri::command]
+fn update_shortcut(
+    app_handle: tauri::AppHandle,
+    shortcut_type: String,
+    shortcut: String,
+) -> Result<(), String> {
+    let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
+    let mut app_config = config::load_config(&app_data_dir);
+
+    match shortcut_type.as_str() {
+        "toggle" => app_config.shortcut = shortcut,
+        "recording" => app_config.recording_shortcut = shortcut,
+        _ => return Err("Invalid shortcut type".to_string()),
+    }
+
+    config::save_config(&app_data_dir, &app_config)?;
+
+    // Re-register shortcuts
+    if let Some(sc) = parse_shortcut(&app_config.shortcut) {
+        let _ = app_handle.global_shortcut().unregister(sc.clone());
+        let _ = app_handle.global_shortcut().register(sc);
+    }
+    if let Some(sc) = parse_shortcut(&app_config.recording_shortcut) {
+        let _ = app_handle.global_shortcut().unregister(sc.clone());
+        let _ = app_handle.global_shortcut().register(sc);
+    }
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .invoke_handler(tauri::generate_handler![get_config, update_shortcut])
         .setup(|app| {
             let app_data_dir = app.path().app_data_dir().unwrap_or_default();
             let app_config = config::load_config(&app_data_dir);
