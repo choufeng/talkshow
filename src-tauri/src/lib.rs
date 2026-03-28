@@ -140,83 +140,69 @@ pub fn run() {
                 Arc::new(std::sync::Mutex::new(None));
 
             // --- Global Shortcuts (single plugin instance) ---
-            app.handle()
-                .plugin(tauri_plugin_global_shortcut::Builder::new().build())?;
+            let toggle_shortcut = parse_shortcut(&shortcut_str);
+            let rec_shortcut = parse_shortcut(&recording_shortcut_str);
+            let esc_shortcut = Shortcut::new(None, Code::Escape);
 
-            // Toggle main window
-            if let Some(shortcut) = parse_shortcut(&shortcut_str) {
-                let app_handle_clone = app.handle().clone();
-                let _ = app.global_shortcut().register(shortcut);
-                let _ =
-                    app.global_shortcut()
-                        .on_shortcut(shortcut, move |_app, _shortcut, event| {
-                            if event.state() == ShortcutState::Pressed {
-                                if let Some(window) = app_handle_clone.get_webview_window("main") {
-                                    toggle_window(&window);
-                                }
-                            }
-                        });
-            }
+            let rec_id = rec_shortcut.as_ref().map(|s| s.id());
+            let esc_id = esc_shortcut.id();
 
-            // Recording toggle
-            {
-                let recording_start_clone = recording_start.clone();
-                let default_icon_clone = default_icon_owned.clone();
-                let recording_icon_clone = recording_icon_owned.clone();
-                let app_handle_clone = app.handle().clone();
-                if let Some(rec_shortcut) = parse_shortcut(&recording_shortcut_str) {
-                    let _ = app.global_shortcut().register(rec_shortcut);
-                    let _ = app.global_shortcut().on_shortcut(
-                        rec_shortcut,
-                        move |_app, _shortcut, event| {
-                            if event.state() != ShortcutState::Pressed {
-                                return;
-                            }
-                            let is_recording = RECORDING.load(Ordering::Relaxed);
-                            if is_recording {
-                                stop_recording(
-                                    &app_handle_clone,
-                                    &recording_start_clone,
-                                    "recording:complete",
-                                );
-                                restore_default_tray(&app_handle_clone, default_icon_clone.clone());
-                            } else {
-                                RECORDING.store(true, Ordering::Relaxed);
-                                *recording_start_clone.lock().unwrap() = Some(Instant::now());
-                                if let Some(tray) = app_handle_clone.tray_by_id("main") {
-                                    let _ = tray.set_icon(Some(recording_icon_clone.clone()));
-                                }
-                            }
-                        },
-                    );
-                }
-            }
-
-            // ESC to cancel recording
-            {
-                let recording_start_clone = recording_start.clone();
-                let default_icon_clone = default_icon_owned.clone();
-                let app_handle_clone = app.handle().clone();
-                let esc_shortcut = Shortcut::new(None, Code::Escape);
-                let _ = app.global_shortcut().register(esc_shortcut);
-                let _ = app.global_shortcut().on_shortcut(
-                    esc_shortcut,
-                    move |_app, _shortcut, event| {
+            let app_handle = app.handle().clone();
+            let recording_start_handler = recording_start.clone();
+            app.handle().plugin(
+                tauri_plugin_global_shortcut::Builder::new()
+                    .with_handler(move |_app, shortcut, event| {
                         if event.state() != ShortcutState::Pressed {
                             return;
                         }
-                        let is_recording = RECORDING.load(Ordering::Relaxed);
-                        if is_recording {
-                            stop_recording(
-                                &app_handle_clone,
-                                &recording_start_clone,
-                                "recording:cancel",
-                            );
-                            restore_default_tray(&app_handle_clone, default_icon_clone.clone());
+                        let id = shortcut.id();
+
+                        if id == esc_id {
+                            let is_recording = RECORDING.load(Ordering::Relaxed);
+                            if is_recording {
+                                stop_recording(
+                                    &app_handle,
+                                    &recording_start_handler,
+                                    "recording:cancel",
+                                );
+                                restore_default_tray(&app_handle, default_icon_owned.clone());
+                            }
+                            return;
                         }
-                    },
-                );
+
+                        if rec_id == Some(id) {
+                            let is_recording = RECORDING.load(Ordering::Relaxed);
+                            if is_recording {
+                                stop_recording(
+                                    &app_handle,
+                                    &recording_start_handler,
+                                    "recording:complete",
+                                );
+                                restore_default_tray(&app_handle, default_icon_owned.clone());
+                            } else {
+                                RECORDING.store(true, Ordering::Relaxed);
+                                *recording_start_handler.lock().unwrap() = Some(Instant::now());
+                                if let Some(tray) = app_handle.tray_by_id("main") {
+                                    let _ = tray.set_icon(Some(recording_icon_owned.clone()));
+                                }
+                            }
+                            return;
+                        }
+
+                        if let Some(window) = app_handle.get_webview_window("main") {
+                            toggle_window(&window);
+                        }
+                    })
+                    .build(),
+            )?;
+
+            if let Some(sc) = toggle_shortcut {
+                let _ = app.global_shortcut().register(sc);
             }
+            if let Some(sc) = rec_shortcut {
+                let _ = app.global_shortcut().register(sc);
+            }
+            let _ = app.global_shortcut().register(esc_shortcut);
 
             // --- Tooltip update loop ---
             {
