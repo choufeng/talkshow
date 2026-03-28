@@ -1,24 +1,21 @@
 import { invoke } from '@tauri-apps/api/core';
 import { writable } from 'svelte/store';
 
-export interface VertexConfig {
+export interface ProviderConfig {
+  id: string;
+  type: string;
+  name: string;
   endpoint: string;
-  models: string[];
-}
-
-export interface DashScopeConfig {
-  api_key: string;
-  endpoint: string;
+  api_key?: string;
   models: string[];
 }
 
 export interface AiConfig {
-  vertex: VertexConfig;
-  dashscope: DashScopeConfig;
+  providers: ProviderConfig[];
 }
 
 export interface TranscriptionConfig {
-  provider: string;
+  provider_id: string;
   model: string;
 }
 
@@ -38,19 +35,27 @@ function createConfigStore() {
     shortcut: 'Control+Shift+Quote',
     recording_shortcut: 'Control+Backslash',
     ai: {
-      vertex: {
-        endpoint: 'https://aiplatform.googleapis.com/v1',
-        models: ['gemini-2.0-flash']
-      },
-      dashscope: {
-        api_key: '',
-        endpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-        models: ['qwen2-audio-instruct']
-      }
+      providers: [
+        {
+          id: 'vertex',
+          type: 'vertex',
+          name: 'VTX',
+          endpoint: 'https://aiplatform.googleapis.com/v1',
+          models: ['gemini-2.0-flash']
+        },
+        {
+          id: 'dashscope',
+          type: 'openai-compatible',
+          name: '阿里云',
+          endpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+          api_key: '',
+          models: ['qwen2-audio-instruct']
+        }
+      ]
     },
     features: {
       transcription: {
-        provider: 'vertex',
+        provider_id: 'vertex',
         model: 'gemini-2.0-flash'
       }
     }
@@ -78,6 +83,15 @@ function createConfigStore() {
         });
       } catch (error) {
         console.error('Failed to update shortcut:', error);
+        throw error;
+      }
+    },
+    save: async (newConfig: AppConfig) => {
+      try {
+        await invoke('save_config_cmd', { config: newConfig });
+        set(newConfig);
+      } catch (error) {
+        console.error('Failed to save config:', error);
         throw error;
       }
     }
