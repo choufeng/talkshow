@@ -17,7 +17,7 @@
 
     const recordingWindow = new WebviewWindow("recording-indicator", {
       url: "/recording",
-      width: 140,
+      width: 160,
       height: 44,
       transparent: true,
       decorations: false,

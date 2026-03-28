@@ -67,6 +67,7 @@
 </div>
 
 <style>
+  :global(html),
   :global(body) {
     margin: 0;
     padding: 0;
@@ -79,7 +80,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    width: 140px;
+    width: 160px;
     height: 44px;
     padding: 0 8px;
     background: rgba(30, 30, 30, 0.9);
