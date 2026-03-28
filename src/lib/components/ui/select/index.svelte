@@ -19,7 +19,7 @@
   function getDisplayLabel(): string {
     for (const group of groups) {
       for (const item of group.items) {
-        if (item.value === value) return `${group.label} — ${item.label}`;
+        if (item.value === value) return group.label ? `${group.label} — ${item.label}` : item.label;
       }
     }
     return placeholder;
@@ -40,7 +40,6 @@
   <Select.Portal>
     <Select.Content
       class="z-50 max-h-64 min-w-[var(--bits-select-anchor-width)] w-[var(--bits-select-anchor-width)] rounded-lg border border-border bg-background-alt p-1 text-foreground shadow-popover data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=top]:slide-in-from-bottom-2"
-      position="popper"
       sideOffset={4}
     >
       <Select.ScrollUpButton class="flex h-4 items-center justify-center">

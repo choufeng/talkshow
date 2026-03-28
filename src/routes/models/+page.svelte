@@ -19,8 +19,8 @@
 
   const PROVIDER_TYPES = [
     { value: 'openai-compatible', label: 'OpenAI Compatible' },
-    { value: 'stubbed', label: 'Stubbed' },
-    { value: 'anthropic-compatible', label: 'Anthropic Compatible' }
+    { value: 'anthropic-compatible', label: 'Anthropic Compatible' },
+    { value: 'stubbed', label: 'Stubbed' }
   ];
 
   onMount(() => {
