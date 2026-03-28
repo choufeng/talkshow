@@ -10,6 +10,8 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::{image::Image, Emitter, Manager, WebviewWindow};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
+const TRAY_ID: &str = "main";
+
 static RECORDING: AtomicBool = AtomicBool::new(false);
 
 fn toggle_window(window: &WebviewWindow) {
@@ -78,7 +80,7 @@ fn stop_recording(
                     }
                     let _ = app_handle.emit("recording:complete", result);
                 }
-                Err(e) if e.contains("too short") => {
+                Err(recording::RecordingError::TooShort) => {
                     let cancelled = recording::RecordingCancelled {
                         duration_secs: duration,
                     };
@@ -188,7 +190,7 @@ pub fn run() {
             let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show_i, &quit_i])?;
 
-            let _tray = TrayIconBuilder::with_id("main")
+            let _tray = TrayIconBuilder::with_id(TRAY_ID)
                 .icon(default_icon_owned.clone())
                 .menu(&menu)
                 .show_menu_on_left_click(false)
@@ -270,23 +272,24 @@ pub fn run() {
                                 );
                                 restore_default_tray(&app_handle, default_icon_owned.clone());
                             } else {
-                                match recorder_handler.lock().unwrap().start() {
-                                    Ok(()) => {
+                                match recorder_handler
+                                    .lock()
+                                    .ok()
+                                    .and_then(|mut r| r.start().ok())
+                                {
+                                    Some(()) => {
                                         RECORDING.store(true, Ordering::Relaxed);
-                                        *recording_start_handler.lock().unwrap() =
-                                            Some(Instant::now());
-                                        if let Some(tray) = app_handle.tray_by_id("main") {
+                                        if let Ok(mut start) = recording_start_handler.lock() {
+                                            *start = Some(Instant::now());
+                                        }
+                                        if let Some(tray) = app_handle.tray_by_id(TRAY_ID) {
                                             let _ =
                                                 tray.set_icon(Some(recording_icon_owned.clone()));
                                         }
                                     }
-                                    Err(e) => {
-                                        eprintln!("Failed to start recording: {}", e);
-                                        show_notification(
-                                            &app_handle,
-                                            "录音失败",
-                                            &format!("{}", e),
-                                        );
+                                    None => {
+                                        eprintln!("Failed to start recording");
+                                        show_notification(&app_handle, "录音失败", "无法开始录音");
                                     }
                                 }
                             }
@@ -327,7 +330,7 @@ pub fn run() {
                             .ok()
                             .and_then(|start| start.as_ref().map(format_elapsed));
                         if let Some(text) = tooltip {
-                            if let Some(tray) = app_handle_tooltip.tray_by_id("main") {
+                            if let Some(tray) = app_handle_tooltip.tray_by_id(TRAY_ID) {
                                 let _ = tray.set_tooltip(Some(&text));
                             }
                         }

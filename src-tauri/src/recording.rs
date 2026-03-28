@@ -15,6 +15,25 @@ pub struct RecordingCancelled {
     pub duration_secs: u64,
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+pub enum RecordingError {
+    TooShort,
+    MicrophoneUnavailable(String),
+    AudioStreamError(String),
+    FileError(String),
+}
+
+impl std::fmt::Display for RecordingError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RecordingError::TooShort => write!(f, "Recording too short, discarded"),
+            RecordingError::MicrophoneUnavailable(e) => write!(f, "{}", e),
+            RecordingError::AudioStreamError(e) => write!(f, "{}", e),
+            RecordingError::FileError(e) => write!(f, "{}", e),
+        }
+    }
+}
+
 const RECORDINGS_DIR_NAME: &str = "talkshow";
 const SAMPLE_RATE: u32 = 16000;
 const CHANNELS: u16 = 1;
@@ -154,7 +173,7 @@ impl AudioRecorder {
         let stream = match device.build_input_stream(
             &config,
             move |data: &[i16], _: &cpal::InputCallbackInfo| {
-                let mut buf = buffer_clone.lock().unwrap();
+                let mut buf = buffer_clone.lock().unwrap_or_else(|e| e.into_inner());
                 buf.extend_from_slice(data);
             },
             |err| {
@@ -175,25 +194,27 @@ impl AudioRecorder {
         }
     }
 
-    pub fn start(&mut self) -> Result<(), String> {
+    pub fn start(&mut self) -> Result<(), RecordingError> {
         match self {
             AudioRecorder::Ready {
                 buffer,
                 stream,
                 start_time,
             } => {
-                buffer.lock().unwrap().clear();
-                stream
-                    .play()
-                    .map_err(|e| format!("Failed to start recording: {}", e))?;
+                buffer.lock().ok().map(|mut b| b.clear());
+                stream.play().map_err(|e| {
+                    RecordingError::AudioStreamError(format!("Failed to start recording: {}", e))
+                })?;
                 *start_time = Some(Instant::now());
                 Ok(())
             }
-            AudioRecorder::Unavailable(reason) => Err(reason.clone()),
+            AudioRecorder::Unavailable(reason) => {
+                Err(RecordingError::MicrophoneUnavailable(reason.clone()))
+            }
         }
     }
 
-    pub fn stop(&mut self) -> Result<RecordingResult, String> {
+    pub fn stop(&mut self) -> Result<RecordingResult, RecordingError> {
         match self {
             AudioRecorder::Ready {
                 buffer,
@@ -205,23 +226,21 @@ impl AudioRecorder {
                 let duration_secs = start_time.map(|t| t.elapsed().as_secs()).unwrap_or(0);
 
                 if duration_secs == 0 {
-                    buffer.lock().unwrap().clear();
+                    buffer.lock().ok().map(|mut b| b.clear());
                     *start_time = None;
-                    return Err("Recording too short, discarded".to_string());
+                    return Err(RecordingError::TooShort);
                 }
 
                 let audio_data: Vec<i16> = {
-                    let mut buf = buffer.lock().unwrap();
+                    let mut buf = buffer.lock().unwrap_or_else(|e| e.into_inner());
                     std::mem::take(&mut *buf)
                 };
                 *start_time = None;
 
-                let dir = ensure_recordings_dir()?;
+                let dir = ensure_recordings_dir().map_err(|e| RecordingError::FileError(e))?;
                 let flac_filename = generate_filename();
                 let flac_path = dir.join(&flac_filename);
-
-                let wav_filename = flac_filename.replace(".flac", ".wav");
-                let wav_path = dir.join(&wav_filename);
+                let wav_path = flac_path.with_extension("wav");
 
                 let spec = hound::WavSpec {
                     channels: CHANNELS,
@@ -230,17 +249,18 @@ impl AudioRecorder {
                     sample_format: hound::SampleFormat::Int,
                 };
 
-                let mut writer = hound::WavWriter::create(&wav_path, spec)
-                    .map_err(|e| format!("Failed to create WAV file: {}", e))?;
+                let mut writer = hound::WavWriter::create(&wav_path, spec).map_err(|e| {
+                    RecordingError::FileError(format!("Failed to create WAV file: {}", e))
+                })?;
 
                 for sample in &audio_data {
-                    writer
-                        .write_sample(*sample)
-                        .map_err(|e| format!("Failed to write WAV sample: {}", e))?;
+                    writer.write_sample(*sample).map_err(|e| {
+                        RecordingError::FileError(format!("Failed to write WAV sample: {}", e))
+                    })?;
                 }
-                writer
-                    .finalize()
-                    .map_err(|e| format!("Failed to finalize WAV file: {}", e))?;
+                writer.finalize().map_err(|e| {
+                    RecordingError::FileError(format!("Failed to finalize WAV file: {}", e))
+                })?;
 
                 let (final_path, format) = match wav_to_flac(&wav_path, &flac_path) {
                     Ok(()) => {
@@ -248,8 +268,7 @@ impl AudioRecorder {
                         (flac_path, "flac".to_string())
                     }
                     Err(_) => {
-                        let final_name = flac_filename.replace(".flac", ".wav");
-                        let final_path = dir.join(&final_name);
+                        let final_path = flac_path.with_extension("wav");
                         if wav_path != final_path {
                             let _ = std::fs::rename(&wav_path, &final_path);
                         }
@@ -263,7 +282,9 @@ impl AudioRecorder {
                     format,
                 })
             }
-            AudioRecorder::Unavailable(reason) => Err(reason.clone()),
+            AudioRecorder::Unavailable(reason) => {
+                Err(RecordingError::MicrophoneUnavailable(reason.clone()))
+            }
         }
     }
 
@@ -276,7 +297,7 @@ impl AudioRecorder {
             } => {
                 let _ = stream.pause();
                 let duration_secs = start_time.map(|t| t.elapsed().as_secs()).unwrap_or(0);
-                buffer.lock().unwrap().clear();
+                buffer.lock().ok().map(|mut b| b.clear());
                 *start_time = None;
                 duration_secs
             }
