@@ -3,8 +3,8 @@ mod recording;
 
 use recording::AudioRecorder;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
-use std::time::Instant;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{image::Image, Emitter, Manager, WebviewWindow};
@@ -13,6 +13,7 @@ use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut,
 const TRAY_ID: &str = "main";
 
 static RECORDING: AtomicBool = AtomicBool::new(false);
+static LAST_REC_PRESS: Mutex<Option<Instant>> = Mutex::new(None);
 
 fn toggle_window(window: &WebviewWindow) {
     if window.is_visible().unwrap_or(false) {
@@ -174,6 +175,18 @@ fn show_notification(app_handle: &tauri::AppHandle, title: &str, body: &str) {
         .ok();
 }
 
+fn play_sound(sound_name: &str) {
+    #[cfg(target_os = "macos")]
+    {
+        let sound_path = format!("/System/Library/Sounds/{}", sound_name);
+        std::thread::spawn(move || {
+            let _ = std::process::Command::new("afplay")
+                .arg(&sound_path)
+                .spawn();
+        });
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -259,6 +272,7 @@ pub fn run() {
             let app_handle = app.handle().clone();
             let recording_start_handler = recording_start.clone();
             let recorder_handler = recorder.clone();
+            let esc_shortcut_handler = esc_shortcut.clone();
             app.handle().plugin(
                 tauri_plugin_global_shortcut::Builder::new()
                     .with_handler(move |_app, shortcut, event| {
@@ -276,12 +290,35 @@ pub fn run() {
                                     &recording_start_handler,
                                     "recording:cancel",
                                 );
+                                play_sound("Pop.aiff");
+                                let h = app_handle.clone();
+                                let esc = esc_shortcut_handler.clone();
+                                std::thread::spawn(move || {
+                                    let _ = h.global_shortcut().unregister(esc);
+                                });
                                 restore_default_tray(&app_handle, default_icon_owned.clone());
                             }
                             return;
                         }
 
                         if rec_id == Some(id) {
+                            let now = Instant::now();
+                            let should_ignore = LAST_REC_PRESS
+                                .lock()
+                                .ok()
+                                .and_then(|mut last| {
+                                    if let Some(t) = *last {
+                                        if now.duration_since(t) < Duration::from_millis(500) {
+                                            return Some(true);
+                                        }
+                                    }
+                                    *last = Some(now);
+                                    Some(false)
+                                })
+                                .unwrap_or(false);
+                            if should_ignore {
+                                return;
+                            }
                             let is_recording = RECORDING.load(Ordering::Relaxed);
                             if is_recording {
                                 stop_recording(
@@ -290,6 +327,12 @@ pub fn run() {
                                     &recording_start_handler,
                                     "recording:complete",
                                 );
+                                play_sound("Submarine.aiff");
+                                let h = app_handle.clone();
+                                let esc = esc_shortcut_handler.clone();
+                                std::thread::spawn(move || {
+                                    let _ = h.global_shortcut().unregister(esc);
+                                });
                                 restore_default_tray(&app_handle, default_icon_owned.clone());
                             } else {
                                 let start_result =
@@ -311,6 +354,12 @@ pub fn run() {
                                             let _ =
                                                 tray.set_icon(Some(recording_icon_owned.clone()));
                                         }
+                                        play_sound("Ping.aiff");
+                                        let h = app_handle.clone();
+                                        let esc = esc_shortcut_handler.clone();
+                                        std::thread::spawn(move || {
+                                            let _ = h.global_shortcut().register(esc);
+                                        });
                                     }
                                     None => {
                                         let err_detail = recorder_handler
@@ -343,9 +392,6 @@ pub fn run() {
                 if let Err(e) = app.global_shortcut().register(sc) {
                     eprintln!("Failed to register recording shortcut: {}", e);
                 }
-            }
-            if let Err(e) = app.global_shortcut().register(esc_shortcut) {
-                eprintln!("Failed to register escape shortcut: {}", e);
             }
 
             // --- Tooltip update loop ---
