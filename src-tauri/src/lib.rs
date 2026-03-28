@@ -108,7 +108,7 @@ fn stop_recording(
                     let audio_path = result.path.clone();
                     let model_name = transcription.model.clone();
                     let h = app_handle.clone();
-                    tokio::spawn(async move {
+                    tauri::async_runtime::spawn(async move {
                         let provider = match provider {
                             Some(p) => p,
                             None => {
