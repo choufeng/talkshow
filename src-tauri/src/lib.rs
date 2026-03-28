@@ -317,7 +317,7 @@ pub fn run() {
                                     &recording_start_handler,
                                     "recording:complete",
                                 );
-                                play_sound("Tink.aiff");
+                                play_sound("Submarine.aiff");
                                 let h = app_handle.clone();
                                 let esc = esc_shortcut_handler.clone();
                                 std::thread::spawn(move || {
@@ -344,7 +344,7 @@ pub fn run() {
                                             let _ =
                                                 tray.set_icon(Some(recording_icon_owned.clone()));
                                         }
-                                        play_sound("Tink.aiff");
+                                        play_sound("Ping.aiff");
                                         let h = app_handle.clone();
                                         let esc = esc_shortcut_handler.clone();
                                         std::thread::spawn(move || {
