@@ -314,7 +314,7 @@ pub fn run() {
                             return;
                         }
                         let id = shortcut.id();
-                        let (current_toggle_id, current_rec_id) = {
+                        let (_current_toggle_id, current_rec_id) = {
                             let ids = SHORTCUT_IDS.read().unwrap();
                             (ids.toggle, ids.recording)
                         };
