@@ -167,7 +167,7 @@
     return Object.keys(errors).length === 0;
   }
 
-  function handleAddProvider() {
+  async function handleAddProvider() {
     if (!validateForm()) return;
 
     const provider: ProviderConfig = {
@@ -183,11 +183,15 @@
       ...$config,
       ai: { providers: newProviders }
     };
-    config.save(newConfig);
 
-    newProvider = { name: '', type: '', id: '', endpoint: '' };
-    formErrors = {};
-    showAddDialog = false;
+    try {
+      await config.save(newConfig);
+      newProvider = { name: '', type: '', id: '', endpoint: '' };
+      formErrors = {};
+      showAddDialog = false;
+    } catch (error) {
+      console.error('Failed to add provider:', error);
+    }
   }
 
   function handleDialogOpenChange(open: boolean) {
@@ -284,8 +288,9 @@
   >
     {#snippet children()}
       <div>
-        <label class="block text-[11px] text-foreground-alt mb-1">Name</label>
+        <label for="provider-name" class="block text-[11px] text-foreground-alt mb-1">Name</label>
         <input
+          id="provider-name"
           class="flex h-8 w-full rounded-md border border-border-input bg-background px-3 py-1 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-1"
           type="text"
           placeholder="如：阿里云"
@@ -298,7 +303,7 @@
       </div>
 
       <div>
-        <label class="block text-[11px] text-foreground-alt mb-1">Type</label>
+        <span class="block text-[11px] text-foreground-alt mb-1">Type</span>
         <GroupedSelect
           value={newProvider.type}
           groups={[{ label: '', items: PROVIDER_TYPES }]}
@@ -311,8 +316,9 @@
       </div>
 
       <div>
-        <label class="block text-[11px] text-foreground-alt mb-1">ID</label>
+        <label for="provider-id" class="block text-[11px] text-foreground-alt mb-1">ID</label>
         <input
+          id="provider-id"
           class="flex h-8 w-full rounded-md border border-border-input bg-background px-3 py-1 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-1"
           type="text"
           placeholder="如：ali-yun"
@@ -325,8 +331,9 @@
       </div>
 
       <div>
-        <label class="block text-[11px] text-foreground-alt mb-1">Endpoint</label>
+        <label for="provider-endpoint" class="block text-[11px] text-foreground-alt mb-1">Endpoint</label>
         <input
+          id="provider-endpoint"
           class="flex h-8 w-full rounded-md border border-border-input bg-background px-3 py-1 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-1"
           type="text"
           placeholder="https://api.example.com/v1"
@@ -341,12 +348,14 @@
 
     {#snippet footer()}
       <button
+        type="button"
         class="rounded-md border border-border px-3 py-1.5 text-xs text-foreground hover:bg-muted transition-colors"
         onclick={() => handleDialogOpenChange(false)}
       >
         取消
       </button>
       <button
+        type="button"
         class="rounded-md bg-foreground px-3 py-1.5 text-xs text-background hover:bg-foreground/90 transition-colors"
         onclick={handleAddProvider}
       >
