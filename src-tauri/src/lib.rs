@@ -278,6 +278,7 @@ pub fn run() {
                                     &recording_start_handler,
                                     "recording:cancel",
                                 );
+                                play_sound("Pop.aiff");
                                 restore_default_tray(&app_handle, default_icon_owned.clone());
                             }
                             return;
@@ -292,6 +293,7 @@ pub fn run() {
                                     &recording_start_handler,
                                     "recording:complete",
                                 );
+                                play_sound("Tink.aiff");
                                 restore_default_tray(&app_handle, default_icon_owned.clone());
                             } else {
                                 let start_result =
@@ -313,6 +315,7 @@ pub fn run() {
                                             let _ =
                                                 tray.set_icon(Some(recording_icon_owned.clone()));
                                         }
+                                        play_sound("Tink.aiff");
                                     }
                                     None => {
                                         let err_detail = recorder_handler
