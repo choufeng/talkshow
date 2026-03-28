@@ -3,8 +3,8 @@ mod recording;
 
 use recording::AudioRecorder;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
-use std::time::Instant;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{image::Image, Emitter, Manager, WebviewWindow};
@@ -13,6 +13,7 @@ use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut,
 const TRAY_ID: &str = "main";
 
 static RECORDING: AtomicBool = AtomicBool::new(false);
+static LAST_REC_PRESS: Mutex<Option<Instant>> = Mutex::new(None);
 
 fn toggle_window(window: &WebviewWindow) {
     if window.is_visible().unwrap_or(false) {
@@ -280,15 +281,34 @@ pub fn run() {
                                     "recording:cancel",
                                 );
                                 play_sound("Pop.aiff");
-                                let _ = app_handle
-                                    .global_shortcut()
-                                    .unregister(esc_shortcut_handler.clone());
+                                let h = app_handle.clone();
+                                let esc = esc_shortcut_handler.clone();
+                                std::thread::spawn(move || {
+                                    let _ = h.global_shortcut().unregister(esc);
+                                });
                                 restore_default_tray(&app_handle, default_icon_owned.clone());
                             }
                             return;
                         }
 
                         if rec_id == Some(id) {
+                            let now = Instant::now();
+                            let should_ignore = LAST_REC_PRESS
+                                .lock()
+                                .ok()
+                                .and_then(|mut last| {
+                                    if let Some(t) = *last {
+                                        if now.duration_since(t) < Duration::from_millis(500) {
+                                            return Some(true);
+                                        }
+                                    }
+                                    *last = Some(now);
+                                    Some(false)
+                                })
+                                .unwrap_or(false);
+                            if should_ignore {
+                                return;
+                            }
                             let is_recording = RECORDING.load(Ordering::Relaxed);
                             if is_recording {
                                 stop_recording(
@@ -298,9 +318,11 @@ pub fn run() {
                                     "recording:complete",
                                 );
                                 play_sound("Tink.aiff");
-                                let _ = app_handle
-                                    .global_shortcut()
-                                    .unregister(esc_shortcut_handler.clone());
+                                let h = app_handle.clone();
+                                let esc = esc_shortcut_handler.clone();
+                                std::thread::spawn(move || {
+                                    let _ = h.global_shortcut().unregister(esc);
+                                });
                                 restore_default_tray(&app_handle, default_icon_owned.clone());
                             } else {
                                 let start_result =
@@ -323,9 +345,11 @@ pub fn run() {
                                                 tray.set_icon(Some(recording_icon_owned.clone()));
                                         }
                                         play_sound("Tink.aiff");
-                                        let _ = app_handle
-                                            .global_shortcut()
-                                            .register(esc_shortcut_handler.clone());
+                                        let h = app_handle.clone();
+                                        let esc = esc_shortcut_handler.clone();
+                                        std::thread::spawn(move || {
+                                            let _ = h.global_shortcut().register(esc);
+                                        });
                                     }
                                     None => {
                                         let err_detail = recorder_handler
