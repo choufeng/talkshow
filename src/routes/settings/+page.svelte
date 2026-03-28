@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { Lightbulb } from 'lucide-svelte';
   import { config } from '$lib/stores/config';
   import ShortcutRecorder from '$lib/components/ShortcutRecorder.svelte';
 
@@ -34,7 +35,7 @@
   />
 
   <div class="hint">
-    <p>💡 提示：点击"修改"按钮后，直接按下键盘上的组合键即可完成设置。按 Esc 取消录制。</p>
+    <p><Lightbulb size={14} style="vertical-align: -2px; margin-right: 4px;" /> 提示：点击"修改"按钮后，直接按下键盘上的组合键即可完成设置。按 Esc 取消录制。</p>
   </div>
 </div>
 
