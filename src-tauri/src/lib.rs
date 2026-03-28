@@ -157,57 +157,39 @@ pub fn run() {
                             return;
                         }
                         let id = shortcut.id();
-                        eprintln!(
-                            "[DEBUG] Shortcut pressed: id={:?}, rec_id={:?}, esc_id={:?}",
-                            id, rec_id, esc_id
-                        );
 
                         if id == esc_id {
-                            eprintln!("[DEBUG] Escape shortcut pressed");
                             let is_recording = RECORDING.load(Ordering::Relaxed);
-                            eprintln!("[DEBUG] Current recording state: {}", is_recording);
                             if is_recording {
-                                eprintln!("[DEBUG] Cancelling recording...");
                                 stop_recording(
                                     &app_handle,
                                     &recording_start_handler,
                                     "recording:cancel",
                                 );
                                 restore_default_tray(&app_handle, default_icon_owned.clone());
-                                eprintln!("[DEBUG] Recording cancelled, tray restored");
                             }
                             return;
                         }
 
                         if rec_id == Some(id) {
-                            eprintln!("[DEBUG] Recording shortcut pressed (Ctrl+\\)");
                             let is_recording = RECORDING.load(Ordering::Relaxed);
-                            eprintln!("[DEBUG] Current recording state: {}", is_recording);
                             if is_recording {
-                                eprintln!("[DEBUG] Stopping recording...");
                                 stop_recording(
                                     &app_handle,
                                     &recording_start_handler,
                                     "recording:complete",
                                 );
                                 restore_default_tray(&app_handle, default_icon_owned.clone());
-                                eprintln!("[DEBUG] Recording stopped, tray restored");
                             } else {
-                                eprintln!("[DEBUG] Starting recording...");
                                 RECORDING.store(true, Ordering::Relaxed);
                                 *recording_start_handler.lock().unwrap() = Some(Instant::now());
                                 if let Some(tray) = app_handle.tray_by_id("main") {
-                                    eprintln!("[DEBUG] Setting recording icon...");
                                     let _ = tray.set_icon(Some(recording_icon_owned.clone()));
-                                    eprintln!("[DEBUG] Recording icon set");
-                                } else {
-                                    eprintln!("[DEBUG] Tray not found!");
                                 }
                             }
                             return;
                         }
 
-                        eprintln!("[DEBUG] Toggle window shortcut pressed");
                         if let Some(window) = app_handle.get_webview_window("main") {
                             toggle_window(&window);
                         }
