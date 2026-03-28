@@ -37,7 +37,6 @@ impl std::fmt::Display for RecordingError {
 }
 
 const RECORDINGS_DIR_NAME: &str = "talkshow";
-const SAMPLE_RATE: u32 = 16000;
 const CHANNELS: u16 = 1;
 
 pub fn recordings_dir() -> PathBuf {
@@ -166,6 +165,7 @@ pub enum AudioRecorder {
     Ready {
         buffer: Arc<Mutex<Vec<i16>>>,
         stream: cpal::Stream,
+        sample_rate: u32,
         start_time: Option<Instant>,
     },
     Unavailable(String),
@@ -198,9 +198,7 @@ impl AudioRecorder {
             }
         };
 
-        let config: cpal::StreamConfig = supported_config
-            .with_sample_rate(cpal::SampleRate(SAMPLE_RATE))
-            .into();
+        let config: cpal::StreamConfig = supported_config.with_max_sample_rate().into();
 
         let buffer: Arc<Mutex<Vec<i16>>> = Arc::new(Mutex::new(Vec::new()));
 
@@ -228,6 +226,7 @@ impl AudioRecorder {
         AudioRecorder::Ready {
             buffer,
             stream,
+            sample_rate: config.sample_rate.0,
             start_time: None,
         }
     }
@@ -238,6 +237,7 @@ impl AudioRecorder {
                 buffer,
                 stream,
                 start_time,
+                ..
             } => {
                 buffer.lock().ok().map(|mut b| b.clear());
                 stream.play().map_err(|e| {
@@ -257,6 +257,7 @@ impl AudioRecorder {
             AudioRecorder::Ready {
                 buffer,
                 stream,
+                sample_rate,
                 start_time,
             } => {
                 let _ = stream.pause();
@@ -282,7 +283,7 @@ impl AudioRecorder {
 
                 let spec = hound::WavSpec {
                     channels: CHANNELS,
-                    sample_rate: SAMPLE_RATE,
+                    sample_rate: *sample_rate,
                     bits_per_sample: 16,
                     sample_format: hound::SampleFormat::Int,
                 };
@@ -332,6 +333,7 @@ impl AudioRecorder {
                 buffer,
                 stream,
                 start_time,
+                ..
             } => {
                 let _ = stream.pause();
                 let duration_secs = start_time.map(|t| t.elapsed().as_secs()).unwrap_or(0);
