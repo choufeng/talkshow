@@ -13,12 +13,7 @@
   }
 
   async function startRecording() {
-    const existing = await WebviewWindow.getByLabel("recording-indicator");
-    if (existing) {
-      await existing.show();
-      await existing.setFocus();
-      return;
-    }
+    recordingStatus = "recording";
 
     const recordingWindow = new WebviewWindow("recording-indicator", {
       url: "/recording",
@@ -32,12 +27,14 @@
       center: true,
     });
 
-    recordingWindow.once("tauri://created", () => {
-      recordingStatus = "recording";
+    recordingWindow.once("tauri://created", async () => {
+      await recordingWindow.show();
+      await recordingWindow.setFocus();
     });
 
     recordingWindow.once("tauri://error", (e) => {
       console.error("Failed to create recording window:", e);
+      recordingStatus = "";
     });
   }
 
