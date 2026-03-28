@@ -168,6 +168,18 @@ fn show_notification(app_handle: &tauri::AppHandle, title: &str, body: &str) {
         .ok();
 }
 
+fn play_sound(sound_name: &str) {
+    #[cfg(target_os = "macos")]
+    {
+        let sound_path = format!("/System/Library/Sounds/{}", sound_name);
+        std::thread::spawn(move || {
+            let _ = std::process::Command::new("afplay")
+                .arg(&sound_path)
+                .spawn();
+        });
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
