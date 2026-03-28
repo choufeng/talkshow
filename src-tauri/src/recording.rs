@@ -305,6 +305,7 @@ impl AudioRecorder {
         }
     }
 
+    #[allow(dead_code)]
     pub fn is_recording(&self) -> bool {
         match self {
             AudioRecorder::Ready { start_time, .. } => start_time.is_some(),

@@ -95,6 +95,9 @@ fn stop_recording(
             }
         },
         "recording:cancel" => {
+            if let Ok(mut r) = recorder.lock() {
+                let _duration = r.cancel();
+            }
             let cancelled = recording::RecordingCancelled {
                 duration_secs: duration,
             };
