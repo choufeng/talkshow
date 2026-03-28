@@ -1,3 +1,5 @@
+mod ai;
+mod clipboard;
 mod config;
 mod recording;
 
@@ -91,7 +93,41 @@ fn stop_recording(
                     if result.format == "wav" {
                         show_notification(&app_handle, "FLAC 编码不可用", "已保存为 WAV 格式");
                     }
-                    let _ = app_handle.emit("recording:complete", result);
+                    let _ = app_handle.emit("recording:complete", &result);
+
+                    let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
+                    let app_config = config::load_config(&app_data_dir);
+                    let transcription = &app_config.features.transcription;
+                    let provider = app_config
+                        .ai
+                        .providers
+                        .iter()
+                        .find(|p| p.id == transcription.provider_id)
+                        .cloned();
+
+                    let audio_path = result.path.clone();
+                    let model_name = transcription.model.clone();
+                    let h = app_handle.clone();
+                    tauri::async_runtime::spawn(async move {
+                        let provider = match provider {
+                            Some(p) => p,
+                            None => {
+                                show_notification(&h, "AI 处理失败", "未找到配置的 AI 提供商");
+                                return;
+                            }
+                        };
+                        let prompt = "请将这段音频转录为文字，只输出转录结果，不要添加任何解释。";
+                        match ai::send_audio_prompt(&audio_path, prompt, &model_name, &provider).await {
+                            Ok(text) => {
+                                if let Err(e) = clipboard::write_and_paste(&text) {
+                                    show_notification(&h, "剪贴板写入失败", &e);
+                                }
+                            }
+                            Err(e) => {
+                                show_notification(&h, "AI 处理失败", &e.to_string());
+                            }
+                        }
+                    });
                 }
                 Err(recording::RecordingError::TooShort) => {
                     let cancelled = recording::RecordingCancelled {
