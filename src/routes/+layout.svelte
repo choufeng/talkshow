@@ -1,6 +1,10 @@
 <script lang="ts">
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
+  import type { Snippet } from 'svelte';
+  import { House, Settings } from 'lucide-svelte';
+
+  let { children }: { children: Snippet } = $props();
 
   let activeMenu = $derived(
     $page.url.pathname === '/settings' ? 'settings' :
@@ -21,7 +25,7 @@
         class:active={activeMenu === 'home'}
         onclick={() => navigateTo('/')}
       >
-        <span class="icon">🏠</span>
+        <House size={18} style="width:18px;height:18px;flex-shrink:0;" />
         <span class="label">首页</span>
       </button>
       <button
@@ -37,13 +41,13 @@
         class:active={activeMenu === 'settings'}
         onclick={() => navigateTo('/settings')}
       >
-        <span class="icon">⚙️</span>
+        <Settings size={18} style="width:18px;height:18px;flex-shrink:0;" />
         <span class="label">设置</span>
       </button>
     </nav>
   </aside>
   <main class="content">
-    <slot />
+    {@render children()}
   </main>
 </div>
 
@@ -96,10 +100,6 @@
   .menu-item.active {
     background-color: #e8e8e8;
     border-left: 3px solid #396cd8;
-  }
-
-  .icon {
-    font-size: 16px;
   }
 
   .content {
