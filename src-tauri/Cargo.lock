@@ -4807,6 +4807,7 @@ version = "0.1.0"
 dependencies = [
  "async-openai",
  "cpal",
+ "dasp_sample",
  "hound",
  "image",
  "serde",

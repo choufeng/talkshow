@@ -1,4 +1,6 @@
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+use cpal::SampleFormat;
+use dasp_sample::Sample as DaspSample;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -126,6 +128,40 @@ pub fn wav_to_flac(wav_path: &Path, flac_path: &Path) -> Result<(), String> {
 // ensuring no concurrent access to the stream.
 unsafe impl Send for AudioRecorder {}
 
+fn sample_to_i16<T: cpal::Sample>(sample: T) -> i16
+where
+    T::Float: dasp_sample::Duplex<f32>,
+{
+    let f: f32 = sample.to_float_sample().to_sample();
+    (f * 32767.0).clamp(-32768.0, 32767.0) as i16
+}
+
+fn build_stream<T>(
+    device: &cpal::Device,
+    config: &cpal::StreamConfig,
+    buffer: Arc<Mutex<Vec<i16>>>,
+) -> Result<cpal::Stream, String>
+where
+    T: cpal::Sample + cpal::SizedSample,
+    T::Float: dasp_sample::Duplex<f32>,
+{
+    device
+        .build_input_stream(
+            config,
+            move |data: &[T], _: &cpal::InputCallbackInfo| {
+                let mut buf = buffer.lock().unwrap_or_else(|e| e.into_inner());
+                for &sample in data {
+                    buf.push(sample_to_i16(sample));
+                }
+            },
+            |err| {
+                eprintln!("Audio input error: {}", err);
+            },
+            None,
+        )
+        .map_err(|e| format!("Failed to create audio stream: {}", e))
+}
+
 pub enum AudioRecorder {
     Ready {
         buffer: Arc<Mutex<Vec<i16>>>,
@@ -153,34 +189,36 @@ impl AudioRecorder {
             }
         };
 
-        let supported_config =
-            match supported_configs.find(|c| c.sample_format() == cpal::SampleFormat::I16) {
-                Some(c) => c,
-                None => {
-                    return AudioRecorder::Unavailable(
-                        "Microphone does not support 16-bit audio format".into(),
-                    )
-                }
-            };
+        let supported_config = match supported_configs.next() {
+            Some(c) => c,
+            None => {
+                return AudioRecorder::Unavailable(
+                    "Microphone has no supported input configurations".into(),
+                )
+            }
+        };
 
         let config: cpal::StreamConfig = supported_config
             .with_sample_rate(cpal::SampleRate(SAMPLE_RATE))
             .into();
 
         let buffer: Arc<Mutex<Vec<i16>>> = Arc::new(Mutex::new(Vec::new()));
-        let buffer_clone = buffer.clone();
 
-        let stream = match device.build_input_stream(
-            &config,
-            move |data: &[i16], _: &cpal::InputCallbackInfo| {
-                let mut buf = buffer_clone.lock().unwrap_or_else(|e| e.into_inner());
-                buf.extend_from_slice(data);
-            },
-            |err| {
-                eprintln!("Audio input error: {}", err);
-            },
-            None,
-        ) {
+        let sample_format = supported_config.sample_format();
+        let stream = match sample_format {
+            SampleFormat::I16 => build_stream::<i16>(&device, &config, buffer.clone()),
+            SampleFormat::I32 => build_stream::<i32>(&device, &config, buffer.clone()),
+            SampleFormat::F32 => build_stream::<f32>(&device, &config, buffer.clone()),
+            SampleFormat::F64 => build_stream::<f64>(&device, &config, buffer.clone()),
+            _ => {
+                return AudioRecorder::Unavailable(format!(
+                    "Unsupported sample format: {:?}",
+                    sample_format
+                ))
+            }
+        };
+
+        let stream = match stream {
             Ok(s) => s,
             Err(e) => {
                 return AudioRecorder::Unavailable(format!("Failed to create audio stream: {}", e))

@@ -275,11 +275,16 @@ pub fn run() {
                                 );
                                 restore_default_tray(&app_handle, default_icon_owned.clone());
                             } else {
-                                match recorder_handler
-                                    .lock()
-                                    .ok()
-                                    .and_then(|mut r| r.start().ok())
-                                {
+                                let start_result =
+                                    recorder_handler.lock().ok().and_then(|mut r| {
+                                        let result = r.start();
+                                        if result.is_ok() {
+                                            Some(())
+                                        } else {
+                                            None
+                                        }
+                                    });
+                                match start_result {
                                     Some(()) => {
                                         RECORDING.store(true, Ordering::Relaxed);
                                         if let Ok(mut start) = recording_start_handler.lock() {
@@ -291,8 +296,14 @@ pub fn run() {
                                         }
                                     }
                                     None => {
-                                        eprintln!("Failed to start recording");
-                                        show_notification(&app_handle, "录音失败", "无法开始录音");
+                                        let err_detail = recorder_handler
+                                            .lock()
+                                            .ok()
+                                            .and_then(|mut r| r.start().err())
+                                            .map(|e| e.to_string())
+                                            .unwrap_or_else(|| "Unknown error".into());
+                                        eprintln!("Failed to start recording: {}", err_detail);
+                                        show_notification(&app_handle, "录音失败", &err_detail);
                                     }
                                 }
                             }
