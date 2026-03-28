@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { Lightbulb } from 'lucide-svelte';
   import { config } from '$lib/stores/config';
-  import ShortcutRecorder from '$lib/components/ShortcutRecorder.svelte';
+  import ShortcutRecorder from '$lib/components/ui/shortcut-recorder/index.svelte';
 
   onMount(() => {
     config.load();
@@ -17,51 +17,28 @@
   }
 </script>
 
-<div class="settings-page">
-  <h2>快捷键设置</h2>
+<div class="max-w-[600px]">
+  <h2 class="text-xl font-semibold text-foreground m-0 mb-6">设置</h2>
 
-  <ShortcutRecorder
-    label="窗口切换"
-    description="显示或隐藏主窗口"
-    value={$config.shortcut}
-    onUpdate={handleUpdateToggle}
-  />
-
-  <ShortcutRecorder
-    label="录音控制"
-    description="开始或结束录音"
-    value={$config.recording_shortcut}
-    onUpdate={handleUpdateRecording}
-  />
-
-  <div class="hint">
-    <p><Lightbulb size={14} style="vertical-align: -2px; margin-right: 4px;" /> 提示：点击"修改"按钮后，直接按下键盘上的组合键即可完成设置。按 Esc 取消录制。</p>
-  </div>
+  <section>
+    <div class="text-[11px] text-muted-foreground uppercase tracking-wider mb-2.5">快捷键</div>
+    <ShortcutRecorder
+      label="窗口切换"
+      description="显示或隐藏主窗口"
+      value={$config.shortcut}
+      onUpdate={handleUpdateToggle}
+    />
+    <ShortcutRecorder
+      label="录音控制"
+      description="开始或结束录音"
+      value={$config.recording_shortcut}
+      onUpdate={handleUpdateRecording}
+    />
+    <div class="rounded-lg bg-accent/50 border border-accent p-4 mt-5">
+      <p class="text-xs text-accent-foreground m-0">
+        <Lightbulb size={14} class="inline -align-[2px] mr-1" />
+        提示：点击"修改"按钮后，直接按下键盘上的组合键即可完成设置。按 Esc 取消录制。
+      </p>
+    </div>
+  </section>
 </div>
-
-<style>
-  .settings-page {
-    max-width: 600px;
-  }
-
-  h2 {
-    margin: 0 0 24px 0;
-    font-size: 20px;
-    font-weight: 600;
-    color: #333;
-  }
-
-  .hint {
-    background: #fff9e6;
-    border: 1px solid #ffd666;
-    border-radius: 8px;
-    padding: 16px;
-    margin-top: 20px;
-  }
-
-  .hint p {
-    margin: 0;
-    color: #d48806;
-    font-size: 13px;
-  }
-</style>

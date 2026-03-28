@@ -96,13 +96,13 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-<div class="shortcut-item">
-  <div class="info">
-    <h4>{label}</h4>
-    <p>{description}</p>
+<div class="rounded-lg border border-border bg-background-alt p-5 mb-4">
+  <div>
+    <h4 class="text-sm font-semibold text-foreground m-0">{label}</h4>
+    <p class="text-[13px] text-foreground-alt m-0 mt-1">{description}</p>
   </div>
-  <div class="controls">
-    <div class="shortcut-display" class:recording={isRecording}>
+  <div class="flex items-center gap-3 mt-3">
+    <div class="rounded-md px-4 py-2 font-mono text-sm min-w-[120px] text-center {isRecording ? 'bg-accent text-accent-foreground' : 'bg-muted text-foreground'}">
       {#if isRecording}
         请按下快捷键...
       {:else}
@@ -110,86 +110,22 @@
       {/if}
     </div>
     {#if isRecording}
-      <button class="btn cancel" onclick={cancelRecording}>
+      <button
+        class="inline-flex items-center justify-center rounded-md border border-accent-foreground bg-accent-foreground px-4 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent-foreground/90"
+        onclick={cancelRecording}
+      >
         取消
       </button>
     {:else}
-      <button class="btn modify" onclick={startRecording}>
+      <button
+        class="inline-flex items-center justify-center rounded-md border border-border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted hover:border-foreground/20"
+        onclick={startRecording}
+      >
         修改
       </button>
     {/if}
   </div>
   {#if error}
-    <p class="error">{error}</p>
+    <p class="text-xs text-destructive m-0 mt-2">{error}</p>
   {/if}
 </div>
-
-<style>
-  .shortcut-item {
-    background: white;
-    border: 1px solid #e0e0e0;
-    border-radius: 8px;
-    padding: 20px;
-    margin-bottom: 16px;
-  }
-
-  .info h4 {
-    margin: 0 0 4px 0;
-    font-size: 14px;
-    font-weight: 600;
-    color: #333;
-  }
-
-  .info p {
-    margin: 0;
-    font-size: 13px;
-    color: #666;
-  }
-
-  .controls {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-top: 12px;
-  }
-
-  .shortcut-display {
-    background: #f0f0f0;
-    padding: 8px 16px;
-    border-radius: 6px;
-    font-family: monospace;
-    font-size: 14px;
-    min-width: 120px;
-    text-align: center;
-  }
-
-  .shortcut-display.recording {
-    background: #396cd8;
-    color: white;
-  }
-
-  .btn {
-    padding: 8px 16px;
-    border-radius: 6px;
-    border: 1px solid #ccc;
-    background: white;
-    cursor: pointer;
-    font-size: 13px;
-  }
-
-  .btn:hover {
-    border-color: #396cd8;
-  }
-
-  .btn.cancel {
-    border-color: #396cd8;
-    background: #396cd8;
-    color: white;
-  }
-
-  .error {
-    margin: 8px 0 0 0;
-    color: #d32f2f;
-    font-size: 12px;
-  }
-</style>

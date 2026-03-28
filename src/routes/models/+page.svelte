@@ -1,9 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { config } from '$lib/stores/config';
-  import GroupedSelect from '$lib/components/GroupedSelect.svelte';
-  import TagInput from '$lib/components/TagInput.svelte';
-  import PasswordInput from '$lib/components/PasswordInput.svelte';
+  import GroupedSelect from '$lib/components/ui/select/index.svelte';
+  import TagInput from '$lib/components/ui/tag-input/index.svelte';
+  import PasswordInput from '$lib/components/ui/password-input/index.svelte';
   import type { ProviderConfig, AppConfig } from '$lib/stores/config';
 
   onMount(() => {
@@ -107,15 +107,15 @@
   }
 </script>
 
-<div class="models-page">
-  <h2>模型</h2>
+<div class="max-w-[800px]">
+  <h2 class="text-xl font-semibold text-foreground m-0 mb-6">模型</h2>
 
-  <section class="section">
-    <div class="section-label">Features</div>
-    <div class="features-grid">
-      <div class="feature-card">
-        <div class="feature-name">Transcription</div>
-        <div class="feature-desc">转写服务</div>
+  <section class="mb-7">
+    <div class="text-[11px] text-muted-foreground uppercase tracking-wider mb-2.5">Features</div>
+    <div class="grid grid-cols-2 gap-3">
+      <div class="rounded-lg border border-border bg-background-alt p-3.5">
+        <div class="text-[13px] font-semibold text-foreground mb-0.5">Transcription</div>
+        <div class="text-[11px] text-foreground-alt mb-2.5">转写服务</div>
         <GroupedSelect
           value={getTranscriptionValue()}
           groups={buildTranscriptionGroups()}
@@ -126,22 +126,27 @@
     </div>
   </section>
 
-  <section class="section">
-    <div class="section-label">Providers</div>
-    <div class="providers-grid">
+  <section>
+    <div class="text-[11px] text-muted-foreground uppercase tracking-wider mb-2.5">Providers</div>
+    <div class="grid grid-cols-2 gap-3">
       {#each $config.ai.providers || [] as provider (provider.id)}
-        <div class="provider-card">
-          <div class="provider-header">
+        <div class="rounded-lg border border-border bg-background-alt p-3.5">
+          <div class="flex justify-between items-start mb-3">
             <div>
-              <div class="provider-name">{provider.name}</div>
-              <div class="provider-subtitle">{provider.id}</div>
+              <div class="text-sm font-semibold text-foreground">{provider.name}</div>
+              <div class="text-[10px] text-muted-foreground mt-0.5">{provider.id}</div>
             </div>
-            <button class="provider-remove" onclick={() => handleRemoveProvider(provider.id)}>✕</button>
+            <button
+              class="text-xs text-muted-foreground hover:text-destructive transition-colors p-0.5"
+              onclick={() => handleRemoveProvider(provider.id)}
+            >
+              ✕
+            </button>
           </div>
 
           {#if needsApiKey(provider)}
-            <div class="field-group">
-              <label class="field-label">API Key</label>
+            <div class="mb-2.5">
+              <label class="block text-[11px] text-foreground-alt mb-1">API Key</label>
               <PasswordInput
                 value={provider.api_key || ''}
                 placeholder="sk-..."
@@ -150,18 +155,18 @@
             </div>
           {/if}
 
-          <div class="field-group">
-            <label class="field-label">Endpoint</label>
+          <div class="mb-2.5">
+            <label class="block text-[11px] text-foreground-alt mb-1">Endpoint</label>
             <input
-              class="field"
+              class="flex h-8 w-full rounded-md border border-border-input bg-background px-3 py-1 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-1"
               type="text"
               value={provider.endpoint}
               onchange={(e) => handleProviderFieldChange(provider.id, 'endpoint', (e.target as HTMLInputElement).value)}
             />
           </div>
 
-          <div class="field-group">
-            <label class="field-label">Models</label>
+          <div>
+            <label class="block text-[11px] text-foreground-alt mb-1">Models</label>
             <TagInput
               tags={provider.models}
               onAdd={(tag: string) => handleAddModel(provider.id, tag)}
@@ -173,127 +178,3 @@
     </div>
   </section>
 </div>
-
-<style>
-  .models-page {
-    max-width: 800px;
-  }
-
-  h2 {
-    margin: 0 0 24px 0;
-    font-size: 20px;
-    font-weight: 600;
-    color: #333;
-  }
-
-  .section {
-    margin-bottom: 28px;
-  }
-
-  .section-label {
-    font-size: 11px;
-    color: #888;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    margin-bottom: 10px;
-  }
-
-  .features-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
-  }
-
-  .feature-card {
-    background: #fff;
-    border: 1px solid #e0e0e0;
-    border-radius: 8px;
-    padding: 14px;
-  }
-
-  .feature-name {
-    font-size: 13px;
-    font-weight: 600;
-    color: #333;
-    margin-bottom: 2px;
-  }
-
-  .feature-desc {
-    font-size: 11px;
-    color: #999;
-    margin-bottom: 10px;
-  }
-
-  .providers-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 12px;
-  }
-
-  .provider-card {
-    background: #fff;
-    border: 1px solid #e0e0e0;
-    border-radius: 8px;
-    padding: 14px;
-  }
-
-  .provider-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 12px;
-  }
-
-  .provider-name {
-    font-size: 14px;
-    font-weight: 600;
-    color: #333;
-  }
-
-  .provider-subtitle {
-    font-size: 10px;
-    color: #aaa;
-    margin-top: 1px;
-  }
-
-  .provider-remove {
-    background: none;
-    border: none;
-    font-size: 10px;
-    color: #ccc;
-    cursor: pointer;
-    padding: 2px;
-  }
-
-  .provider-remove:hover {
-    color: #d32f2f;
-  }
-
-  .field-group {
-    margin-bottom: 10px;
-  }
-
-  .field-label {
-    display: block;
-    font-size: 11px;
-    color: #888;
-    margin-bottom: 4px;
-  }
-
-  .field {
-    width: 100%;
-    background: #f8f8f8;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    padding: 6px 8px;
-    font-size: 11px;
-    outline: none;
-    word-break: break-all;
-    box-sizing: border-box;
-  }
-
-  .field:focus {
-    border-color: #396cd8;
-    box-shadow: 0 0 0 2px rgba(57, 108, 216, 0.15);
-  }
-</style>

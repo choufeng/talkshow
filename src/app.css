@@ -1,0 +1,69 @@
+@import "tailwindcss";
+@plugin "tailwindcss-animate";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-background-alt: var(--background-alt);
+  --color-foreground: var(--foreground);
+  --color-foreground-alt: var(--foreground-alt);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-border-input: var(--border-input);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+
+  --shadow-card: 0px 2px 0px 1px rgba(0, 0, 0, 0.04);
+  --shadow-popover: 0px 7px 12px 3px rgba(0, 0, 0, 0.08);
+  --shadow-mini: 0px 1px 0px 1px rgba(0, 0, 0, 0.04);
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+:root {
+  --background: oklch(100% 0 0);
+  --background-alt: oklch(97% 0 0);
+  --foreground: oklch(20% 0 0);
+  --foreground-alt: oklch(37% 0.01 67.558);
+  --muted: oklch(92% 0 0);
+  --muted-foreground: oklch(42% 0.095 57.708);
+  --border: oklch(85% 0 0 / 0.2);
+  --border-input: oklch(75% 0 0 / 0.35);
+  --accent: oklch(85% 0.199 91.936);
+  --accent-foreground: oklch(42% 0.095 57.708);
+  --destructive: oklch(70% 0.191 22.216);
+}
+
+.dark {
+  --background: oklch(14.076% 0.004 285.822);
+  --background-alt: oklch(20.219% 0.004 308.229);
+  --foreground: oklch(75.687% 0.123 76.89);
+  --foreground-alt: oklch(93.203% 0.089 90.861);
+  --muted: oklch(23.219% 0.004 308.229);
+  --muted-foreground: oklch(85.516% 0.012 261.069);
+  --border: oklch(36.674% 0.051 338.825 / 0.25);
+  --border-input: oklch(36.674% 0.051 338.825 / 0.4);
+  --accent: oklch(36.674% 0.051 338.825);
+  --accent-foreground: oklch(87.334% 0.01 338.825);
+  --destructive: oklch(71.753% 0.176 22.568);
+}
+
+@layer base {
+  *,
+  ::after,
+  ::before {
+    border-color: var(--border);
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background-color: var(--background);
+    color: var(--foreground);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
