@@ -157,6 +157,12 @@ fn update_shortcut(
     Ok(())
 }
 
+#[tauri::command]
+fn save_config_cmd(app_handle: tauri::AppHandle, config: config::AppConfig) -> Result<(), String> {
+    let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
+    config::save_config(&app_data_dir, &config)
+}
+
 fn show_notification(app_handle: &tauri::AppHandle, title: &str, body: &str) {
     use tauri_plugin_notification::NotificationExt;
     app_handle
@@ -173,7 +179,11 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
-        .invoke_handler(tauri::generate_handler![get_config, update_shortcut])
+        .invoke_handler(tauri::generate_handler![
+            get_config,
+            update_shortcut,
+            save_config_cmd
+        ])
         .setup(|app| {
             let app_data_dir = app.path().app_data_dir().unwrap_or_default();
             let app_config = config::load_config(&app_data_dir);

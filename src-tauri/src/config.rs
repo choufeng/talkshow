@@ -6,10 +6,47 @@ const DEFAULT_SHORTCUT: &str = "Control+Shift+Quote";
 const DEFAULT_RECORDING_SHORTCUT: &str = "Control+Backslash";
 const CONFIG_FILE_NAME: &str = "config.json";
 
+const DEFAULT_VERTEX_ENDPOINT: &str = "https://aiplatform.googleapis.com/v1";
+const DEFAULT_DASHSCOPE_ENDPOINT: &str = "https://dashscope.aliyuncs.com/compatible-mode/v1";
+
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(default)]
+pub struct ProviderConfig {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub provider_type: String,
+    pub name: String,
+    pub endpoint: String,
+    pub api_key: Option<String>,
+    pub models: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(default)]
+pub struct AiConfig {
+    pub providers: Vec<ProviderConfig>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(default)]
+pub struct TranscriptionConfig {
+    pub provider_id: String,
+    pub model: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(default)]
+pub struct FeaturesConfig {
+    pub transcription: TranscriptionConfig,
+}
+
 #[derive(Serialize, Deserialize, Clone)]
+#[serde(default)]
 pub struct AppConfig {
     pub shortcut: String,
     pub recording_shortcut: String,
+    pub ai: AiConfig,
+    pub features: FeaturesConfig,
 }
 
 impl Default for AppConfig {
@@ -17,6 +54,32 @@ impl Default for AppConfig {
         AppConfig {
             shortcut: DEFAULT_SHORTCUT.to_string(),
             recording_shortcut: DEFAULT_RECORDING_SHORTCUT.to_string(),
+            ai: AiConfig {
+                providers: vec![
+                    ProviderConfig {
+                        id: "vertex".to_string(),
+                        provider_type: "vertex".to_string(),
+                        name: "VTX".to_string(),
+                        endpoint: DEFAULT_VERTEX_ENDPOINT.to_string(),
+                        api_key: None,
+                        models: vec!["gemini-2.0-flash".to_string()],
+                    },
+                    ProviderConfig {
+                        id: "dashscope".to_string(),
+                        provider_type: "openai-compatible".to_string(),
+                        name: "阿里云".to_string(),
+                        endpoint: DEFAULT_DASHSCOPE_ENDPOINT.to_string(),
+                        api_key: Some(String::new()),
+                        models: vec!["qwen2-audio-instruct".to_string()],
+                    },
+                ],
+            },
+            features: FeaturesConfig {
+                transcription: TranscriptionConfig {
+                    provider_id: "vertex".to_string(),
+                    model: "gemini-2.0-flash".to_string(),
+                },
+            },
         }
     }
 }
