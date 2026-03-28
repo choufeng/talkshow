@@ -261,6 +261,7 @@ pub fn run() {
             let app_handle = app.handle().clone();
             let recording_start_handler = recording_start.clone();
             let recorder_handler = recorder.clone();
+            let esc_shortcut_handler = esc_shortcut.clone();
             app.handle().plugin(
                 tauri_plugin_global_shortcut::Builder::new()
                     .with_handler(move |_app, shortcut, event| {
@@ -279,6 +280,9 @@ pub fn run() {
                                     "recording:cancel",
                                 );
                                 play_sound("Pop.aiff");
+                                let _ = app_handle
+                                    .global_shortcut()
+                                    .unregister(esc_shortcut_handler.clone());
                                 restore_default_tray(&app_handle, default_icon_owned.clone());
                             }
                             return;
@@ -294,6 +298,9 @@ pub fn run() {
                                     "recording:complete",
                                 );
                                 play_sound("Tink.aiff");
+                                let _ = app_handle
+                                    .global_shortcut()
+                                    .unregister(esc_shortcut_handler.clone());
                                 restore_default_tray(&app_handle, default_icon_owned.clone());
                             } else {
                                 let start_result =
@@ -316,6 +323,9 @@ pub fn run() {
                                                 tray.set_icon(Some(recording_icon_owned.clone()));
                                         }
                                         play_sound("Tink.aiff");
+                                        let _ = app_handle
+                                            .global_shortcut()
+                                            .register(esc_shortcut_handler.clone());
                                     }
                                     None => {
                                         let err_detail = recorder_handler
@@ -348,9 +358,6 @@ pub fn run() {
                 if let Err(e) = app.global_shortcut().register(sc) {
                     eprintln!("Failed to register recording shortcut: {}", e);
                 }
-            }
-            if let Err(e) = app.global_shortcut().register(esc_shortcut) {
-                eprintln!("Failed to register escape shortcut: {}", e);
             }
 
             // --- Tooltip update loop ---
