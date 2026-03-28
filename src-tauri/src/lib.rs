@@ -29,7 +29,7 @@ fn toggle_window(window: &WebviewWindow) {
 fn parse_shortcut(shortcut_str: &str) -> Option<Shortcut> {
     let parts: Vec<&str> = shortcut_str.split('+').collect();
     let mut modifiers = Modifiers::empty();
-    let mut key_code = None;
+    let mut key_code: Option<Code> = None;
 
     for part in &parts {
         match *part {
@@ -37,15 +37,11 @@ fn parse_shortcut(shortcut_str: &str) -> Option<Shortcut> {
             "Shift" => modifiers |= Modifiers::SHIFT,
             "Alt" => modifiers |= Modifiers::ALT,
             "Command" | "Super" => modifiers |= Modifiers::SUPER,
-            "Quote" => key_code = Some(Code::Quote),
-            "Space" => key_code = Some(Code::Space),
-            "KeyN" => key_code = Some(Code::KeyN),
-            "KeyR" => key_code = Some(Code::KeyR),
-            "KeyS" => key_code = Some(Code::KeyS),
-            "KeyQ" => key_code = Some(Code::KeyQ),
-            "Backslash" => key_code = Some(Code::Backslash),
-            "Escape" => key_code = Some(Code::Escape),
-            _ => {}
+            s => {
+                if let Ok(code) = s.parse::<Code>() {
+                    key_code = Some(code);
+                }
+            }
         }
     }
 
