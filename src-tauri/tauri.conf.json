@@ -11,6 +11,11 @@
   },
   "app": {
     "macOSPrivateApi": true,
+    "macos": {
+      "permissions": {
+        "microphone": "TalkShow needs microphone access to record audio."
+      }
+    },
     "windows": [
       {
         "title": "TalkShow",
