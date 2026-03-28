@@ -6,10 +6,51 @@ const DEFAULT_SHORTCUT: &str = "Control+Shift+Quote";
 const DEFAULT_RECORDING_SHORTCUT: &str = "Control+Backslash";
 const CONFIG_FILE_NAME: &str = "config.json";
 
+const DEFAULT_VERTEX_ENDPOINT: &str = "https://aiplatform.googleapis.com/v1";
+const DEFAULT_DASHSCOPE_ENDPOINT: &str = "https://dashscope.aliyuncs.com/compatible-mode/v1";
+
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(default)]
+pub struct VertexConfig {
+    pub endpoint: String,
+    pub models: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(default)]
+pub struct DashScopeConfig {
+    pub api_key: String,
+    pub endpoint: String,
+    pub models: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(default)]
+pub struct AiConfig {
+    pub vertex: VertexConfig,
+    pub dashscope: DashScopeConfig,
+}
+
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(default)]
+pub struct TranscriptionConfig {
+    pub provider: String,
+    pub model: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(default)]
+pub struct FeaturesConfig {
+    pub transcription: TranscriptionConfig,
+}
+
 #[derive(Serialize, Deserialize, Clone)]
+#[serde(default)]
 pub struct AppConfig {
     pub shortcut: String,
     pub recording_shortcut: String,
+    pub ai: AiConfig,
+    pub features: FeaturesConfig,
 }
 
 impl Default for AppConfig {
@@ -17,6 +58,23 @@ impl Default for AppConfig {
         AppConfig {
             shortcut: DEFAULT_SHORTCUT.to_string(),
             recording_shortcut: DEFAULT_RECORDING_SHORTCUT.to_string(),
+            ai: AiConfig {
+                vertex: VertexConfig {
+                    endpoint: DEFAULT_VERTEX_ENDPOINT.to_string(),
+                    models: vec!["gemini-2.0-flash".to_string()],
+                },
+                dashscope: DashScopeConfig {
+                    api_key: String::new(),
+                    endpoint: DEFAULT_DASHSCOPE_ENDPOINT.to_string(),
+                    models: vec!["qwen2-audio-instruct".to_string()],
+                },
+            },
+            features: FeaturesConfig {
+                transcription: TranscriptionConfig {
+                    provider: "vertex".to_string(),
+                    model: "gemini-2.0-flash".to_string(),
+                },
+            },
         }
     }
 }
