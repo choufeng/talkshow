@@ -164,17 +164,23 @@ fn update_shortcut(
     let new_toggle = parse_shortcut(&app_config.shortcut);
     let new_rec = parse_shortcut(&app_config.recording_shortcut);
 
-    if let Some(sc) = new_toggle {
-        let _ = app_handle.global_shortcut().register(sc);
-    }
-    if let Some(sc) = new_rec {
-        let _ = app_handle.global_shortcut().register(sc);
-    }
-
     {
         let mut ids = SHORTCUT_IDS.write().unwrap();
         ids.toggle = new_toggle.map(|s| s.id()).unwrap_or(0);
         ids.recording = new_rec.map(|s| s.id()).unwrap_or(0);
+    }
+
+    if let Some(sc) = new_toggle {
+        app_handle
+            .global_shortcut()
+            .register(sc)
+            .map_err(|e| e.to_string())?;
+    }
+    if let Some(sc) = new_rec {
+        app_handle
+            .global_shortcut()
+            .register(sc)
+            .map_err(|e| e.to_string())?;
     }
 
     Ok(())
@@ -289,11 +295,11 @@ pub fn run() {
             let esc_shortcut = Shortcut::new(None, Code::Escape);
 
             let toggle_id = toggle_shortcut.as_ref().map(|s| s.id()).unwrap_or(0);
-            let rec_id_val = rec_shortcut.as_ref().map(|s| s.id()).unwrap_or(0);
+            let rec_id = rec_shortcut.as_ref().map(|s| s.id()).unwrap_or(0);
             {
                 let mut ids = SHORTCUT_IDS.write().unwrap();
                 ids.toggle = toggle_id;
-                ids.recording = rec_id_val;
+                ids.recording = rec_id;
             }
             let esc_id = esc_shortcut.id();
 
