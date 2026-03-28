@@ -37,10 +37,16 @@ impl std::fmt::Display for RecordingError {
 }
 
 const RECORDINGS_DIR_NAME: &str = "talkshow";
-const CHANNELS: u16 = 1;
 
-pub fn recordings_dir() -> PathBuf {
-    std::env::temp_dir().join(RECORDINGS_DIR_NAME)
+pub enum AudioRecorder {
+    Ready {
+        buffer: Arc<Mutex<Vec<i16>>>,
+        stream: cpal::Stream,
+        sample_rate: u32,
+        channels: u16,
+        start_time: Option<Instant>,
+    },
+    Unavailable(String),
 }
 
 pub fn generate_filename() -> String {
@@ -95,6 +101,10 @@ fn days_to_date(days_since_epoch: u64) -> (u64, u64, u64) {
 
 fn is_leap_year(year: u64) -> bool {
     (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)
+}
+
+pub fn recordings_dir() -> PathBuf {
+    std::env::temp_dir().join(RECORDINGS_DIR_NAME)
 }
 
 pub fn ensure_recordings_dir() -> Result<PathBuf, String> {
@@ -161,16 +171,6 @@ where
         .map_err(|e| format!("Failed to create audio stream: {}", e))
 }
 
-pub enum AudioRecorder {
-    Ready {
-        buffer: Arc<Mutex<Vec<i16>>>,
-        stream: cpal::Stream,
-        sample_rate: u32,
-        start_time: Option<Instant>,
-    },
-    Unavailable(String),
-}
-
 impl AudioRecorder {
     pub fn new() -> Self {
         let host = cpal::default_host();
@@ -227,6 +227,7 @@ impl AudioRecorder {
             buffer,
             stream,
             sample_rate: config.sample_rate.0,
+            channels: config.channels,
             start_time: None,
         }
     }
@@ -258,6 +259,7 @@ impl AudioRecorder {
                 buffer,
                 stream,
                 sample_rate,
+                channels,
                 start_time,
             } => {
                 let _ = stream.pause();
@@ -282,7 +284,7 @@ impl AudioRecorder {
                 let wav_path = flac_path.with_extension("wav");
 
                 let spec = hound::WavSpec {
-                    channels: CHANNELS,
+                    channels: *channels,
                     sample_rate: *sample_rate,
                     bits_per_sample: 16,
                     sample_format: hound::SampleFormat::Int,
