@@ -136,10 +136,22 @@ fn update_shortcut(
     Ok(())
 }
 
+fn show_notification(app_handle: &tauri::AppHandle, title: &str, body: &str) {
+    use tauri_plugin_notification::NotificationExt;
+    app_handle
+        .notification()
+        .builder()
+        .title(title)
+        .body(body)
+        .show()
+        .ok();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![get_config, update_shortcut])
         .setup(|app| {
             let app_data_dir = app.path().app_data_dir().unwrap_or_default();
@@ -261,6 +273,11 @@ pub fn run() {
                                     }
                                     Err(e) => {
                                         eprintln!("Failed to start recording: {}", e);
+                                        show_notification(
+                                            &app_handle,
+                                            "录音失败",
+                                            &format!("{}", e),
+                                        );
                                     }
                                 }
                             }
