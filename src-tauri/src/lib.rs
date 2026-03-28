@@ -75,6 +75,12 @@ fn stop_recording(
         "recording:complete" => match recorder.lock() {
             Ok(mut r) => match r.stop() {
                 Ok(result) => {
+                    println!(
+                        "[TalkShow] Recording saved: {} ({}s, {})",
+                        result.path.display(),
+                        result.duration_secs,
+                        result.format,
+                    );
                     if result.format == "wav" {
                         show_notification(&app_handle, "FLAC 编码不可用", "已保存为 WAV 格式");
                     }
@@ -98,6 +104,7 @@ fn stop_recording(
             if let Ok(mut r) = recorder.lock() {
                 let _duration = r.cancel();
             }
+            println!("[TalkShow] Recording cancelled ({}s)", duration);
             let cancelled = recording::RecordingCancelled {
                 duration_secs: duration,
             };
