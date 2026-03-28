@@ -112,8 +112,8 @@
 
   <section class="mb-7">
     <div class="text-[11px] text-muted-foreground uppercase tracking-wider mb-2.5">Features</div>
-    <div class="grid grid-cols-3 gap-3">
-      <div class="rounded-lg border border-border bg-background p-3.5">
+    <div class="grid grid-cols-2 gap-3">
+      <div class="rounded-lg border border-border bg-background-alt p-3.5">
         <div class="text-[13px] font-semibold text-foreground mb-0.5">Transcription</div>
         <div class="text-[11px] text-foreground-alt mb-2.5">转写服务</div>
         <GroupedSelect
@@ -130,7 +130,7 @@
     <div class="text-[11px] text-muted-foreground uppercase tracking-wider mb-2.5">Providers</div>
     <div class="grid grid-cols-2 gap-3">
       {#each $config.ai.providers || [] as provider (provider.id)}
-        <div class="rounded-lg border border-border bg-background p-3.5">
+        <div class="rounded-lg border border-border bg-background-alt p-3.5">
           <div class="flex justify-between items-start mb-3">
             <div>
               <div class="text-sm font-semibold text-foreground">{provider.name}</div>

@@ -96,7 +96,7 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-<div class="rounded-lg border border-border bg-background p-5 mb-4">
+<div class="rounded-lg border border-border bg-background-alt p-5 mb-4">
   <div>
     <h4 class="text-sm font-semibold text-foreground m-0">{label}</h4>
     <p class="text-[13px] text-foreground-alt m-0 mt-1">{description}</p>
