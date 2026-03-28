@@ -73,7 +73,16 @@ fn stop_recording(
         "recording:complete" => match recorder.lock() {
             Ok(mut r) => match r.stop() {
                 Ok(result) => {
+                    if result.format == "wav" {
+                        show_notification(&app_handle, "FLAC 编码不可用", "已保存为 WAV 格式");
+                    }
                     let _ = app_handle.emit("recording:complete", result);
+                }
+                Err(e) if e.contains("too short") => {
+                    let cancelled = recording::RecordingCancelled {
+                        duration_secs: duration,
+                    };
+                    let _ = app_handle.emit("recording:cancel", cancelled);
                 }
                 Err(e) => {
                     let _ = app_handle.emit("recording:error", e.to_string());

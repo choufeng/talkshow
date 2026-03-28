@@ -7,6 +7,7 @@ use std::time::Instant;
 pub struct RecordingResult {
     pub path: PathBuf,
     pub duration_secs: u64,
+    pub format: String,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -100,6 +101,10 @@ pub fn wav_to_flac(wav_path: &Path, flac_path: &Path) -> Result<(), String> {
     }
 }
 
+// SAFETY: cpal::Stream uses platform-specific audio backends (CoreAudio on macOS,
+// WASAPI on Windows, ALSA/PulseAudio on Linux) that are thread-safe.
+// AudioRecorder is always accessed through Arc<Mutex<>> in lib.rs,
+// ensuring no concurrent access to the stream.
 unsafe impl Send for AudioRecorder {}
 
 pub enum AudioRecorder {
@@ -237,10 +242,10 @@ impl AudioRecorder {
                     .finalize()
                     .map_err(|e| format!("Failed to finalize WAV file: {}", e))?;
 
-                let final_path = match wav_to_flac(&wav_path, &flac_path) {
+                let (final_path, format) = match wav_to_flac(&wav_path, &flac_path) {
                     Ok(()) => {
                         let _ = std::fs::remove_file(&wav_path);
-                        flac_path
+                        (flac_path, "flac".to_string())
                     }
                     Err(_) => {
                         let final_name = flac_filename.replace(".flac", ".wav");
@@ -248,13 +253,14 @@ impl AudioRecorder {
                         if wav_path != final_path {
                             let _ = std::fs::rename(&wav_path, &final_path);
                         }
-                        final_path
+                        (final_path, "wav".to_string())
                     }
                 };
 
                 Ok(RecordingResult {
                     path: final_path,
                     duration_secs,
+                    format,
                 })
             }
             AudioRecorder::Unavailable(reason) => Err(reason.clone()),
