@@ -2,7 +2,10 @@
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
 
-  let activeMenu = $derived($page.url.pathname === '/settings' ? 'settings' : 'home');
+  let activeMenu = $derived(
+    $page.url.pathname === '/settings' ? 'settings' :
+    $page.url.pathname === '/models' ? 'models' : 'home'
+  );
 
   function navigateTo(path: string) {
     goto(path);
@@ -20,6 +23,14 @@
       >
         <span class="icon">🏠</span>
         <span class="label">首页</span>
+      </button>
+      <button
+        class="menu-item"
+        class:active={activeMenu === 'models'}
+        onclick={() => navigateTo('/models')}
+      >
+        <span class="icon">🤖</span>
+        <span class="label">模型</span>
       </button>
       <button
         class="menu-item"
