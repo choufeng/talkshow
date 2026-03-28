@@ -1,3 +1,4 @@
+mod ai;
 mod clipboard;
 mod config;
 mod recording;
