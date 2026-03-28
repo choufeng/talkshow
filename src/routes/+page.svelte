@@ -1,53 +1,13 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
-  import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
-  import { listen } from "@tauri-apps/api/event";
 
   let name = $state("");
   let greetMsg = $state("");
-  let recordingStatus = $state("");
 
   async function greet(event: Event) {
     event.preventDefault();
     greetMsg = await invoke("greet", { name });
   }
-
-  async function startRecording() {
-    recordingStatus = "recording";
-
-    const recordingWindow = new WebviewWindow("recording-indicator", {
-      url: "/recording",
-      width: 176,
-      height: 60,
-      transparent: true,
-      decorations: false,
-      resizable: false,
-      alwaysOnTop: true,
-      skipTaskbar: true,
-      center: true,
-      backgroundColor: "#00000000",
-    });
-
-    recordingWindow.once("tauri://created", async () => {
-      await recordingWindow.show();
-      await recordingWindow.setFocus();
-    });
-
-    recordingWindow.once("tauri://error", (e) => {
-      console.error("Failed to create recording window:", e);
-      recordingStatus = "";
-    });
-  }
-
-  listen<{ duration: number }>("recording:complete", (event) => {
-    const mins = Math.floor(event.payload.duration / 60);
-    const secs = event.payload.duration % 60;
-    recordingStatus = `completed (${mins}:${String(secs).padStart(2, "0")})`;
-  });
-
-  listen("recording:cancel", () => {
-    recordingStatus = "cancelled";
-  });
 </script>
 
 <main class="container">
@@ -71,13 +31,6 @@
     <button type="submit">Greet</button>
   </form>
   <p>{greetMsg}</p>
-
-  <div class="row" style="margin-top: 20px">
-    <button class="record-btn" onclick={startRecording}>Start Recording</button>
-    {#if recordingStatus}
-      <p class="recording-status">Recording {recordingStatus}</p>
-    {/if}
-  </div>
 </main>
 
 <style>
@@ -198,27 +151,4 @@ button {
     background-color: #0f0f0f69;
   }
 }
-
-.record-btn {
-  background: #ff3b30;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  cursor: pointer;
-  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.2);
-}
-
-.record-btn:hover {
-  border-color: transparent;
-  background: #e6352b;
-}
-
-.recording-status {
-  margin-left: 10px;
-  font-size: 0.9em;
-}
-
 </style>
