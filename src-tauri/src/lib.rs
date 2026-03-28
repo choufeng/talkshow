@@ -1,5 +1,7 @@
 mod config;
+mod recording;
 
+use recording::AudioRecorder;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
@@ -56,6 +58,7 @@ fn format_elapsed(start: &Instant) -> String {
 
 fn stop_recording(
     app_handle: &tauri::AppHandle,
+    recorder: &Arc<std::sync::Mutex<AudioRecorder>>,
     recording_start: &Arc<std::sync::Mutex<Option<Instant>>>,
     event_name: &str,
 ) {
@@ -65,7 +68,29 @@ fn stop_recording(
         .ok()
         .and_then(|mut start| start.take().map(|s| s.elapsed().as_secs()))
         .unwrap_or(0);
-    let _ = app_handle.emit(event_name, duration);
+
+    match event_name {
+        "recording:complete" => match recorder.lock() {
+            Ok(mut r) => match r.stop() {
+                Ok(result) => {
+                    let _ = app_handle.emit("recording:complete", result);
+                }
+                Err(e) => {
+                    let _ = app_handle.emit("recording:error", e.to_string());
+                }
+            },
+            Err(_) => {
+                let _ = app_handle.emit("recording:error", "Recording lock poisoned");
+            }
+        },
+        "recording:cancel" => {
+            let cancelled = recording::RecordingCancelled {
+                duration_secs: duration,
+            };
+            let _ = app_handle.emit("recording:cancel", cancelled);
+        }
+        _ => {}
+    }
 }
 
 fn restore_default_tray(app_handle: &tauri::AppHandle, default_icon: Image) {
@@ -177,6 +202,9 @@ pub fn run() {
             let recording_start: Arc<std::sync::Mutex<Option<Instant>>> =
                 Arc::new(std::sync::Mutex::new(None));
 
+            let recorder: Arc<std::sync::Mutex<AudioRecorder>> =
+                Arc::new(std::sync::Mutex::new(AudioRecorder::new()));
+
             // --- Global Shortcuts (single plugin instance) ---
             let toggle_shortcut = parse_shortcut(&shortcut_str);
             let rec_shortcut = parse_shortcut(&recording_shortcut_str);
@@ -187,6 +215,7 @@ pub fn run() {
 
             let app_handle = app.handle().clone();
             let recording_start_handler = recording_start.clone();
+            let recorder_handler = recorder.clone();
             app.handle().plugin(
                 tauri_plugin_global_shortcut::Builder::new()
                     .with_handler(move |_app, shortcut, event| {
@@ -200,6 +229,7 @@ pub fn run() {
                             if is_recording {
                                 stop_recording(
                                     &app_handle,
+                                    &recorder_handler,
                                     &recording_start_handler,
                                     "recording:cancel",
                                 );
@@ -213,15 +243,25 @@ pub fn run() {
                             if is_recording {
                                 stop_recording(
                                     &app_handle,
+                                    &recorder_handler,
                                     &recording_start_handler,
                                     "recording:complete",
                                 );
                                 restore_default_tray(&app_handle, default_icon_owned.clone());
                             } else {
-                                RECORDING.store(true, Ordering::Relaxed);
-                                *recording_start_handler.lock().unwrap() = Some(Instant::now());
-                                if let Some(tray) = app_handle.tray_by_id("main") {
-                                    let _ = tray.set_icon(Some(recording_icon_owned.clone()));
+                                match recorder_handler.lock().unwrap().start() {
+                                    Ok(()) => {
+                                        RECORDING.store(true, Ordering::Relaxed);
+                                        *recording_start_handler.lock().unwrap() =
+                                            Some(Instant::now());
+                                        if let Some(tray) = app_handle.tray_by_id("main") {
+                                            let _ =
+                                                tray.set_icon(Some(recording_icon_owned.clone()));
+                                        }
+                                    }
+                                    Err(e) => {
+                                        eprintln!("Failed to start recording: {}", e);
+                                    }
                                 }
                             }
                             return;

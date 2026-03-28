@@ -100,6 +100,8 @@ pub fn wav_to_flac(wav_path: &Path, flac_path: &Path) -> Result<(), String> {
     }
 }
 
+unsafe impl Send for AudioRecorder {}
+
 pub enum AudioRecorder {
     Ready {
         buffer: Arc<Mutex<Vec<i16>>>,
@@ -117,7 +119,7 @@ impl AudioRecorder {
             None => return AudioRecorder::Unavailable("No microphone device available".into()),
         };
 
-        let supported_configs = match device.supported_input_configs() {
+        let mut supported_configs = match device.supported_input_configs() {
             Ok(configs) => configs,
             Err(e) => {
                 return AudioRecorder::Unavailable(format!(
@@ -137,8 +139,9 @@ impl AudioRecorder {
                 }
             };
 
-        let config: cpal::StreamConfig =
-            supported_config.with_sample_rate(cpal::SampleRate(SAMPLE_RATE));
+        let config: cpal::StreamConfig = supported_config
+            .with_sample_rate(cpal::SampleRate(SAMPLE_RATE))
+            .into();
 
         let buffer: Arc<Mutex<Vec<i16>>> = Arc::new(Mutex::new(Vec::new()));
         let buffer_clone = buffer.clone();
