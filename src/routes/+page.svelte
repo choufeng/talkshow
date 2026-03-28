@@ -17,14 +17,15 @@
 
     const recordingWindow = new WebviewWindow("recording-indicator", {
       url: "/recording",
-      width: 160,
-      height: 44,
+      width: 176,
+      height: 60,
       transparent: true,
       decorations: false,
       resizable: false,
       alwaysOnTop: true,
       skipTaskbar: true,
       center: true,
+      backgroundColor: "#00000000",
     });
 
     recordingWindow.once("tauri://created", async () => {
