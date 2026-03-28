@@ -3,17 +3,20 @@ use std::fs;
 use std::path::PathBuf;
 
 const DEFAULT_SHORTCUT: &str = "Control+Shift+Quote";
+const DEFAULT_RECORDING_SHORTCUT: &str = "Control+Shift+KeyR";
 const CONFIG_FILE_NAME: &str = "config.json";
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct AppConfig {
     pub shortcut: String,
+    pub recording_shortcut: String,
 }
 
 impl Default for AppConfig {
     fn default() -> Self {
         AppConfig {
             shortcut: DEFAULT_SHORTCUT.to_string(),
+            recording_shortcut: DEFAULT_RECORDING_SHORTCUT.to_string(),
         }
     }
 }
