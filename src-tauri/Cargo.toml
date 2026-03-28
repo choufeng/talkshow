@@ -28,4 +28,6 @@ async-openai = "0.20" # OpenAI API client, compatible with Vertex AI Gemini mode
 tokio = { version = "1", features = ["full"] }
 # For full Google Cloud support (Vertex AI training, model management, etc.), uncomment the following:
 # google-cloud-rust = "1"
+cpal = "0.15"
+hound = "3.5"
 
