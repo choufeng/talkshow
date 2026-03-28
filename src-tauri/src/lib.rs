@@ -188,7 +188,7 @@ pub fn run() {
                                 }
                             }
                         },
-                    )?;
+                    );
                 }
             }
 
@@ -215,7 +215,7 @@ pub fn run() {
                             restore_default_tray(&app_handle_clone, default_icon_clone.clone());
                         }
                     },
-                )?;
+                );
             }
 
             // --- Tooltip update loop ---
