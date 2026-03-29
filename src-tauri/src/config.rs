@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
@@ -17,6 +18,7 @@ fn builtin_providers() -> Vec<ProviderConfig> {
             models: vec![ModelConfig {
                 name: "gemini-2.0-flash".to_string(),
                 capabilities: vec!["transcription".to_string()],
+                verified: None,
             }],
         },
         ProviderConfig {
@@ -28,6 +30,7 @@ fn builtin_providers() -> Vec<ProviderConfig> {
             models: vec![ModelConfig {
                 name: "qwen2-audio-instruct".to_string(),
                 capabilities: vec!["transcription".to_string()],
+                verified: None,
             }],
         },
     ]
@@ -47,9 +50,19 @@ fn merge_builtin_providers(mut providers: Vec<ProviderConfig>) -> Vec<ProviderCo
 
 #[derive(Serialize, Deserialize, Clone, Default)]
 #[serde(default)]
+pub struct ModelVerified {
+    pub status: String,
+    pub tested_at: String,
+    pub latency_ms: Option<u64>,
+    pub message: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(default)]
 pub struct ModelConfig {
     pub name: String,
     pub capabilities: Vec<String>,
+    pub verified: Option<ModelVerified>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Default)]
@@ -114,6 +127,26 @@ pub fn config_file_path(app_data_dir: &PathBuf) -> PathBuf {
     app_data_dir.join(CONFIG_FILE_NAME)
 }
 
+fn dedup_models(models: &mut Vec<ModelConfig>) {
+    let mut seen: HashMap<String, usize> = HashMap::new();
+    let mut i = 0;
+    while i < models.len() {
+        if let Some(&prev) = seen.get(&models[i].name) {
+            let caps_to_merge: Vec<String> = models[i]
+                .capabilities
+                .iter()
+                .filter(|c| !models[prev].capabilities.contains(c))
+                .cloned()
+                .collect();
+            models[prev].capabilities.extend(caps_to_merge);
+            models.remove(i);
+        } else {
+            seen.insert(models[i].name.clone(), i);
+            i += 1;
+        }
+    }
+}
+
 fn migrate_models(value: &mut serde_json::Value) {
     if let Some(providers) = value
         .get_mut("ai")
@@ -152,6 +185,9 @@ pub fn load_config(app_data_dir: &PathBuf) -> AppConfig {
                 migrate_models(&mut raw);
                 let mut config: AppConfig = serde_json::from_value(raw).unwrap_or_default();
                 config.ai.providers = merge_builtin_providers(config.ai.providers);
+                for provider in &mut config.ai.providers {
+                    dedup_models(&mut provider.models);
+                }
                 config
             }
             Err(_) => AppConfig::default(),

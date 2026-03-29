@@ -1,9 +1,17 @@
 import { invoke } from '@tauri-apps/api/core';
 import { writable } from 'svelte/store';
 
+export interface ModelVerified {
+  status: 'ok' | 'error';
+  tested_at: string;
+  latency_ms?: number;
+  message?: string;
+}
+
 export interface ModelConfig {
   name: string;
   capabilities: string[];
+  verified?: ModelVerified;
 }
 
 export interface ProviderConfig {

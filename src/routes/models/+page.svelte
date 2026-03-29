@@ -4,8 +4,9 @@
   import GroupedSelect from '$lib/components/ui/select/index.svelte';
   import PasswordInput from '$lib/components/ui/password-input/index.svelte';
   import Dialog from '$lib/components/ui/dialog/index.svelte';
+  import { invoke } from '@tauri-apps/api/core';
   import { Plus, RotateCcw } from 'lucide-svelte';
-  import type { ProviderConfig, AppConfig, ModelConfig } from '$lib/stores/config';
+  import type { ProviderConfig, AppConfig, ModelConfig, ModelVerified } from '$lib/stores/config';
 
   let showAddDialog = $state(false);
   let newProvider = $state({
@@ -24,6 +25,7 @@
   let newModelCapabilities = $state<string[]>([]);
   let showRemoveModelConfirm = $state(false);
   let pendingRemoveModel = $state<{ providerId: string; modelName: string }>({ providerId: '', modelName: '' });
+  let testingModels = $state<Set<string>>(new Set());
 
   const PROVIDER_TYPES = [
     { value: 'openai-compatible', label: 'OpenAI Compatible' },
@@ -274,6 +276,48 @@
     }
     showAddDialog = open;
   }
+
+  function formatTestDate(isoStr: string): string {
+    try {
+      return new Date(isoStr).toLocaleDateString(undefined, { month: '2-digit', day: '2-digit' });
+    } catch {
+      return '';
+    }
+  }
+
+  function getTestKey(providerId: string, modelName: string): string {
+    return `${providerId}::${modelName}`;
+  }
+
+  function isTesting(providerId: string, modelName: string): boolean {
+    return testingModels.has(getTestKey(providerId, modelName));
+  }
+
+  async function testModel(providerId: string, modelName: string) {
+    const key = getTestKey(providerId, modelName);
+    testingModels = new Set([...testingModels, key]);
+    try {
+      const result = await invoke<{ status: string; latency_ms?: number; message: string }>('test_model_connectivity', {
+        providerId,
+        modelName,
+      });
+      await config.load();
+      return result;
+    } catch (e) {
+      await config.load();
+      throw e;
+    } finally {
+      const next = new Set(testingModels);
+      next.delete(key);
+      testingModels = next;
+    }
+  }
+
+  async function testAllModels(provider: ProviderConfig) {
+    for (const model of provider.models) {
+      await testModel(provider.id, model.name);
+    }
+  }
 </script>
 
 <div class="max-w-[800px]">
@@ -349,26 +393,55 @@
             <div class="mt-1">
               <div class="flex flex-wrap gap-1 mb-1">
                 {#each provider.models || [] as model (model.name)}
-                  <span class="inline-flex items-center gap-1 rounded bg-accent px-2 py-0.5 text-[10px] text-accent-foreground">
+                  {@const verified = model.verified}
+                  {@const testing = isTesting(provider.id, model.name)}
+                  <span
+                    class="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] text-accent-foreground cursor-pointer select-none
+                      {verified?.status === 'ok' ? 'bg-green-500/15 border border-green-500/30' : ''}
+                      {verified?.status === 'error' ? 'bg-red-500/15 border border-red-500/30' : ''}
+                      {!verified && !testing ? 'bg-accent' : ''}
+                      {testing ? 'bg-accent animate-pulse' : ''}"
+                    title={verified ? `${verified.status === 'ok' ? '验证通过' : '验证失败'}${verified.latency_ms ? ' · ' + verified.latency_ms + 'ms' : ''}${verified.message ? ' · ' + verified.message : ''}` : '点击测试'}
+                    onclick={() => testModel(provider.id, model.name)}
+                  >
                     {model.name}
                     {#if model.capabilities?.includes('transcription')}
                       <span class="text-[8px] opacity-70">T</span>
                     {/if}
+                    {#if testing}
+                      <span class="animate-spin text-[9px]">⟳</span>
+                    {:else if verified?.status === 'ok'}
+                      <span class="text-green-500 text-[9px]">✓</span>
+                      <span class="text-[8px] text-green-500/70">{formatTestDate(verified.tested_at)}</span>
+                    {:else if verified?.status === 'error'}
+                      <span class="text-red-500 text-[9px]">✕</span>
+                      <span class="text-[8px] text-red-500/70">{formatTestDate(verified.tested_at)}</span>
+                    {/if}
                     <button
                       class="opacity-60 hover:opacity-100 transition-opacity"
-                      onclick={() => handleRemoveModel(provider.id, model.name)}
+                      onclick={(e) => { e.stopPropagation(); handleRemoveModel(provider.id, model.name); }}
                     >
                       ✕
                     </button>
                   </span>
                 {/each}
               </div>
-              <button
-                class="text-xs text-accent-foreground hover:underline"
-                onclick={() => openAddModelDialog(provider.id)}
-              >
-                + 添加模型
-              </button>
+              <div class="flex items-center gap-1.5">
+                <button
+                  class="text-xs text-accent-foreground hover:underline"
+                  onclick={() => openAddModelDialog(provider.id)}
+                >
+                  + 添加模型
+                </button>
+                <span class="text-border">|</span>
+                <button
+                  class="text-xs text-accent-foreground hover:underline inline-flex items-center gap-0.5"
+                  onclick={() => testAllModels(provider)}
+                  disabled={provider.models.length === 0 || [...testingModels].some(k => k.startsWith(provider.id + '::'))}
+                >
+                  ⟳ 测试全部
+                </button>
+              </div>
             </div>
           </div>
         </div>

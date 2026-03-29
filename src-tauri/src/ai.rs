@@ -165,3 +165,135 @@ async fn send_via_openai_compatible(
 
     Ok(text)
 }
+
+pub async fn send_text_prompt(
+    text_prompt: &str,
+    model_name: &str,
+    provider: &ProviderConfig,
+) -> Result<String, AiError> {
+    match provider.provider_type.as_str() {
+        "vertex" => send_text_via_vertex(text_prompt, model_name).await,
+        "openai-compatible" => {
+            let api_key = provider
+                .api_key
+                .as_deref()
+                .ok_or_else(|| AiError::MissingApiKey(provider.id.clone()))?;
+            send_text_via_openai_compatible(
+                text_prompt,
+                model_name,
+                api_key,
+                &provider.endpoint,
+            )
+            .await
+        }
+        _ => Err(AiError::ProviderNotFound(format!(
+            "Unknown provider type: {}",
+            provider.provider_type
+        ))),
+    }
+}
+
+async fn send_text_via_vertex(
+    text_prompt: &str,
+    model_name: &str,
+) -> Result<String, AiError> {
+    let client = rig_vertexai::Client::builder()
+        .build()
+        .map_err(|e| AiError::RequestError(format!("Vertex AI client init failed: {}", e)))?;
+
+    let model = client.completion_model(model_name);
+
+    let prompt_content = OneOrMany::one(UserContent::text(text_prompt.to_string()));
+    let message = Message::User {
+        content: prompt_content,
+    };
+
+    let request = model.completion_request(message).build();
+    let response = model
+        .completion(request)
+        .await
+        .map_err(|e| AiError::RequestError(e.to_string()))?;
+
+    let text = response
+        .choice
+        .into_iter()
+        .filter_map(|c| match c {
+            rig::completion::message::AssistantContent::Text(t) => Some(t.text),
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .join("");
+
+    Ok(text)
+}
+
+async fn send_text_via_openai_compatible(
+    text_prompt: &str,
+    model_name: &str,
+    api_key: &str,
+    base_url: &str,
+) -> Result<String, AiError> {
+    let client = openai::CompletionsClient::builder()
+        .api_key(api_key)
+        .base_url(base_url)
+        .build()
+        .map_err(|e| AiError::RequestError(format!("Client init failed: {}", e)))?;
+
+    let model = client.completion_model(model_name);
+
+    let prompt_content = OneOrMany::one(UserContent::text(text_prompt.to_string()));
+    let message = Message::User {
+        content: prompt_content,
+    };
+
+    let request = model.completion_request(message).build();
+    let response = model
+        .completion(request)
+        .await
+        .map_err(|e| AiError::RequestError(e.to_string()))?;
+
+    let text = response
+        .choice
+        .into_iter()
+        .filter_map(|c| match c {
+            rig::completion::message::AssistantContent::Text(t) => Some(t.text),
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .join("");
+
+    Ok(text)
+}
+
+pub async fn send_audio_prompt_from_bytes(
+    audio_bytes: &[u8],
+    media_type: &str,
+    text_prompt: &str,
+    model_name: &str,
+    provider: &ProviderConfig,
+) -> Result<String, AiError> {
+    let audio_b64 = base64::engine::general_purpose::STANDARD.encode(audio_bytes);
+
+    match provider.provider_type.as_str() {
+        "vertex" => send_via_vertex(&audio_b64, media_type, text_prompt, model_name).await,
+        "openai-compatible" => {
+            let api_key = provider
+                .api_key
+                .as_deref()
+                .ok_or_else(|| AiError::MissingApiKey(provider.id.clone()))?;
+            send_via_openai_compatible(
+                &audio_b64,
+                media_type,
+                text_prompt,
+                model_name,
+                api_key,
+                &provider.endpoint,
+            )
+            .await
+        }
+        _ => Err(AiError::ProviderNotFound(format!(
+            "Unknown provider type: {}",
+            provider.provider_type
+        ))),
+    }
+}
