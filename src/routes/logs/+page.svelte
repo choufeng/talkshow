@@ -33,6 +33,7 @@
   let entries = $state<LogEntry[]>([]);
   let selectedSession = $state<string | null>(null);
   let loading = $state(false);
+  let copied = $state(false);
 
   let filteredEntries = $derived(
     selectedModule === 'all'
@@ -129,6 +130,22 @@
     if (meta.error) parts.push(String(meta.error));
     return parts.join(' · ');
   }
+
+  function formatEntryForCopy(entry: LogEntry): string {
+    const ts = formatTimestamp(entry.ts);
+    const summary = metaSummary(entry.meta as Record<string, unknown> | undefined);
+    let line = `[${ts}] [${entry.level}] [${entry.module}] ${entry.msg}`;
+    if (summary) line += ` | ${summary}`;
+    if (entry.meta) line += `\n${JSON.stringify(entry.meta, null, 2)}`;
+    return line;
+  }
+
+  async function copyAll() {
+    const text = filteredEntries.map(formatEntryForCopy).join('\n');
+    await navigator.clipboard.writeText(text);
+    copied = true;
+    setTimeout(() => { copied = false; }, 2000);
+  }
 </script>
 
 <div class="max-w-[960px]">
@@ -165,6 +182,13 @@
       <span class="ml-auto text-[11px] text-muted-foreground">
         {filteredEntries.length} 条日志
       </span>
+      <button
+        class="px-2 py-0.5 rounded text-[11px] border border-border text-muted-foreground hover:text-foreground transition-colors"
+        onclick={copyAll}
+        disabled={copied}
+      >
+        {copied ? '已拷贝' : '拷贝全部'}
+      </button>
     {/if}
   </div>
 

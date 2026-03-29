@@ -119,7 +119,8 @@ fn stop_recording(
                             }
                         };
                         let prompt = "请将这段音频转录为文字，只输出转录结果，不要添加任何解释。";
-                        match ai::send_audio_prompt(&audio_path, prompt, &model_name, &provider).await {
+                        let logger = h.state::<Logger>();
+                        match ai::send_audio_prompt(&logger, &audio_path, prompt, &model_name, &provider).await {
                             Ok(text) => {
                                 if let Err(e) = clipboard::write_and_paste(&text) {
                                     show_notification(&h, "剪贴板写入失败", &e);
@@ -279,6 +280,7 @@ async fn test_model_connectivity(
     let start = Instant::now();
     let result = if is_transcription {
         ai::send_audio_prompt_from_bytes(
+            &logger,
             test_audio,
             "audio/wav",
             "请将这段音频转录为文字",
@@ -287,7 +289,7 @@ async fn test_model_connectivity(
         )
         .await
     } else {
-        ai::send_text_prompt("Hi", &model_name, &provider).await
+        ai::send_text_prompt(&logger, "Hi", &model_name, &provider).await
     };
     let latency = start.elapsed().as_millis() as u64;
 

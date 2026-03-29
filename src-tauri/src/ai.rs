@@ -1,13 +1,16 @@
 use base64::Engine;
 use rig::completion::message::{AudioMediaType, MimeType, UserContent};
 use rig::client::CompletionClient;
+use rig::client::transcription::TranscriptionClient;
 use rig::completion::CompletionModel;
 use rig::providers::openai;
+use rig::transcription::TranscriptionModel;
 use rig::OneOrMany;
 use rig::completion::message::Message;
 use std::path::Path;
 
 use crate::config::ProviderConfig;
+use crate::logger::Logger;
 
 #[derive(Debug)]
 pub enum AiError {
@@ -29,6 +32,7 @@ impl std::fmt::Display for AiError {
 }
 
 pub async fn send_audio_prompt(
+    logger: &Logger,
     audio_path: &Path,
     text_prompt: &str,
     model_name: &str,
@@ -51,14 +55,15 @@ pub async fn send_audio_prompt(
     };
 
     match provider.provider_type.as_str() {
-        "vertex" => send_via_vertex(&audio_b64, media_type, text_prompt, model_name).await,
+        "vertex" => send_via_vertex(logger, &audio_b64, media_type, text_prompt, model_name).await,
         "openai-compatible" => {
             let api_key = provider
                 .api_key
                 .as_deref()
                 .ok_or_else(|| AiError::MissingApiKey(provider.id.clone()))?;
             send_via_openai_compatible(
-                &audio_b64,
+                logger,
+                &audio_data,
                 media_type,
                 text_prompt,
                 model_name,
@@ -75,6 +80,7 @@ pub async fn send_audio_prompt(
 }
 
 async fn send_via_vertex(
+    _logger: &Logger,
     audio_b64: &str,
     media_type: &str,
     text_prompt: &str,
@@ -119,66 +125,100 @@ async fn send_via_vertex(
 }
 
 async fn send_via_openai_compatible(
-    audio_b64: &str,
+    logger: &Logger,
+    audio_bytes: &[u8],
     media_type: &str,
     text_prompt: &str,
     model_name: &str,
     api_key: &str,
     base_url: &str,
 ) -> Result<String, AiError> {
-    let audio_mt: Option<AudioMediaType> = AudioMediaType::from_mime_type(media_type);
+    let extension = media_type.split('/').last().unwrap_or("wav");
 
-    let client = openai::CompletionsClient::builder()
+    let final_url = format!("{}/audio/transcriptions", base_url.trim_end_matches('/'));
+    logger.info(
+        "ai",
+        "准备发送 Transcription 请求",
+        Some(serde_json::json!({
+            "url": final_url,
+            "model": model_name,
+            "media_type": media_type,
+            "audio_size_bytes": audio_bytes.len(),
+            "prompt": text_prompt,
+        })),
+    );
+
+    let client = openai::Client::builder()
         .api_key(api_key)
         .base_url(base_url)
         .build()
-        .map_err(|e| AiError::RequestError(format!("Client init failed: {}", e)))?;
+        .map_err(|e| {
+            logger.error(
+                "ai",
+                "Client 初始化失败",
+                Some(serde_json::json!({ "error": e.to_string() })),
+            );
+            AiError::RequestError(format!("Client init failed: {}", e))
+        })?;
 
-    let model = client.completion_model(model_name);
-    let audio_content = UserContent::audio(audio_b64.to_string(), audio_mt);
+    let model = client.transcription_model(model_name);
 
-    let prompt_content = OneOrMany::many(vec![
-        audio_content,
-        UserContent::text(text_prompt.to_string()),
-    ])
-    .map_err(|e| AiError::RequestError(format!("Failed to build prompt: {}", e)))?;
+    logger.info(
+        "ai",
+        "请求构建完成，正在发送",
+        Some(serde_json::json!({
+            "client_base_url": client.base_url(),
+            "model": model_name,
+        })),
+    );
 
-    let message = Message::User {
-        content: prompt_content,
-    };
-
-    let request = model.completion_request(message).build();
     let response = model
-        .completion(request)
+        .transcription_request()
+        .data(audio_bytes.to_vec())
+        .filename(Some(format!("audio.{}", extension)))
+        .prompt(text_prompt.to_string())
+        .send()
         .await
-        .map_err(|e| AiError::RequestError(e.to_string()))?;
+        .map_err(|e| {
+            let err_str = e.to_string();
+            logger.error(
+                "ai",
+                "AI 请求失败",
+                Some(serde_json::json!({
+                    "error": err_str,
+                    "url": final_url,
+                    "model": model_name,
+                })),
+            );
+            AiError::RequestError(err_str)
+        })?;
 
-    let text = response
-        .choice
-        .into_iter()
-        .filter_map(|c| match c {
-            rig::completion::message::AssistantContent::Text(t) => Some(t.text),
-            _ => None,
-        })
-        .collect::<Vec<_>>()
-        .join("");
+    logger.info(
+        "ai",
+        "AI 请求成功",
+        Some(serde_json::json!({
+            "response_length": response.text.len(),
+        })),
+    );
 
-    Ok(text)
+    Ok(response.text)
 }
 
 pub async fn send_text_prompt(
+    logger: &Logger,
     text_prompt: &str,
     model_name: &str,
     provider: &ProviderConfig,
 ) -> Result<String, AiError> {
     match provider.provider_type.as_str() {
-        "vertex" => send_text_via_vertex(text_prompt, model_name).await,
+        "vertex" => send_text_via_vertex(logger, text_prompt, model_name).await,
         "openai-compatible" => {
             let api_key = provider
                 .api_key
                 .as_deref()
                 .ok_or_else(|| AiError::MissingApiKey(provider.id.clone()))?;
             send_text_via_openai_compatible(
+                logger,
                 text_prompt,
                 model_name,
                 api_key,
@@ -194,6 +234,7 @@ pub async fn send_text_prompt(
 }
 
 async fn send_text_via_vertex(
+    _logger: &Logger,
     text_prompt: &str,
     model_name: &str,
 ) -> Result<String, AiError> {
@@ -228,16 +269,35 @@ async fn send_text_via_vertex(
 }
 
 async fn send_text_via_openai_compatible(
+    logger: &Logger,
     text_prompt: &str,
     model_name: &str,
     api_key: &str,
     base_url: &str,
 ) -> Result<String, AiError> {
+    let final_url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
+    logger.info(
+        "ai",
+        "准备发送 OpenAI 兼容文本请求",
+        Some(serde_json::json!({
+            "url": final_url,
+            "model": model_name,
+            "prompt": text_prompt,
+        })),
+    );
+
     let client = openai::CompletionsClient::builder()
         .api_key(api_key)
         .base_url(base_url)
         .build()
-        .map_err(|e| AiError::RequestError(format!("Client init failed: {}", e)))?;
+        .map_err(|e| {
+            logger.error(
+                "ai",
+                "Client 初始化失败",
+                Some(serde_json::json!({ "error": e.to_string() })),
+            );
+            AiError::RequestError(format!("Client init failed: {}", e))
+        })?;
 
     let model = client.completion_model(model_name);
 
@@ -250,7 +310,19 @@ async fn send_text_via_openai_compatible(
     let response = model
         .completion(request)
         .await
-        .map_err(|e| AiError::RequestError(e.to_string()))?;
+        .map_err(|e| {
+            let err_str = e.to_string();
+            logger.error(
+                "ai",
+                "AI 文本请求失败",
+                Some(serde_json::json!({
+                    "error": err_str,
+                    "url": final_url,
+                    "model": model_name,
+                })),
+            );
+            AiError::RequestError(err_str)
+        })?;
 
     let text = response
         .choice
@@ -262,27 +334,38 @@ async fn send_text_via_openai_compatible(
         .collect::<Vec<_>>()
         .join("");
 
+    logger.info(
+        "ai",
+        "AI 文本请求成功",
+        Some(serde_json::json!({
+            "response_length": text.len(),
+        })),
+    );
+
     Ok(text)
 }
 
 pub async fn send_audio_prompt_from_bytes(
+    logger: &Logger,
     audio_bytes: &[u8],
     media_type: &str,
     text_prompt: &str,
     model_name: &str,
     provider: &ProviderConfig,
 ) -> Result<String, AiError> {
-    let audio_b64 = base64::engine::general_purpose::STANDARD.encode(audio_bytes);
-
     match provider.provider_type.as_str() {
-        "vertex" => send_via_vertex(&audio_b64, media_type, text_prompt, model_name).await,
+        "vertex" => {
+            let audio_b64 = base64::engine::general_purpose::STANDARD.encode(audio_bytes);
+            send_via_vertex(logger, &audio_b64, media_type, text_prompt, model_name).await
+        }
         "openai-compatible" => {
             let api_key = provider
                 .api_key
                 .as_deref()
                 .ok_or_else(|| AiError::MissingApiKey(provider.id.clone()))?;
             send_via_openai_compatible(
-                &audio_b64,
+                logger,
+                audio_bytes,
                 media_type,
                 text_prompt,
                 model_name,
