@@ -240,110 +240,45 @@ fn resample_to_16k(samples: &[f32]) -> Result<Vec<f32>, SenseVoiceError> {
 }
 
 fn extract_fbank(waveform: &[f32]) -> Result<Array2<f32>, SenseVoiceError> {
+    use kaldi_native_fbank::{FbankComputer, FbankOptions, OnlineFeature};
+    use kaldi_native_fbank::online::FeatureComputer;
+
+    let mut opts = FbankOptions::default();
+    opts.frame_opts.samp_freq = 16000.0;
+    opts.frame_opts.frame_shift_ms = 10.0;
+    opts.frame_opts.frame_length_ms = 25.0;
+    opts.frame_opts.dither = 0.0;
+    opts.frame_opts.preemph_coeff = 0.0;
+    opts.frame_opts.remove_dc_offset = false;
+    opts.frame_opts.window_type = "hamming".to_string();
+    opts.mel_opts.num_bins = 80;
+    opts.mel_opts.low_freq = 20.0;
+    opts.mel_opts.high_freq = 0.0;
+    opts.use_energy = false;
+    opts.use_log_fbank = true;
+    opts.use_power = true;
+
+    let computer = FbankComputer::new(opts.clone())
+        .map_err(|e| SenseVoiceError::InferenceFailed(format!("FbankComputer init failed: {}", e)))?;
+    let mut online = OnlineFeature::new(FeatureComputer::Fbank(computer));
+
     let scaled: Vec<f32> = waveform.iter().map(|&s| s * 32768.0).collect();
-    let frame_length_ms = 25.0f64;
-    let frame_shift_ms = 10.0f64;
-    let sample_rate = 16000.0f64;
-    let frame_length = (sample_rate * frame_length_ms / 1000.0) as usize;
-    let frame_shift = (sample_rate * frame_shift_ms / 1000.0) as usize;
-    let n_mels = 80;
-    let n_fft = frame_length;
-    let mut features = Vec::new();
-    let num_frames = if scaled.len() >= frame_length {
-        (scaled.len() - frame_length) / frame_shift + 1
-    } else {
-        0
-    };
+    online.accept_waveform(16000.0, &scaled);
+    online.input_finished();
+
+    let num_frames = online.num_frames_ready();
+    let num_bins = opts.mel_opts.num_bins;
+    if num_frames == 0 {
+        return Ok(Array2::from_shape_vec((0, num_bins), vec![]).unwrap_or(Array2::default((0, num_bins))));
+    }
+
+    let mut flat = Vec::with_capacity(num_frames * num_bins);
     for i in 0..num_frames {
-        let start = i * frame_shift;
-        let frame = &scaled[start..start + frame_length];
-        let windowed: Vec<f64> = frame.iter().enumerate().map(|(j, &s)| {
-            let hamming = 0.54 - 0.46 * (2.0 * std::f64::consts::PI * j as f64 / (frame_length as f64 - 1.0)).cos();
-            s as f64 * hamming
-        }).collect();
-        let mut spectrum = vec![0.0f64; n_fft / 2 + 1];
-        for k in 0..=n_fft / 2 {
-            let mut re = 0.0f64;
-            let mut im = 0.0f64;
-            for n in 0..frame_length {
-                let angle = -2.0 * std::f64::consts::PI * k as f64 * n as f64 / n_fft as f64;
-                re += windowed[n] * angle.cos();
-                im += windowed[n] * angle.sin();
-            }
-            spectrum[k] = re * re + im * im;
+        if let Some(frame) = online.get_frame(i) {
+            flat.extend_from_slice(frame);
         }
-        let mel_filters = make_mel_filters(n_mels, n_fft, sample_rate as f64);
-        let mut mel_energies = vec![0.0f64; n_mels];
-        for (m, filter) in mel_filters.iter().enumerate() {
-            for (k, &w) in filter.iter().enumerate() {
-                if k < spectrum.len() {
-                    mel_energies[m] += spectrum[k] * w;
-                }
-            }
-            mel_energies[m] = mel_energies[m].max(1e-10).ln();
-        }
-        let dct_result = apply_dct(&mel_energies, 13);
-        let fbank_feat: Vec<f32> = dct_result[..n_mels].iter().map(|&v| v as f32).collect();
-        features.push(fbank_feat);
     }
-    if features.is_empty() {
-        return Ok(Array2::from_shape_vec((0, n_mels), vec![]).unwrap_or(Array2::default((0, n_mels))));
-    }
-    let rows = features.len();
-    let cols = features[0].len();
-    let flat: Vec<f32> = features.into_iter().flatten().collect();
-    Ok(Array2::from_shape_vec((rows, cols), flat).unwrap_or(Array2::default((rows, cols))))
-}
-
-fn make_mel_filters(n_mels: usize, n_fft: usize, sample_rate: f64) -> Vec<Vec<f64>> {
-    let low_freq = 0.0f64;
-    let high_freq = sample_rate / 2.0;
-    let low_mel = hz_to_mel(low_freq);
-    let high_mel = hz_to_mel(high_freq);
-    let mel_points: Vec<f64> = (0..=n_mels + 1)
-        .map(|i| low_mel + (high_mel - low_mel) * i as f64 / (n_mels + 1) as f64)
-        .collect();
-    let hz_points: Vec<f64> = mel_points.iter().map(|&m| mel_to_hz(m)).collect();
-    let bin_points: Vec<f64> = hz_points.iter().map(|&f| (n_fft as f64 + 1.0) * f / sample_rate).collect();
-    let n_bins = n_fft / 2 + 1;
-    let mut filters = Vec::with_capacity(n_mels);
-    for i in 0..n_mels {
-        let mut filter = vec![0.0f64; n_bins];
-        let left = bin_points[i];
-        let center = bin_points[i + 1];
-        let right = bin_points[i + 2];
-        for k in 0..n_bins {
-            let k_f = k as f64;
-            if k_f >= left && k_f < center && center > left {
-                filter[k] = (k_f - left) / (center - left);
-            } else if k_f >= center && k_f <= right && right > center {
-                filter[k] = (right - k_f) / (right - center);
-            }
-        }
-        filters.push(filter);
-    }
-    filters
-}
-
-fn hz_to_mel(hz: f64) -> f64 {
-    2595.0 * (1.0 + hz / 700.0).ln() / std::f64::consts::LN_10
-}
-
-fn mel_to_hz(mel: f64) -> f64 {
-    700.0 * (10.0_f64.powf(mel / 2595.0) - 1.0)
-}
-
-fn apply_dct(input: &[f64], n_out: usize) -> Vec<f64> {
-    let n = input.len();
-    let mut output = Vec::with_capacity(n_out);
-    for k in 0..n_out.min(n) {
-        let mut sum = 0.0f64;
-        for (n_idx, &val) in input.iter().enumerate() {
-            sum += val * (std::f64::consts::PI * (n_idx as f64 + 0.5) * k as f64 / n as f64).cos();
-        }
-        output.push(sum);
-    }
-    output
+    Ok(Array2::from_shape_vec((num_frames, num_bins), flat).unwrap_or(Array2::default((num_frames, num_bins))))
 }
 
 fn apply_lfr(feat: &Array2<f32>) -> Array2<f32> {
