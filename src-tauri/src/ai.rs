@@ -80,17 +80,27 @@ pub async fn send_audio_prompt(
 }
 
 async fn send_via_vertex(
-    _logger: &Logger,
+    logger: &Logger,
     audio_b64: &str,
     media_type: &str,
     text_prompt: &str,
     model_name: &str,
 ) -> Result<String, AiError> {
+    logger.info("ai", "准备发送 Vertex AI 音频请求", Some(serde_json::json!({
+        "model": model_name,
+        "media_type": media_type,
+        "audio_size_b64": audio_b64.len(),
+        "prompt": text_prompt,
+    })));
+
     let audio_mt: Option<AudioMediaType> = AudioMediaType::from_mime_type(media_type);
 
     let client = rig_vertexai::Client::builder()
         .build()
-        .map_err(|e| AiError::RequestError(format!("Vertex AI client init failed: {}", e)))?;
+        .map_err(|e| {
+            logger.error("ai", "Vertex AI client 初始化失败", Some(serde_json::json!({ "error": e.to_string() })));
+            AiError::RequestError(format!("Vertex AI client init failed: {}", e))
+        })?;
 
     let model = client.completion_model(model_name);
     let audio_content = UserContent::audio(audio_b64.to_string(), audio_mt);
@@ -105,11 +115,16 @@ async fn send_via_vertex(
         content: prompt_content,
     };
 
+    logger.info("ai", "Vertex AI 请求发送中", Some(serde_json::json!({ "model": model_name })));
+
     let request = model.completion_request(message).build();
     let response = model
         .completion(request)
         .await
-        .map_err(|e| AiError::RequestError(e.to_string()))?;
+        .map_err(|e| {
+            logger.error("ai", "Vertex AI 请求失败", Some(serde_json::json!({ "error": e.to_string(), "model": model_name })));
+            AiError::RequestError(e.to_string())
+        })?;
 
     let text = response
         .choice
@@ -120,6 +135,8 @@ async fn send_via_vertex(
         })
         .collect::<Vec<_>>()
         .join("");
+
+    logger.info("ai", "Vertex AI 请求成功", Some(serde_json::json!({ "response_length": text.len() })));
 
     Ok(text)
 }
@@ -234,13 +251,21 @@ pub async fn send_text_prompt(
 }
 
 async fn send_text_via_vertex(
-    _logger: &Logger,
+    logger: &Logger,
     text_prompt: &str,
     model_name: &str,
 ) -> Result<String, AiError> {
+    logger.info("ai", "准备发送 Vertex AI 文本请求", Some(serde_json::json!({
+        "model": model_name,
+        "prompt": text_prompt,
+    })));
+
     let client = rig_vertexai::Client::builder()
         .build()
-        .map_err(|e| AiError::RequestError(format!("Vertex AI client init failed: {}", e)))?;
+        .map_err(|e| {
+            logger.error("ai", "Vertex AI client 初始化失败", Some(serde_json::json!({ "error": e.to_string() })));
+            AiError::RequestError(format!("Vertex AI client init failed: {}", e))
+        })?;
 
     let model = client.completion_model(model_name);
 
@@ -249,11 +274,16 @@ async fn send_text_via_vertex(
         content: prompt_content,
     };
 
+    logger.info("ai", "Vertex AI 文本请求发送中", Some(serde_json::json!({ "model": model_name })));
+
     let request = model.completion_request(message).build();
     let response = model
         .completion(request)
         .await
-        .map_err(|e| AiError::RequestError(e.to_string()))?;
+        .map_err(|e| {
+            logger.error("ai", "Vertex AI 文本请求失败", Some(serde_json::json!({ "error": e.to_string(), "model": model_name })));
+            AiError::RequestError(e.to_string())
+        })?;
 
     let text = response
         .choice
@@ -264,6 +294,8 @@ async fn send_text_via_vertex(
         })
         .collect::<Vec<_>>()
         .join("");
+
+    logger.info("ai", "Vertex AI 文本请求成功", Some(serde_json::json!({ "response_length": text.len() })));
 
     Ok(text)
 }

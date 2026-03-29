@@ -82,6 +82,12 @@ fn stop_recording(
         .and_then(|mut start| start.take().map(|s| s.elapsed().as_secs()))
         .unwrap_or(0);
 
+    let logger = app_handle.try_state::<Logger>();
+
+    if let Some(ref lg) = logger {
+        lg.info("recording", &format!("录音停止 ({})", event_name), Some(serde_json::json!({ "duration_secs": duration })));
+    }
+
     match event_name {
         "recording:complete" => match recorder.lock() {
             Ok(mut r) => match r.stop() {
@@ -96,6 +102,14 @@ fn stop_recording(
                         show_notification(&app_handle, "FLAC 编码不可用", "已保存为 WAV 格式");
                     }
                     let _ = app_handle.emit("recording:complete", &result);
+
+                    if let Some(ref lg) = logger {
+                        lg.info("recording", "录音文件已保存", Some(serde_json::json!({
+                            "path": result.path.display().to_string(),
+                            "duration_secs": result.duration_secs,
+                            "format": result.format,
+                        })));
+                    }
 
                     let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
                     let app_config = config::load_config(&app_data_dir);
@@ -115,30 +129,62 @@ fn stop_recording(
                             Some(p) => p,
                             None => {
                                 show_notification(&h, "AI 处理失败", "未找到配置的 AI 提供商");
+                                if let Some(lg) = h.try_state::<Logger>() {
+                                    lg.error("ai", "未找到配置的 AI 提供商", None);
+                                }
                                 return;
                             }
                         };
+
+                        if let Some(lg) = h.try_state::<Logger>() {
+                            lg.info("ai", "开始发送 AI 转写请求", Some(serde_json::json!({
+                                "provider_id": provider.id,
+                                "provider_type": provider.provider_type,
+                                "model": model_name,
+                                "audio_path": audio_path.display().to_string(),
+                            })));
+                        }
+
                         let prompt = "请将这段音频转录为文字，只输出转录结果，不要添加任何解释。";
                         let logger = h.state::<Logger>();
                         match ai::send_audio_prompt(&logger, &audio_path, prompt, &model_name, &provider).await {
                             Ok(text) => {
-                                if let Err(e) = clipboard::write_and_paste(&text) {
-                                    show_notification(&h, "剪贴板写入失败", &e);
+                                logger.info("ai", "AI 转写成功", Some(serde_json::json!({
+                                    "response_length": text.len(),
+                                    "response_preview": text.chars().take(100).collect::<String>(),
+                                })));
+                                match clipboard::write_and_paste(&text) {
+                                    Ok(()) => {
+                                        logger.info("clipboard", "剪贴板写入并粘贴成功", Some(serde_json::json!({
+                                            "text_length": text.len(),
+                                        })));
+                                    }
+                                    Err(e) => {
+                                        logger.error("clipboard", "剪贴板写入/粘贴失败", Some(serde_json::json!({ "error": e })));
+                                        show_notification(&h, "剪贴板写入失败", &e);
+                                    }
                                 }
                             }
                             Err(e) => {
+                                logger.error("ai", "AI 转写失败", Some(serde_json::json!({ "error": e.to_string() })));
                                 show_notification(&h, "AI 处理失败", &e.to_string());
                             }
                         }
                     });
                 }
                 Err(recording::RecordingError::TooShort) => {
+                    if let Some(ref lg) = logger {
+                        lg.info("recording", "录音时间过短，已丢弃", Some(serde_json::json!({ "duration_secs": duration })));
+                    }
                     let cancelled = recording::RecordingCancelled {
                         duration_secs: duration,
                     };
                     let _ = app_handle.emit("recording:cancel", cancelled);
                 }
                 Err(e) => {
+                    if let Some(ref lg) = logger {
+                        lg.error("recording", "录音停止失败", Some(serde_json::json!({ "error": e.to_string() })));
+                    }
                     let _ = app_handle.emit("recording:error", e.to_string());
                 }
             },
@@ -151,6 +197,9 @@ fn stop_recording(
                 let _duration = r.cancel();
             }
             println!("[TalkShow] Recording cancelled ({}s)", duration);
+            if let Some(ref lg) = logger {
+                lg.info("recording", "录音已取消", Some(serde_json::json!({ "duration_secs": duration })));
+            }
             let cancelled = recording::RecordingCancelled {
                 duration_secs: duration,
             };
@@ -571,6 +620,9 @@ pub fn run() {
                                                 tray.set_icon(Some(recording_icon_owned.clone()));
                                         }
                                         play_sound("Ping.aiff");
+                                        if let Some(logger) = app_handle.try_state::<Logger>() {
+                                            logger.info("recording", "录音开始", None);
+                                        }
                                         let h = app_handle.clone();
                                         let esc = esc_shortcut_handler.clone();
                                         std::thread::spawn(move || {
@@ -585,6 +637,9 @@ pub fn run() {
                                             .map(|e| e.to_string())
                                             .unwrap_or_else(|| "Unknown error".into());
                                         eprintln!("Failed to start recording: {}", err_detail);
+                                        if let Some(logger) = app_handle.try_state::<Logger>() {
+                                            logger.error("recording", "录音启动失败", Some(serde_json::json!({ "error": err_detail })));
+                                        }
                                         show_notification(&app_handle, "录音失败", &err_detail);
                                     }
                                 }
