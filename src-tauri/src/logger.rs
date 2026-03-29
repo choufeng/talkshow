@@ -67,12 +67,16 @@ impl Logger {
 
         let mut line = match serde_json::to_string(&entry) {
             Ok(s) => s,
-            Err(_) => return,
+            Err(e) => {
+                eprintln!("[TalkShow] Failed to serialize log entry: {}", e);
+                return;
+            }
         };
         line.push('\n');
 
         if let Ok(mut file) = self.current_file.lock() {
             let _ = file.write_all(line.as_bytes());
+            let _ = file.flush();
         }
     }
 
@@ -139,6 +143,9 @@ impl Logger {
 
     pub fn get_content(&self, session_file: Option<&str>) -> Vec<LogEntry> {
         let filename = session_file.unwrap_or(&self.current_filename);
+        if filename.contains("..") || filename.contains('/') || filename.contains('\\') {
+            return Vec::new();
+        }
         let filepath = self.log_dir.join(filename);
 
         let content = match fs::read_to_string(filepath) {
@@ -188,16 +195,13 @@ fn cleanup_old_logs(log_dir: &std::path::Path, max_files: usize) {
 }
 
 #[tauri::command]
-pub fn get_log_sessions(app_handle: tauri::AppHandle) -> Vec<LogSession> {
+fn get_log_sessions(app_handle: tauri::AppHandle) -> Vec<LogSession> {
     let logger = app_handle.state::<Logger>();
     logger.get_sessions()
 }
 
 #[tauri::command]
-pub fn get_log_content(
-    app_handle: tauri::AppHandle,
-    session_file: Option<String>,
-) -> Vec<LogEntry> {
+fn get_log_content(app_handle: tauri::AppHandle, session_file: Option<String>) -> Vec<LogEntry> {
     let logger = app_handle.state::<Logger>();
     logger.get_content(session_file.as_deref())
 }
