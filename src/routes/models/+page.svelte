@@ -1,12 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { config, isBuiltinProvider, BUILTIN_PROVIDERS } from '$lib/stores/config';
+  import { config, isBuiltinProvider, BUILTIN_PROVIDERS, MODEL_CAPABILITIES } from '$lib/stores/config';
   import GroupedSelect from '$lib/components/ui/select/index.svelte';
-  import TagInput from '$lib/components/ui/tag-input/index.svelte';
   import PasswordInput from '$lib/components/ui/password-input/index.svelte';
   import Dialog from '$lib/components/ui/dialog/index.svelte';
   import { Plus, RotateCcw } from 'lucide-svelte';
-  import type { ProviderConfig, AppConfig } from '$lib/stores/config';
+  import type { ProviderConfig, AppConfig, ModelConfig } from '$lib/stores/config';
 
   let showAddDialog = $state(false);
   let newProvider = $state({
@@ -19,6 +18,12 @@
   let showDeleteConfirm = $state(false);
   let showResetConfirm = $state(false);
   let pendingActionProviderId = $state('');
+  let showAddModelDialog = $state(false);
+  let addModelProviderId = $state('');
+  let newModelName = $state('');
+  let newModelCapabilities = $state<string[]>([]);
+  let showRemoveModelConfirm = $state(false);
+  let pendingRemoveModel = $state<{ providerId: string; modelName: string }>({ providerId: '', modelName: '' });
 
   const PROVIDER_TYPES = [
     { value: 'openai-compatible', label: 'OpenAI Compatible' },
@@ -33,10 +38,12 @@
   function buildTranscriptionGroups() {
     return ($config.ai.providers || []).map((p: ProviderConfig) => ({
       label: p.name,
-      items: (p.models || []).map((m: string) => ({
-        value: `${p.id}::${m}`,
-        label: m
-      }))
+      items: (p.models || [])
+        .filter((m: ModelConfig) => m.capabilities.includes('transcription'))
+        .map((m: ModelConfig) => ({
+          value: `${p.id}::${m.name}`,
+          label: m.name
+        }))
     }));
   }
 
@@ -85,7 +92,7 @@
     config.save(newConfig);
   }
 
-  function handleAddModel(providerId: string, model: string) {
+  function handleAddModel(providerId: string, model: ModelConfig) {
     const newProviders = $config.ai.providers.map((p: ProviderConfig) =>
       p.id === providerId
         ? { ...p, models: [...p.models, model] }
@@ -98,10 +105,36 @@
     config.save(newConfig);
   }
 
-  function handleRemoveModel(providerId: string, model: string) {
+  function openAddModelDialog(providerId: string) {
+    addModelProviderId = providerId;
+    newModelName = '';
+    newModelCapabilities = [];
+    showAddModelDialog = true;
+  }
+
+  function confirmAddModel() {
+    if (!newModelName.trim()) return;
+    const model: ModelConfig = {
+      name: newModelName.trim(),
+      capabilities: [...newModelCapabilities]
+    };
+    handleAddModel(addModelProviderId, model);
+    showAddModelDialog = false;
+    addModelProviderId = '';
+    newModelName = '';
+    newModelCapabilities = [];
+  }
+
+  function handleRemoveModel(providerId: string, modelName: string) {
+    pendingRemoveModel = { providerId, modelName };
+    showRemoveModelConfirm = true;
+  }
+
+  function confirmRemoveModel() {
+    const { providerId, modelName } = pendingRemoveModel;
     const newProviders = $config.ai.providers.map((p: ProviderConfig) =>
       p.id === providerId
-        ? { ...p, models: p.models.filter((m: string) => m !== model) }
+        ? { ...p, models: p.models.filter((m: ModelConfig) => m.name !== modelName) }
         : p
     );
     const newConfig: AppConfig = {
@@ -109,6 +142,16 @@
       ai: { providers: newProviders }
     };
     config.save(newConfig);
+    showRemoveModelConfirm = false;
+    pendingRemoveModel = { providerId: '', modelName: '' };
+  }
+
+  function toggleCapability(cap: string) {
+    if (newModelCapabilities.includes(cap)) {
+      newModelCapabilities = newModelCapabilities.filter((c) => c !== cap);
+    } else {
+      newModelCapabilities = [...newModelCapabilities, cap];
+    }
   }
 
   function handleRemoveProvider(providerId: string) {
@@ -303,11 +346,30 @@
 
           <div>
             <label class="block text-[11px] text-foreground-alt mb-1">Models</label>
-            <TagInput
-              tags={provider.models}
-              onAdd={(tag: string) => handleAddModel(provider.id, tag)}
-              onRemove={(tag: string) => handleRemoveModel(provider.id, tag)}
-            />
+            <div class="mt-1">
+              <div class="flex flex-wrap gap-1 mb-1">
+                {#each provider.models || [] as model (model.name)}
+                  <span class="inline-flex items-center gap-1 rounded bg-accent px-2 py-0.5 text-[10px] text-accent-foreground">
+                    {model.name}
+                    {#if model.capabilities?.includes('transcription')}
+                      <span class="text-[8px] opacity-70">T</span>
+                    {/if}
+                    <button
+                      class="opacity-60 hover:opacity-100 transition-opacity"
+                      onclick={() => handleRemoveModel(provider.id, model.name)}
+                    >
+                      ✕
+                    </button>
+                  </span>
+                {/each}
+              </div>
+              <button
+                class="text-xs text-accent-foreground hover:underline"
+                onclick={() => openAddModelDialog(provider.id)}
+              >
+                + 添加模型
+              </button>
+            </div>
           </div>
         </div>
       {/each}
@@ -448,6 +510,84 @@
         onclick={confirmResetProvider}
       >
         重置
+      </button>
+    {/snippet}
+  </Dialog>
+
+  <Dialog
+    open={showRemoveModelConfirm}
+    onOpenChange={(open) => { showRemoveModelConfirm = open; if (!open) pendingRemoveModel = { providerId: '', modelName: '' }; }}
+    title="删除模型"
+    description="确定要删除该模型吗？此操作无法撤销。"
+  >
+    {#snippet footer()}
+      <button
+        type="button"
+        class="rounded-md border border-border px-3 py-1.5 text-xs text-foreground hover:bg-muted transition-colors"
+        onclick={() => { showRemoveModelConfirm = false; pendingRemoveModel = { providerId: '', modelName: '' }; }}
+      >
+        取消
+      </button>
+      <button
+        type="button"
+        class="rounded-md bg-destructive px-3 py-1.5 text-xs text-white hover:bg-destructive/90 transition-colors"
+        onclick={confirmRemoveModel}
+      >
+        删除
+      </button>
+    {/snippet}
+  </Dialog>
+
+  <Dialog
+    open={showAddModelDialog}
+    onOpenChange={(open) => { showAddModelDialog = open; if (!open) { addModelProviderId = ''; newModelName = ''; newModelCapabilities = []; } }}
+    title="添加模型"
+    description="为 Provider 添加新模型"
+  >
+    {#snippet children()}
+      <div>
+        <label for="model-name" class="block text-[11px] text-foreground-alt mb-1">模型名称</label>
+        <input
+          id="model-name"
+          class="flex h-8 w-full rounded-md border border-border-input bg-background px-3 py-1 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-1"
+          type="text"
+          placeholder="如：gpt-4o"
+          bind:value={newModelName}
+        />
+      </div>
+      <div>
+        <span class="block text-[11px] text-foreground-alt mb-1">能力</span>
+        <div class="flex flex-wrap gap-2">
+          {#each MODEL_CAPABILITIES as cap}
+            <label class="inline-flex items-center gap-1.5 text-xs text-foreground cursor-pointer">
+              <input
+                type="checkbox"
+                class="rounded border-border-input"
+                checked={newModelCapabilities.includes(cap.value)}
+                onchange={() => toggleCapability(cap.value)}
+              />
+              {cap.label}
+            </label>
+          {/each}
+        </div>
+      </div>
+    {/snippet}
+
+    {#snippet footer()}
+      <button
+        type="button"
+        class="rounded-md border border-border px-3 py-1.5 text-xs text-foreground hover:bg-muted transition-colors"
+        onclick={() => { showAddModelDialog = false; addModelProviderId = ''; newModelName = ''; newModelCapabilities = []; }}
+      >
+        取消
+      </button>
+      <button
+        type="button"
+        class="rounded-md bg-foreground px-3 py-1.5 text-xs text-background hover:bg-foreground/90 transition-colors"
+        onclick={confirmAddModel}
+        disabled={!newModelName.trim()}
+      >
+        添加
       </button>
     {/snippet}
   </Dialog>

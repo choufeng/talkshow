@@ -14,7 +14,10 @@ fn builtin_providers() -> Vec<ProviderConfig> {
             name: "Vertex AI".to_string(),
             endpoint: "https://aiplatform.googleapis.com/v1".to_string(),
             api_key: None,
-            models: vec!["gemini-2.0-flash".to_string()],
+            models: vec![ModelConfig {
+                name: "gemini-2.0-flash".to_string(),
+                capabilities: vec!["transcription".to_string()],
+            }],
         },
         ProviderConfig {
             id: "dashscope".to_string(),
@@ -22,7 +25,10 @@ fn builtin_providers() -> Vec<ProviderConfig> {
             name: "阿里云".to_string(),
             endpoint: "https://dashscope.aliyuncs.com/compatible-mode/v1".to_string(),
             api_key: Some(String::new()),
-            models: vec!["qwen2-audio-instruct".to_string()],
+            models: vec![ModelConfig {
+                name: "qwen2-audio-instruct".to_string(),
+                capabilities: vec!["transcription".to_string()],
+            }],
         },
     ]
 }
@@ -41,6 +47,13 @@ fn merge_builtin_providers(mut providers: Vec<ProviderConfig>) -> Vec<ProviderCo
 
 #[derive(Serialize, Deserialize, Clone, Default)]
 #[serde(default)]
+pub struct ModelConfig {
+    pub name: String,
+    pub capabilities: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(default)]
 pub struct ProviderConfig {
     pub id: String,
     #[serde(rename = "type")]
@@ -48,7 +61,7 @@ pub struct ProviderConfig {
     pub name: String,
     pub endpoint: String,
     pub api_key: Option<String>,
-    pub models: Vec<String>,
+    pub models: Vec<ModelConfig>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Default)]
@@ -101,12 +114,43 @@ pub fn config_file_path(app_data_dir: &PathBuf) -> PathBuf {
     app_data_dir.join(CONFIG_FILE_NAME)
 }
 
+fn migrate_models(value: &mut serde_json::Value) {
+    if let Some(providers) = value
+        .get_mut("ai")
+        .and_then(|ai| ai.get_mut("providers"))
+        .and_then(|p| p.as_array_mut())
+    {
+        for provider in providers.iter_mut() {
+            if let Some(models) = provider.get_mut("models") {
+                if let Some(arr) = models.as_array_mut() {
+                    let migrated: Vec<serde_json::Value> = arr
+                        .drain(..)
+                        .map(|m| {
+                            if m.is_string() {
+                                serde_json::json!({
+                                    "name": m,
+                                    "capabilities": []
+                                })
+                            } else {
+                                m
+                            }
+                        })
+                        .collect();
+                    *arr = migrated;
+                }
+            }
+        }
+    }
+}
+
 pub fn load_config(app_data_dir: &PathBuf) -> AppConfig {
     let path = config_file_path(app_data_dir);
     if path.exists() {
         match fs::read_to_string(&path) {
             Ok(content) => {
-                let mut config: AppConfig = serde_json::from_str(&content).unwrap_or_default();
+                let mut raw: serde_json::Value = serde_json::from_str(&content).unwrap_or_default();
+                migrate_models(&mut raw);
+                let mut config: AppConfig = serde_json::from_value(raw).unwrap_or_default();
                 config.ai.providers = merge_builtin_providers(config.ai.providers);
                 config
             }

@@ -1,13 +1,18 @@
 import { invoke } from '@tauri-apps/api/core';
 import { writable } from 'svelte/store';
 
+export interface ModelConfig {
+  name: string;
+  capabilities: string[];
+}
+
 export interface ProviderConfig {
   id: string;
   type: string;
   name: string;
   endpoint: string;
   api_key?: string;
-  models: string[];
+  models: ModelConfig[];
 }
 
 export interface AiConfig {
@@ -30,13 +35,17 @@ export interface AppConfig {
   features: FeaturesConfig;
 }
 
+export const MODEL_CAPABILITIES = [
+  { value: 'transcription', label: '语音转文字' }
+];
+
 export const BUILTIN_PROVIDERS: ProviderConfig[] = [
   {
     id: 'vertex',
     type: 'vertex',
     name: 'Vertex AI',
     endpoint: 'https://aiplatform.googleapis.com/v1',
-    models: ['gemini-2.0-flash']
+    models: [{ name: 'gemini-2.0-flash', capabilities: ['transcription'] }]
   },
   {
     id: 'dashscope',
@@ -44,7 +53,7 @@ export const BUILTIN_PROVIDERS: ProviderConfig[] = [
     name: '阿里云',
     endpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
     api_key: '',
-    models: ['qwen2-audio-instruct']
+    models: [{ name: 'qwen2-audio-instruct', capabilities: ['transcription'] }]
   }
 ];
 
@@ -54,6 +63,15 @@ export function isBuiltinProvider(id: string): boolean {
 
 function getBuiltinProvider(id: string): ProviderConfig | undefined {
   return BUILTIN_PROVIDERS.find((p) => p.id === id);
+}
+
+function migrateModels(providers: ProviderConfig[]): ProviderConfig[] {
+  return providers.map((p) => ({
+    ...p,
+    models: (p.models || []).map((m) =>
+      typeof m === 'string' ? { name: m, capabilities: [] as string[] } : m
+    )
+  }));
 }
 
 function mergeBuiltinProviders(providers: ProviderConfig[]): ProviderConfig[] {
@@ -82,7 +100,9 @@ function createConfigStore() {
     load: async () => {
       try {
         const config = await invoke<AppConfig>('get_config');
-        config.ai.providers = mergeBuiltinProviders(config.ai.providers || []);
+        config.ai.providers = mergeBuiltinProviders(
+          migrateModels(config.ai.providers || [])
+        );
         set(config);
       } catch (error) {
         console.error('Failed to load config:', error);
