@@ -4,6 +4,7 @@ use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Mutex;
+use tauri::Manager;
 
 const MAX_LOG_FILES: usize = 10;
 const LOG_DIR_NAME: &str = "logs";
@@ -188,20 +189,23 @@ fn cleanup_old_logs(log_dir: &std::path::Path, max_files: usize) {
     files.sort_by(|a, b| b.1.cmp(&a.1));
 
     if files.len() > max_files {
-        for (_, filename) in files.iter().skip(max_files) {
+        for (filename, _) in files.iter().skip(max_files) {
             let _ = fs::remove_file(log_dir.join(filename));
         }
     }
 }
 
 #[tauri::command]
-fn get_log_sessions(app_handle: tauri::AppHandle) -> Vec<LogSession> {
+pub fn get_log_sessions(app_handle: tauri::AppHandle) -> Vec<LogSession> {
     let logger = app_handle.state::<Logger>();
     logger.get_sessions()
 }
 
 #[tauri::command]
-fn get_log_content(app_handle: tauri::AppHandle, session_file: Option<String>) -> Vec<LogEntry> {
+pub fn get_log_content(
+    app_handle: tauri::AppHandle,
+    session_file: Option<String>,
+) -> Vec<LogEntry> {
     let logger = app_handle.state::<Logger>();
     logger.get_content(session_file.as_deref())
 }

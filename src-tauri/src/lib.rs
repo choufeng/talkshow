@@ -1,8 +1,10 @@
 mod ai;
 mod clipboard;
 mod config;
+mod logger;
 mod recording;
 
+use logger::Logger;
 use recording::AudioRecorder;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
@@ -228,6 +230,123 @@ fn save_config_cmd(app_handle: tauri::AppHandle, config: config::AppConfig) -> R
     config::save_config(&app_data_dir, &config)
 }
 
+#[derive(serde::Serialize, Clone)]
+struct TestResult {
+    status: String,
+    latency_ms: Option<u64>,
+    message: String,
+}
+
+#[tauri::command]
+async fn test_model_connectivity(
+    app_handle: tauri::AppHandle,
+    provider_id: String,
+    model_name: String,
+) -> Result<TestResult, String> {
+    let logger = app_handle.state::<Logger>();
+    let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
+    let mut app_config = config::load_config(&app_data_dir);
+
+    let provider = app_config
+        .ai
+        .providers
+        .iter()
+        .find(|p| p.id == provider_id)
+        .ok_or_else(|| format!("Provider not found: {}", provider_id))?
+        .clone();
+
+    let model = provider
+        .models
+        .iter()
+        .find(|m| m.name == model_name)
+        .ok_or_else(|| format!("Model not found: {}", model_name))?
+        .clone();
+
+    let is_transcription = model.capabilities.iter().any(|c| c == "transcription");
+
+    logger.info(
+        "connectivity",
+        &format!("开始测试模型连通性: {}/{}", provider_id, model_name),
+        Some(serde_json::json!({
+            "provider_id": provider_id,
+            "model_name": model_name,
+            "is_transcription": is_transcription,
+        })),
+    );
+
+    let test_audio: &[u8] = include_bytes!("../assets/test.wav");
+
+    let start = Instant::now();
+    let result = if is_transcription {
+        ai::send_audio_prompt_from_bytes(
+            test_audio,
+            "audio/wav",
+            "请将这段音频转录为文字",
+            &model_name,
+            &provider,
+        )
+        .await
+    } else {
+        ai::send_text_prompt("Hi", &model_name, &provider).await
+    };
+    let latency = start.elapsed().as_millis() as u64;
+
+    let (status, message) = match &result {
+        Ok(text) => {
+            let summary: String = text.chars().take(50).collect();
+            logger.info(
+                "connectivity",
+                &format!("测试成功: {}/{}", provider_id, model_name),
+                Some(serde_json::json!({
+                    "provider_id": provider_id,
+                    "model_name": model_name,
+                    "latency_ms": latency,
+                    "response_summary": summary,
+                })),
+            );
+            ("ok".to_string(), summary)
+        }
+        Err(e) => {
+            let error_str = e.to_string();
+            logger.error(
+                "connectivity",
+                &format!("测试失败: {}/{}", provider_id, model_name),
+                Some(serde_json::json!({
+                    "provider_id": provider_id,
+                    "model_name": model_name,
+                    "latency_ms": latency,
+                    "error": error_str,
+                })),
+            );
+            ("error".to_string(), error_str)
+        }
+    };
+
+    let verified = config::ModelVerified {
+        status: status.clone(),
+        tested_at: chrono::Utc::now().to_rfc3339(),
+        latency_ms: Some(latency),
+        message: if status == "error" {
+            Some(message.clone())
+        } else {
+            None
+        },
+    };
+
+    if let Some(p) = app_config.ai.providers.iter_mut().find(|p| p.id == provider_id) {
+        if let Some(m) = p.models.iter_mut().find(|m| m.name == model_name) {
+            m.verified = Some(verified);
+        }
+    }
+    config::save_config(&app_data_dir, &app_config)?;
+
+    Ok(TestResult {
+        status,
+        latency_ms: Some(latency),
+        message,
+    })
+}
+
 fn show_notification(app_handle: &tauri::AppHandle, title: &str, body: &str) {
     use tauri_plugin_notification::NotificationExt;
     app_handle
@@ -259,10 +378,15 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_config,
             update_shortcut,
-            save_config_cmd
+            save_config_cmd,
+            test_model_connectivity,
+            logger::get_log_sessions,
+            logger::get_log_content
         ])
         .setup(|app| {
             let app_data_dir = app.path().app_data_dir().unwrap_or_default();
+            let logger = Logger::new(&app_data_dir)
+                .expect("Failed to initialize logger");
             let app_config = config::load_config(&app_data_dir);
             let shortcut_str = app_config.shortcut.clone();
             let recording_shortcut_str = app_config.recording_shortcut.clone();
@@ -499,6 +623,8 @@ pub fn run() {
                     }
                 });
             }
+
+            app.manage(logger);
 
             Ok(())
         })
