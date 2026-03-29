@@ -1,7 +1,7 @@
 use ndarray::{Array1, Array2, Array3};
 use ort::session::Session;
 use std::path::PathBuf;
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 
 const MODEL_DIR_NAME: &str = "sensevoice";
 const HF_REPO: &str = "haixuantao/SenseVoiceSmall-onnx";
@@ -79,8 +79,10 @@ impl SenseVoiceEngine {
     pub fn new(model_dir: &PathBuf) -> Result<Self, SenseVoiceError> {
         let onnx_path = model_dir.join("model_quant.onnx");
         let session = Session::builder()
-            .and_then(|b| b.with_intra_threads(4))
-            .and_then(|b| b.commit_from_file(&onnx_path))
+            .map_err(|e| SenseVoiceError::LoadFailed(e.to_string()))?
+            .with_intra_threads(4)
+            .map_err(|e| SenseVoiceError::LoadFailed(e.to_string()))?
+            .commit_from_file(&onnx_path)
             .map_err(|e| SenseVoiceError::LoadFailed(e.to_string()))?;
 
         let (cmvn_means, cmvn_vars) = parse_cmvn(&model_dir.join("am.mvn"))
@@ -94,7 +96,7 @@ impl SenseVoiceEngine {
         })
     }
 
-    pub fn transcribe(&self, wav_path: &PathBuf, language: i32) -> Result<String, SenseVoiceError> {
+    pub fn transcribe(&mut self, wav_path: &PathBuf, language: i32) -> Result<String, SenseVoiceError> {
         let waveform = load_wav(wav_path)?;
         let waveform_16k = resample_to_16k(&waveform)?;
         if waveform_16k.len() < 4800 {
@@ -111,7 +113,7 @@ impl SenseVoiceEngine {
     }
 
     fn infer(
-        &self,
+        &mut self,
         feats: &Array3<f32>,
         feats_len: i32,
         language: i32,
@@ -121,22 +123,32 @@ impl SenseVoiceEngine {
         let language_arr = Array1::from_vec(vec![language]);
         let textnorm_arr = Array1::from_vec(vec![14i32]);
 
-        let outputs = self.session.run(ort::inputs![
-            ort::value::TensorRef::from_array_view(&feats.view()),
-            ort::value::TensorRef::from_array_view(&feats_len_arr.view()),
-            ort::value::TensorRef::from_array_view(&language_arr.view()),
-            ort::value::TensorRef::from_array_view(&textnorm_arr.view()),
-        ].unwrap()).map_err(|e| SenseVoiceError::InferenceFailed(e.to_string()))?;
-
-        let logits = outputs[0].try_extract_tensor::<f32>()
+        let feats_input = ort::value::TensorRef::from_array_view(feats.view())
             .map_err(|e| SenseVoiceError::InferenceFailed(e.to_string()))?;
-        let logits_view = logits.view();
-        let (_, _, _vocab_size) = logits.dim();
+        let feats_len_input = ort::value::TensorRef::from_array_view(feats_len_arr.view())
+            .map_err(|e| SenseVoiceError::InferenceFailed(e.to_string()))?;
+        let language_input = ort::value::TensorRef::from_array_view(language_arr.view())
+            .map_err(|e| SenseVoiceError::InferenceFailed(e.to_string()))?;
+        let textnorm_input = ort::value::TensorRef::from_array_view(textnorm_arr.view())
+            .map_err(|e| SenseVoiceError::InferenceFailed(e.to_string()))?;
+
+        let outputs = self.session.run(ort::inputs![
+            feats_input,
+            feats_len_input,
+            language_input,
+            textnorm_input,
+        ]).map_err(|e| SenseVoiceError::InferenceFailed(e.to_string()))?;
+
+        let (logits_shape, logits_data) = outputs[0].try_extract_tensor::<f32>()
+            .map_err(|e| SenseVoiceError::InferenceFailed(e.to_string()))?;
+        let vocab_size = logits_shape[2] as usize;
+        let t_lfr_out = logits_shape[1] as usize;
         let mut token_ids = Vec::new();
-        for t in 0..t_lfr {
-            let row = logits_view.row(t).to_slice().unwrap_or(&[]);
+        for t in 0..t_lfr_out {
+            let start = t * vocab_size;
+            let row = &logits_data[start..start + vocab_size];
             if let Some((idx, _)) = row.iter().enumerate().max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal)) {
-                if *idx != 0 && token_ids.last().copied() != Some(idx as i32) {
+                if idx != 0 && token_ids.last().copied() != Some(idx as i32) {
                     token_ids.push(idx as i32);
                 }
             }
@@ -207,7 +219,7 @@ fn resample_to_16k(samples: &[f32]) -> Result<Vec<f32>, SenseVoiceError> {
         return Ok(samples.to_vec());
     }
     let chunk_size = 1024;
-    let mut resampler = FftFixedInOut::<f64>::new(src_rate, dst_rate, chunk_size)
+    let mut resampler = FftFixedInOut::<f64>::new(src_rate, dst_rate, chunk_size, 1)
         .map_err(|e| SenseVoiceError::InvalidAudio(format!("Resampler init failed: {}", e)))?;
     let input_f64: Vec<f64> = samples.iter().map(|&s| s as f64).collect();
     let mut output = Vec::new();
@@ -292,7 +304,7 @@ fn make_mel_filters(n_mels: usize, n_fft: usize, sample_rate: f64) -> Vec<Vec<f6
         .map(|i| low_mel + (high_mel - low_mel) * i as f64 / (n_mels + 1) as f64)
         .collect();
     let hz_points: Vec<f64> = mel_points.iter().map(|&m| mel_to_hz(m)).collect();
-    let bin_points: Vec<f64> = hz_points.iter().map(|&f| (n_fft as f64 + 1) * f / sample_rate).collect();
+    let bin_points: Vec<f64> = hz_points.iter().map(|&f| (n_fft as f64 + 1.0) * f / sample_rate).collect();
     let n_bins = n_fft / 2 + 1;
     let mut filters = Vec::with_capacity(n_mels);
     for i in 0..n_mels {
@@ -373,7 +385,7 @@ fn apply_lfr(feat: &Array2<f32>) -> Array2<f32> {
 
 fn apply_cmvn(feat: &Array2<f32>, means: &Array1<f64>, vars: &Array1<f64>) -> Array3<f32> {
     let (t, dim) = feat.dim();
-    let feat_3d = feat.insert_axis(ndarray::Axis(0));
+    let feat_3d = feat.clone().insert_axis(ndarray::Axis(0));
     let mut result = feat_3d.clone();
     for i in 0..t {
         for j in 0..dim.min(means.len()).min(vars.len()) {
@@ -396,7 +408,7 @@ fn decode_tokens(token_ids: &[i32], model_dir: &PathBuf) -> Result<String, Sense
     let sp = sentencepiece::SentencePieceProcessor::open(bpe_path.to_str().unwrap_or(""))
         .map_err(|e| SenseVoiceError::LoadFailed(format!("Failed to load BPE model: {}", e)))?;
     let ids: Vec<u32> = token_ids.iter().filter_map(|&id| if id > 0 { Some(id as u32) } else { None }).collect();
-    let text = sp.decode(&ids)
+    let text = sp.decode_piece_ids(&ids)
         .map_err(|e| SenseVoiceError::InferenceFailed(format!("BPE decode failed: {}", e)))?;
     Ok(text)
 }
