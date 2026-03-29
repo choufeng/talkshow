@@ -37,12 +37,29 @@ fn builtin_providers() -> Vec<ProviderConfig> {
 }
 
 fn merge_builtin_providers(mut providers: Vec<ProviderConfig>) -> Vec<ProviderConfig> {
+    let builtins = builtin_providers();
+    let builtin_map: std::collections::HashMap<String, ProviderConfig> =
+        builtins.into_iter().map(|p| (p.id.clone(), p)).collect();
+
+    let builtin_ids: std::collections::HashSet<String> = builtin_map.keys().cloned().collect();
     let user_ids: std::collections::HashSet<String> =
         providers.iter().map(|p| p.id.clone()).collect();
-    let missing: Vec<ProviderConfig> = builtin_providers()
-        .into_iter()
+
+    let missing: Vec<ProviderConfig> = builtin_map
+        .values()
         .filter(|p| !user_ids.contains(&p.id))
+        .cloned()
         .collect();
+
+    for provider in &mut providers {
+        if let Some(builtin) = builtin_map.get(&provider.id) {
+            if builtin_ids.contains(&provider.id) {
+                provider.provider_type = builtin.provider_type.clone();
+                provider.endpoint = builtin.endpoint.clone();
+            }
+        }
+    }
+
     let mut result = missing;
     result.append(&mut providers);
     result

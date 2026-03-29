@@ -85,7 +85,14 @@ function migrateModels(providers: ProviderConfig[]): ProviderConfig[] {
 function mergeBuiltinProviders(providers: ProviderConfig[]): ProviderConfig[] {
   const userIds = new Set(providers.map((p) => p.id));
   const missing = BUILTIN_PROVIDERS.filter((p) => !userIds.has(p.id));
-  return [...missing, ...providers];
+  const corrected = providers.map((p) => {
+    const builtin = BUILTIN_PROVIDERS.find((b) => b.id === p.id);
+    if (builtin) {
+      return { ...p, type: builtin.type, endpoint: builtin.endpoint };
+    }
+    return p;
+  });
+  return [...missing, ...corrected];
 }
 
 function createConfigStore() {
