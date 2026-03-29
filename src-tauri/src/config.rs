@@ -13,7 +13,7 @@ fn builtin_providers() -> Vec<ProviderConfig> {
             id: "vertex".to_string(),
             provider_type: "vertex".to_string(),
             name: "Vertex AI".to_string(),
-            endpoint: "https://aiplatform.googleapis.com/v1".to_string(),
+            endpoint: String::new(),
             api_key: None,
             models: vec![ModelConfig {
                 name: "gemini-2.0-flash".to_string(),

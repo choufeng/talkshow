@@ -26,14 +26,20 @@
   let showRemoveModelConfirm = $state(false);
   let pendingRemoveModel = $state<{ providerId: string; modelName: string }>({ providerId: '', modelName: '' });
   let testingModels = $state<Set<string>>(new Set());
+  let vertexEnvInfo = $state<{ project: string; location: string } | null>(null);
 
   const PROVIDER_TYPES = [
     { value: 'openai-compatible', label: 'OpenAI Compatible' },
     { value: 'anthropic-compatible', label: 'Anthropic Compatible' }
   ];
 
-  onMount(() => {
+  onMount(async () => {
     config.load();
+    try {
+      vertexEnvInfo = await invoke<{ project: string; location: string }>('get_vertex_env_info');
+    } catch {
+      vertexEnvInfo = null;
+    }
   });
 
   function buildTranscriptionGroups() {
@@ -377,15 +383,26 @@
             </div>
           {/if}
 
-          <div class="mb-2.5">
-            <label class="block text-[11px] text-foreground-alt mb-1">Endpoint</label>
-            <input
-              class="flex h-8 w-full rounded-md border border-border-input bg-background px-3 py-1 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-1"
-              type="text"
-              value={provider.endpoint}
-              onchange={(e) => handleProviderFieldChange(provider.id, 'endpoint', (e.target as HTMLInputElement).value)}
-            />
-          </div>
+          {#if provider.type === 'vertex'}
+            <div class="mb-2.5">
+              <label class="block text-[11px] text-foreground-alt mb-1">Vertex AI 配置</label>
+              <div class="text-[10px] text-muted-foreground space-y-0.5 bg-background rounded-md border border-border p-2">
+                <div>GOOGLE_CLOUD_PROJECT: <span class="text-foreground">{vertexEnvInfo?.project || '未设置'}</span></div>
+                <div>GOOGLE_CLOUD_LOCATION: <span class="text-foreground">{vertexEnvInfo?.location || 'global'}</span></div>
+                <div class="text-muted-foreground/70 mt-1">认证: <code class="text-[9px] bg-background px-1 py-0.5 rounded border border-border">gcloud auth application-default login</code></div>
+              </div>
+            </div>
+          {:else}
+            <div class="mb-2.5">
+              <label class="block text-[11px] text-foreground-alt mb-1">Endpoint</label>
+              <input
+                class="flex h-8 w-full rounded-md border border-border-input bg-background px-3 py-1 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-1"
+                type="text"
+                value={provider.endpoint}
+                onchange={(e) => handleProviderFieldChange(provider.id, 'endpoint', (e.target as HTMLInputElement).value)}
+              />
+            </div>
+          {/if}
 
           <div>
             <label class="block text-[11px] text-foreground-alt mb-1">Models</label>

@@ -52,7 +52,7 @@ export const BUILTIN_PROVIDERS: ProviderConfig[] = [
     id: 'vertex',
     type: 'vertex',
     name: 'Vertex AI',
-    endpoint: 'https://aiplatform.googleapis.com/v1',
+    endpoint: '',
     models: [{ name: 'gemini-2.0-flash', capabilities: ['transcription'] }]
   },
   {

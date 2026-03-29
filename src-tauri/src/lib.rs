@@ -275,10 +275,11 @@ async fn test_model_connectivity(
         })),
     );
 
-    let test_audio: &[u8] = include_bytes!("../assets/test.wav");
-
     let start = Instant::now();
-    let result = if is_transcription {
+    let result = if provider.provider_type == "vertex" {
+        ai::send_text_prompt(&logger, "Hi", &model_name, &provider).await
+    } else if is_transcription {
+        let test_audio: &[u8] = include_bytes!("../assets/test.wav");
         ai::send_audio_prompt_from_bytes(
             &logger,
             test_audio,
@@ -349,6 +350,20 @@ async fn test_model_connectivity(
     })
 }
 
+#[derive(serde::Serialize, Clone)]
+struct VertexEnvInfo {
+    project: String,
+    location: String,
+}
+
+#[tauri::command]
+fn get_vertex_env_info() -> VertexEnvInfo {
+    let project = std::env::var("GOOGLE_CLOUD_PROJECT").unwrap_or_default();
+    let location = std::env::var("GOOGLE_CLOUD_LOCATION")
+        .unwrap_or_else(|_| "global".to_string());
+    VertexEnvInfo { project, location }
+}
+
 fn show_notification(app_handle: &tauri::AppHandle, title: &str, body: &str) {
     use tauri_plugin_notification::NotificationExt;
     app_handle
@@ -382,6 +397,7 @@ pub fn run() {
             update_shortcut,
             save_config_cmd,
             test_model_connectivity,
+            get_vertex_env_info,
             logger::get_log_sessions,
             logger::get_log_content
         ])
