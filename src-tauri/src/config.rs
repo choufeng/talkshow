@@ -33,6 +33,18 @@ fn builtin_providers() -> Vec<ProviderConfig> {
                 verified: None,
             }],
         },
+        ProviderConfig {
+            id: "sensevoice".to_string(),
+            provider_type: "sensevoice".to_string(),
+            name: "SenseVoice (本地)".to_string(),
+            endpoint: String::new(),
+            api_key: None,
+            models: vec![ModelConfig {
+                name: "SenseVoice-Small".to_string(),
+                capabilities: vec!["transcription".to_string()],
+                verified: None,
+            }],
+        },
     ]
 }
 

@@ -62,6 +62,13 @@ export const BUILTIN_PROVIDERS: ProviderConfig[] = [
     endpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
     api_key: '',
     models: [{ name: 'qwen2-audio-instruct', capabilities: ['transcription'] }]
+  },
+  {
+    id: 'sensevoice',
+    type: 'sensevoice',
+    name: 'SenseVoice (本地)',
+    endpoint: '',
+    models: [{ name: 'SenseVoice-Small', capabilities: ['transcription'] }]
   }
 ];
 
