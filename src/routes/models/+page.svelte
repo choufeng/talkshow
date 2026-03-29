@@ -1,11 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { config } from '$lib/stores/config';
+  import { config, isBuiltinProvider, BUILTIN_PROVIDERS } from '$lib/stores/config';
   import GroupedSelect from '$lib/components/ui/select/index.svelte';
   import TagInput from '$lib/components/ui/tag-input/index.svelte';
   import PasswordInput from '$lib/components/ui/password-input/index.svelte';
   import Dialog from '$lib/components/ui/dialog/index.svelte';
-  import { Plus } from 'lucide-svelte';
+  import { Plus, RotateCcw } from 'lucide-svelte';
   import type { ProviderConfig, AppConfig } from '$lib/stores/config';
 
   let showAddDialog = $state(false);
@@ -16,6 +16,9 @@
     endpoint: ''
   });
   let formErrors = $state<Record<string, string>>({});
+  let showDeleteConfirm = $state(false);
+  let showResetConfirm = $state(false);
+  let pendingActionProviderId = $state('');
 
   const PROVIDER_TYPES = [
     { value: 'openai-compatible', label: 'OpenAI Compatible' },
@@ -109,14 +112,41 @@
   }
 
   function handleRemoveProvider(providerId: string) {
+    pendingActionProviderId = providerId;
+    showDeleteConfirm = true;
+  }
+
+  function confirmRemoveProvider() {
     const newProviders = $config.ai.providers.filter(
-      (p: ProviderConfig) => p.id !== providerId
+      (p: ProviderConfig) => p.id !== pendingActionProviderId
     );
     const newConfig: AppConfig = {
       ...$config,
       ai: { providers: newProviders }
     };
     config.save(newConfig);
+    showDeleteConfirm = false;
+    pendingActionProviderId = '';
+  }
+
+  function handleResetProvider(providerId: string) {
+    pendingActionProviderId = providerId;
+    showResetConfirm = true;
+  }
+
+  function confirmResetProvider() {
+    const builtin = BUILTIN_PROVIDERS.find((p) => p.id === pendingActionProviderId);
+    if (!builtin) return;
+    const newProviders = $config.ai.providers.map((p: ProviderConfig) =>
+      p.id === pendingActionProviderId ? { ...builtin } : p
+    );
+    const newConfig: AppConfig = {
+      ...$config,
+      ai: { providers: newProviders }
+    };
+    config.save(newConfig);
+    showResetConfirm = false;
+    pendingActionProviderId = '';
   }
 
   function needsApiKey(provider: ProviderConfig): boolean {
@@ -232,12 +262,22 @@
               <div class="text-sm font-semibold text-foreground">{provider.name}</div>
               <div class="text-[10px] text-muted-foreground mt-0.5">{provider.id}</div>
             </div>
-            <button
-              class="text-xs text-muted-foreground hover:text-destructive transition-colors p-0.5"
-              onclick={() => handleRemoveProvider(provider.id)}
-            >
-              ✕
-            </button>
+            {#if isBuiltinProvider(provider.id)}
+              <button
+                class="text-xs text-muted-foreground hover:text-foreground transition-colors p-0.5"
+                onclick={() => handleResetProvider(provider.id)}
+                title="重置为默认"
+              >
+                <RotateCcw class="h-3.5 w-3.5" />
+              </button>
+            {:else}
+              <button
+                class="text-xs text-muted-foreground hover:text-destructive transition-colors p-0.5"
+                onclick={() => handleRemoveProvider(provider.id)}
+              >
+                ✕
+              </button>
+            {/if}
           </div>
 
           {#if needsApiKey(provider)}
@@ -360,6 +400,54 @@
         onclick={handleAddProvider}
       >
         添加
+      </button>
+    {/snippet}
+  </Dialog>
+
+  <Dialog
+    open={showDeleteConfirm}
+    onOpenChange={(open) => { showDeleteConfirm = open; if (!open) pendingActionProviderId = ''; }}
+    title="删除 Provider"
+    description="确定要删除该 Provider 吗？此操作无法撤销。"
+  >
+    {#snippet footer()}
+      <button
+        type="button"
+        class="rounded-md border border-border px-3 py-1.5 text-xs text-foreground hover:bg-muted transition-colors"
+        onclick={() => { showDeleteConfirm = false; pendingActionProviderId = ''; }}
+      >
+        取消
+      </button>
+      <button
+        type="button"
+        class="rounded-md bg-destructive px-3 py-1.5 text-xs text-white hover:bg-destructive/90 transition-colors"
+        onclick={confirmRemoveProvider}
+      >
+        删除
+      </button>
+    {/snippet}
+  </Dialog>
+
+  <Dialog
+    open={showResetConfirm}
+    onOpenChange={(open) => { showResetConfirm = open; if (!open) pendingActionProviderId = ''; }}
+    title="重置 Provider"
+    description="确定要重置为默认设置吗？自定义的 Endpoint、API Key 和 Models 将被覆盖。"
+  >
+    {#snippet footer()}
+      <button
+        type="button"
+        class="rounded-md border border-border px-3 py-1.5 text-xs text-foreground hover:bg-muted transition-colors"
+        onclick={() => { showResetConfirm = false; pendingActionProviderId = ''; }}
+      >
+        取消
+      </button>
+      <button
+        type="button"
+        class="rounded-md bg-foreground px-3 py-1.5 text-xs text-background hover:bg-foreground/90 transition-colors"
+        onclick={confirmResetProvider}
+      >
+        重置
       </button>
     {/snippet}
   </Dialog>

@@ -30,28 +30,44 @@ export interface AppConfig {
   features: FeaturesConfig;
 }
 
+export const BUILTIN_PROVIDERS: ProviderConfig[] = [
+  {
+    id: 'vertex',
+    type: 'vertex',
+    name: 'Vertex AI',
+    endpoint: 'https://aiplatform.googleapis.com/v1',
+    models: ['gemini-2.0-flash']
+  },
+  {
+    id: 'dashscope',
+    type: 'openai-compatible',
+    name: '阿里云',
+    endpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    api_key: '',
+    models: ['qwen2-audio-instruct']
+  }
+];
+
+export function isBuiltinProvider(id: string): boolean {
+  return BUILTIN_PROVIDERS.some((p) => p.id === id);
+}
+
+function getBuiltinProvider(id: string): ProviderConfig | undefined {
+  return BUILTIN_PROVIDERS.find((p) => p.id === id);
+}
+
+function mergeBuiltinProviders(providers: ProviderConfig[]): ProviderConfig[] {
+  const userIds = new Set(providers.map((p) => p.id));
+  const missing = BUILTIN_PROVIDERS.filter((p) => !userIds.has(p.id));
+  return [...missing, ...providers];
+}
+
 function createConfigStore() {
   const { subscribe, set, update } = writable<AppConfig>({
     shortcut: 'Control+Shift+Quote',
     recording_shortcut: 'Control+Backslash',
     ai: {
-      providers: [
-        {
-          id: 'vertex',
-          type: 'vertex',
-          name: 'VTX',
-          endpoint: 'https://aiplatform.googleapis.com/v1',
-          models: ['gemini-2.0-flash']
-        },
-        {
-          id: 'dashscope',
-          type: 'openai-compatible',
-          name: '阿里云',
-          endpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-          api_key: '',
-          models: ['qwen2-audio-instruct']
-        }
-      ]
+      providers: BUILTIN_PROVIDERS.map((p) => ({ ...p }))
     },
     features: {
       transcription: {
@@ -66,6 +82,7 @@ function createConfigStore() {
     load: async () => {
       try {
         const config = await invoke<AppConfig>('get_config');
+        config.ai.providers = mergeBuiltinProviders(config.ai.providers || []);
         set(config);
       } catch (error) {
         console.error('Failed to load config:', error);

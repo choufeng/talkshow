@@ -6,8 +6,38 @@ const DEFAULT_SHORTCUT: &str = "Control+Shift+Quote";
 const DEFAULT_RECORDING_SHORTCUT: &str = "Control+Backslash";
 const CONFIG_FILE_NAME: &str = "config.json";
 
-const DEFAULT_VERTEX_ENDPOINT: &str = "https://aiplatform.googleapis.com/v1";
-const DEFAULT_DASHSCOPE_ENDPOINT: &str = "https://dashscope.aliyuncs.com/compatible-mode/v1";
+fn builtin_providers() -> Vec<ProviderConfig> {
+    vec![
+        ProviderConfig {
+            id: "vertex".to_string(),
+            provider_type: "vertex".to_string(),
+            name: "Vertex AI".to_string(),
+            endpoint: "https://aiplatform.googleapis.com/v1".to_string(),
+            api_key: None,
+            models: vec!["gemini-2.0-flash".to_string()],
+        },
+        ProviderConfig {
+            id: "dashscope".to_string(),
+            provider_type: "openai-compatible".to_string(),
+            name: "阿里云".to_string(),
+            endpoint: "https://dashscope.aliyuncs.com/compatible-mode/v1".to_string(),
+            api_key: Some(String::new()),
+            models: vec!["qwen2-audio-instruct".to_string()],
+        },
+    ]
+}
+
+fn merge_builtin_providers(mut providers: Vec<ProviderConfig>) -> Vec<ProviderConfig> {
+    let user_ids: std::collections::HashSet<String> =
+        providers.iter().map(|p| p.id.clone()).collect();
+    let missing: Vec<ProviderConfig> = builtin_providers()
+        .into_iter()
+        .filter(|p| !user_ids.contains(&p.id))
+        .collect();
+    let mut result = missing;
+    result.append(&mut providers);
+    result
+}
 
 #[derive(Serialize, Deserialize, Clone, Default)]
 #[serde(default)]
@@ -55,24 +85,7 @@ impl Default for AppConfig {
             shortcut: DEFAULT_SHORTCUT.to_string(),
             recording_shortcut: DEFAULT_RECORDING_SHORTCUT.to_string(),
             ai: AiConfig {
-                providers: vec![
-                    ProviderConfig {
-                        id: "vertex".to_string(),
-                        provider_type: "vertex".to_string(),
-                        name: "VTX".to_string(),
-                        endpoint: DEFAULT_VERTEX_ENDPOINT.to_string(),
-                        api_key: None,
-                        models: vec!["gemini-2.0-flash".to_string()],
-                    },
-                    ProviderConfig {
-                        id: "dashscope".to_string(),
-                        provider_type: "openai-compatible".to_string(),
-                        name: "阿里云".to_string(),
-                        endpoint: DEFAULT_DASHSCOPE_ENDPOINT.to_string(),
-                        api_key: Some(String::new()),
-                        models: vec!["qwen2-audio-instruct".to_string()],
-                    },
-                ],
+                providers: builtin_providers(),
             },
             features: FeaturesConfig {
                 transcription: TranscriptionConfig {
@@ -92,7 +105,11 @@ pub fn load_config(app_data_dir: &PathBuf) -> AppConfig {
     let path = config_file_path(app_data_dir);
     if path.exists() {
         match fs::read_to_string(&path) {
-            Ok(content) => serde_json::from_str(&content).unwrap_or_default(),
+            Ok(content) => {
+                let mut config: AppConfig = serde_json::from_str(&content).unwrap_or_default();
+                config.ai.providers = merge_builtin_providers(config.ai.providers);
+                config
+            }
             Err(_) => AppConfig::default(),
         }
     } else {
