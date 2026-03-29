@@ -157,4 +157,21 @@ function createConfigStore() {
   };
 }
 
+export interface SenseVoiceModelStatus {
+  status: 'not_downloaded' | 'downloading' | 'ready' | 'error';
+  file?: string;
+  percent?: number;
+  downloaded?: number;
+  total?: number;
+  size_bytes?: number;
+  message?: string;
+}
+
+export const SENSEVOICE_LANGUAGES = [
+  { value: 0, label: '自动检测' },
+  { value: 3, label: '中文' },
+  { value: 4, label: '英文' },
+  { value: 11, label: '日文' },
+];
+
 export const config = createConfigStore();
