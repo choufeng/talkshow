@@ -1,13 +1,26 @@
 import { invoke } from '@tauri-apps/api/core';
 import { writable } from 'svelte/store';
 
+export interface ModelVerified {
+  status: 'ok' | 'error';
+  tested_at: string;
+  latency_ms?: number;
+  message?: string;
+}
+
+export interface ModelConfig {
+  name: string;
+  capabilities: string[];
+  verified?: ModelVerified;
+}
+
 export interface ProviderConfig {
   id: string;
   type: string;
   name: string;
   endpoint: string;
   api_key?: string;
-  models: string[];
+  models: ModelConfig[];
 }
 
 export interface AiConfig {
@@ -30,28 +43,57 @@ export interface AppConfig {
   features: FeaturesConfig;
 }
 
+export const MODEL_CAPABILITIES = [
+  { value: 'transcription', label: '语音转文字' }
+];
+
+export const BUILTIN_PROVIDERS: ProviderConfig[] = [
+  {
+    id: 'vertex',
+    type: 'vertex',
+    name: 'Vertex AI',
+    endpoint: 'https://aiplatform.googleapis.com/v1',
+    models: [{ name: 'gemini-2.0-flash', capabilities: ['transcription'] }]
+  },
+  {
+    id: 'dashscope',
+    type: 'openai-compatible',
+    name: '阿里云',
+    endpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    api_key: '',
+    models: [{ name: 'qwen2-audio-instruct', capabilities: ['transcription'] }]
+  }
+];
+
+export function isBuiltinProvider(id: string): boolean {
+  return BUILTIN_PROVIDERS.some((p) => p.id === id);
+}
+
+function getBuiltinProvider(id: string): ProviderConfig | undefined {
+  return BUILTIN_PROVIDERS.find((p) => p.id === id);
+}
+
+function migrateModels(providers: ProviderConfig[]): ProviderConfig[] {
+  return providers.map((p) => ({
+    ...p,
+    models: (p.models || []).map((m) =>
+      typeof m === 'string' ? { name: m, capabilities: [] as string[] } : m
+    )
+  }));
+}
+
+function mergeBuiltinProviders(providers: ProviderConfig[]): ProviderConfig[] {
+  const userIds = new Set(providers.map((p) => p.id));
+  const missing = BUILTIN_PROVIDERS.filter((p) => !userIds.has(p.id));
+  return [...missing, ...providers];
+}
+
 function createConfigStore() {
   const { subscribe, set, update } = writable<AppConfig>({
     shortcut: 'Control+Shift+Quote',
     recording_shortcut: 'Control+Backslash',
     ai: {
-      providers: [
-        {
-          id: 'vertex',
-          type: 'vertex',
-          name: 'VTX',
-          endpoint: 'https://aiplatform.googleapis.com/v1',
-          models: ['gemini-2.0-flash']
-        },
-        {
-          id: 'dashscope',
-          type: 'openai-compatible',
-          name: '阿里云',
-          endpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-          api_key: '',
-          models: ['qwen2-audio-instruct']
-        }
-      ]
+      providers: BUILTIN_PROVIDERS.map((p) => ({ ...p }))
     },
     features: {
       transcription: {
@@ -66,6 +108,9 @@ function createConfigStore() {
     load: async () => {
       try {
         const config = await invoke<AppConfig>('get_config');
+        config.ai.providers = mergeBuiltinProviders(
+          migrateModels(config.ai.providers || [])
+        );
         set(config);
       } catch (error) {
         console.error('Failed to load config:', error);

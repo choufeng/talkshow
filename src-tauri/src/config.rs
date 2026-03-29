@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
@@ -6,8 +7,63 @@ const DEFAULT_SHORTCUT: &str = "Control+Shift+Quote";
 const DEFAULT_RECORDING_SHORTCUT: &str = "Control+Backslash";
 const CONFIG_FILE_NAME: &str = "config.json";
 
-const DEFAULT_VERTEX_ENDPOINT: &str = "https://aiplatform.googleapis.com/v1";
-const DEFAULT_DASHSCOPE_ENDPOINT: &str = "https://dashscope.aliyuncs.com/compatible-mode/v1";
+fn builtin_providers() -> Vec<ProviderConfig> {
+    vec![
+        ProviderConfig {
+            id: "vertex".to_string(),
+            provider_type: "vertex".to_string(),
+            name: "Vertex AI".to_string(),
+            endpoint: "https://aiplatform.googleapis.com/v1".to_string(),
+            api_key: None,
+            models: vec![ModelConfig {
+                name: "gemini-2.0-flash".to_string(),
+                capabilities: vec!["transcription".to_string()],
+                verified: None,
+            }],
+        },
+        ProviderConfig {
+            id: "dashscope".to_string(),
+            provider_type: "openai-compatible".to_string(),
+            name: "阿里云".to_string(),
+            endpoint: "https://dashscope.aliyuncs.com/compatible-mode/v1".to_string(),
+            api_key: Some(String::new()),
+            models: vec![ModelConfig {
+                name: "qwen2-audio-instruct".to_string(),
+                capabilities: vec!["transcription".to_string()],
+                verified: None,
+            }],
+        },
+    ]
+}
+
+fn merge_builtin_providers(mut providers: Vec<ProviderConfig>) -> Vec<ProviderConfig> {
+    let user_ids: std::collections::HashSet<String> =
+        providers.iter().map(|p| p.id.clone()).collect();
+    let missing: Vec<ProviderConfig> = builtin_providers()
+        .into_iter()
+        .filter(|p| !user_ids.contains(&p.id))
+        .collect();
+    let mut result = missing;
+    result.append(&mut providers);
+    result
+}
+
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(default)]
+pub struct ModelVerified {
+    pub status: String,
+    pub tested_at: String,
+    pub latency_ms: Option<u64>,
+    pub message: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(default)]
+pub struct ModelConfig {
+    pub name: String,
+    pub capabilities: Vec<String>,
+    pub verified: Option<ModelVerified>,
+}
 
 #[derive(Serialize, Deserialize, Clone, Default)]
 #[serde(default)]
@@ -18,7 +74,7 @@ pub struct ProviderConfig {
     pub name: String,
     pub endpoint: String,
     pub api_key: Option<String>,
-    pub models: Vec<String>,
+    pub models: Vec<ModelConfig>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Default)]
@@ -55,24 +111,7 @@ impl Default for AppConfig {
             shortcut: DEFAULT_SHORTCUT.to_string(),
             recording_shortcut: DEFAULT_RECORDING_SHORTCUT.to_string(),
             ai: AiConfig {
-                providers: vec![
-                    ProviderConfig {
-                        id: "vertex".to_string(),
-                        provider_type: "vertex".to_string(),
-                        name: "VTX".to_string(),
-                        endpoint: DEFAULT_VERTEX_ENDPOINT.to_string(),
-                        api_key: None,
-                        models: vec!["gemini-2.0-flash".to_string()],
-                    },
-                    ProviderConfig {
-                        id: "dashscope".to_string(),
-                        provider_type: "openai-compatible".to_string(),
-                        name: "阿里云".to_string(),
-                        endpoint: DEFAULT_DASHSCOPE_ENDPOINT.to_string(),
-                        api_key: Some(String::new()),
-                        models: vec!["qwen2-audio-instruct".to_string()],
-                    },
-                ],
+                providers: builtin_providers(),
             },
             features: FeaturesConfig {
                 transcription: TranscriptionConfig {
@@ -88,11 +127,69 @@ pub fn config_file_path(app_data_dir: &PathBuf) -> PathBuf {
     app_data_dir.join(CONFIG_FILE_NAME)
 }
 
+fn dedup_models(models: &mut Vec<ModelConfig>) {
+    let mut seen: HashMap<String, usize> = HashMap::new();
+    let mut i = 0;
+    while i < models.len() {
+        if let Some(&prev) = seen.get(&models[i].name) {
+            let caps_to_merge: Vec<String> = models[i]
+                .capabilities
+                .iter()
+                .filter(|c| !models[prev].capabilities.contains(c))
+                .cloned()
+                .collect();
+            models[prev].capabilities.extend(caps_to_merge);
+            models.remove(i);
+        } else {
+            seen.insert(models[i].name.clone(), i);
+            i += 1;
+        }
+    }
+}
+
+fn migrate_models(value: &mut serde_json::Value) {
+    if let Some(providers) = value
+        .get_mut("ai")
+        .and_then(|ai| ai.get_mut("providers"))
+        .and_then(|p| p.as_array_mut())
+    {
+        for provider in providers.iter_mut() {
+            if let Some(models) = provider.get_mut("models") {
+                if let Some(arr) = models.as_array_mut() {
+                    let migrated: Vec<serde_json::Value> = arr
+                        .drain(..)
+                        .map(|m| {
+                            if m.is_string() {
+                                serde_json::json!({
+                                    "name": m,
+                                    "capabilities": []
+                                })
+                            } else {
+                                m
+                            }
+                        })
+                        .collect();
+                    *arr = migrated;
+                }
+            }
+        }
+    }
+}
+
 pub fn load_config(app_data_dir: &PathBuf) -> AppConfig {
     let path = config_file_path(app_data_dir);
     if path.exists() {
         match fs::read_to_string(&path) {
-            Ok(content) => serde_json::from_str(&content).unwrap_or_default(),
+            Ok(content) => {
+                let mut raw: serde_json::Value = serde_json::from_str(&content).unwrap_or_default();
+                migrate_models(&mut raw);
+                let mut config: AppConfig = serde_json::from_value(raw).unwrap_or_default();
+                config.ai.providers = merge_builtin_providers(config.ai.providers);
+                for provider in &mut config.ai.providers {
+                    dedup_models(&mut provider.models);
+                }
+                config
+            }
             Err(_) => AppConfig::default(),
         }
     } else {

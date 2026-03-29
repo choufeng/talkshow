@@ -1,12 +1,12 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { config } from '$lib/stores/config';
+  import { config, isBuiltinProvider, BUILTIN_PROVIDERS, MODEL_CAPABILITIES } from '$lib/stores/config';
   import GroupedSelect from '$lib/components/ui/select/index.svelte';
-  import TagInput from '$lib/components/ui/tag-input/index.svelte';
   import PasswordInput from '$lib/components/ui/password-input/index.svelte';
   import Dialog from '$lib/components/ui/dialog/index.svelte';
-  import { Plus } from 'lucide-svelte';
-  import type { ProviderConfig, AppConfig } from '$lib/stores/config';
+  import { invoke } from '@tauri-apps/api/core';
+  import { Plus, RotateCcw } from 'lucide-svelte';
+  import type { ProviderConfig, AppConfig, ModelConfig, ModelVerified } from '$lib/stores/config';
 
   let showAddDialog = $state(false);
   let newProvider = $state({
@@ -16,6 +16,16 @@
     endpoint: ''
   });
   let formErrors = $state<Record<string, string>>({});
+  let showDeleteConfirm = $state(false);
+  let showResetConfirm = $state(false);
+  let pendingActionProviderId = $state('');
+  let showAddModelDialog = $state(false);
+  let addModelProviderId = $state('');
+  let newModelName = $state('');
+  let newModelCapabilities = $state<string[]>([]);
+  let showRemoveModelConfirm = $state(false);
+  let pendingRemoveModel = $state<{ providerId: string; modelName: string }>({ providerId: '', modelName: '' });
+  let testingModels = $state<Set<string>>(new Set());
 
   const PROVIDER_TYPES = [
     { value: 'openai-compatible', label: 'OpenAI Compatible' },
@@ -30,10 +40,12 @@
   function buildTranscriptionGroups() {
     return ($config.ai.providers || []).map((p: ProviderConfig) => ({
       label: p.name,
-      items: (p.models || []).map((m: string) => ({
-        value: `${p.id}::${m}`,
-        label: m
-      }))
+      items: (p.models || [])
+        .filter((m: ModelConfig) => m.capabilities.includes('transcription'))
+        .map((m: ModelConfig) => ({
+          value: `${p.id}::${m.name}`,
+          label: m.name
+        }))
     }));
   }
 
@@ -82,7 +94,7 @@
     config.save(newConfig);
   }
 
-  function handleAddModel(providerId: string, model: string) {
+  function handleAddModel(providerId: string, model: ModelConfig) {
     const newProviders = $config.ai.providers.map((p: ProviderConfig) =>
       p.id === providerId
         ? { ...p, models: [...p.models, model] }
@@ -95,10 +107,36 @@
     config.save(newConfig);
   }
 
-  function handleRemoveModel(providerId: string, model: string) {
+  function openAddModelDialog(providerId: string) {
+    addModelProviderId = providerId;
+    newModelName = '';
+    newModelCapabilities = [];
+    showAddModelDialog = true;
+  }
+
+  function confirmAddModel() {
+    if (!newModelName.trim()) return;
+    const model: ModelConfig = {
+      name: newModelName.trim(),
+      capabilities: [...newModelCapabilities]
+    };
+    handleAddModel(addModelProviderId, model);
+    showAddModelDialog = false;
+    addModelProviderId = '';
+    newModelName = '';
+    newModelCapabilities = [];
+  }
+
+  function handleRemoveModel(providerId: string, modelName: string) {
+    pendingRemoveModel = { providerId, modelName };
+    showRemoveModelConfirm = true;
+  }
+
+  function confirmRemoveModel() {
+    const { providerId, modelName } = pendingRemoveModel;
     const newProviders = $config.ai.providers.map((p: ProviderConfig) =>
       p.id === providerId
-        ? { ...p, models: p.models.filter((m: string) => m !== model) }
+        ? { ...p, models: p.models.filter((m: ModelConfig) => m.name !== modelName) }
         : p
     );
     const newConfig: AppConfig = {
@@ -106,17 +144,54 @@
       ai: { providers: newProviders }
     };
     config.save(newConfig);
+    showRemoveModelConfirm = false;
+    pendingRemoveModel = { providerId: '', modelName: '' };
+  }
+
+  function toggleCapability(cap: string) {
+    if (newModelCapabilities.includes(cap)) {
+      newModelCapabilities = newModelCapabilities.filter((c) => c !== cap);
+    } else {
+      newModelCapabilities = [...newModelCapabilities, cap];
+    }
   }
 
   function handleRemoveProvider(providerId: string) {
+    pendingActionProviderId = providerId;
+    showDeleteConfirm = true;
+  }
+
+  function confirmRemoveProvider() {
     const newProviders = $config.ai.providers.filter(
-      (p: ProviderConfig) => p.id !== providerId
+      (p: ProviderConfig) => p.id !== pendingActionProviderId
     );
     const newConfig: AppConfig = {
       ...$config,
       ai: { providers: newProviders }
     };
     config.save(newConfig);
+    showDeleteConfirm = false;
+    pendingActionProviderId = '';
+  }
+
+  function handleResetProvider(providerId: string) {
+    pendingActionProviderId = providerId;
+    showResetConfirm = true;
+  }
+
+  function confirmResetProvider() {
+    const builtin = BUILTIN_PROVIDERS.find((p) => p.id === pendingActionProviderId);
+    if (!builtin) return;
+    const newProviders = $config.ai.providers.map((p: ProviderConfig) =>
+      p.id === pendingActionProviderId ? { ...builtin } : p
+    );
+    const newConfig: AppConfig = {
+      ...$config,
+      ai: { providers: newProviders }
+    };
+    config.save(newConfig);
+    showResetConfirm = false;
+    pendingActionProviderId = '';
   }
 
   function needsApiKey(provider: ProviderConfig): boolean {
@@ -201,6 +276,48 @@
     }
     showAddDialog = open;
   }
+
+  function formatTestDate(isoStr: string): string {
+    try {
+      return new Date(isoStr).toLocaleDateString(undefined, { month: '2-digit', day: '2-digit' });
+    } catch {
+      return '';
+    }
+  }
+
+  function getTestKey(providerId: string, modelName: string): string {
+    return `${providerId}::${modelName}`;
+  }
+
+  function isTesting(providerId: string, modelName: string): boolean {
+    return testingModels.has(getTestKey(providerId, modelName));
+  }
+
+  async function testModel(providerId: string, modelName: string) {
+    const key = getTestKey(providerId, modelName);
+    testingModels = new Set([...testingModels, key]);
+    try {
+      const result = await invoke<{ status: string; latency_ms?: number; message: string }>('test_model_connectivity', {
+        providerId,
+        modelName,
+      });
+      await config.load();
+      return result;
+    } catch (e) {
+      await config.load();
+      throw e;
+    } finally {
+      const next = new Set(testingModels);
+      next.delete(key);
+      testingModels = next;
+    }
+  }
+
+  async function testAllModels(provider: ProviderConfig) {
+    for (const model of provider.models) {
+      await testModel(provider.id, model.name);
+    }
+  }
 </script>
 
 <div class="max-w-[800px]">
@@ -232,12 +349,22 @@
               <div class="text-sm font-semibold text-foreground">{provider.name}</div>
               <div class="text-[10px] text-muted-foreground mt-0.5">{provider.id}</div>
             </div>
-            <button
-              class="text-xs text-muted-foreground hover:text-destructive transition-colors p-0.5"
-              onclick={() => handleRemoveProvider(provider.id)}
-            >
-              ✕
-            </button>
+            {#if isBuiltinProvider(provider.id)}
+              <button
+                class="text-xs text-muted-foreground hover:text-foreground transition-colors p-0.5"
+                onclick={() => handleResetProvider(provider.id)}
+                title="重置为默认"
+              >
+                <RotateCcw class="h-3.5 w-3.5" />
+              </button>
+            {:else}
+              <button
+                class="text-xs text-muted-foreground hover:text-destructive transition-colors p-0.5"
+                onclick={() => handleRemoveProvider(provider.id)}
+              >
+                ✕
+              </button>
+            {/if}
           </div>
 
           {#if needsApiKey(provider)}
@@ -263,11 +390,59 @@
 
           <div>
             <label class="block text-[11px] text-foreground-alt mb-1">Models</label>
-            <TagInput
-              tags={provider.models}
-              onAdd={(tag: string) => handleAddModel(provider.id, tag)}
-              onRemove={(tag: string) => handleRemoveModel(provider.id, tag)}
-            />
+            <div class="mt-1">
+              <div class="flex flex-wrap gap-1 mb-1">
+                {#each provider.models || [] as model (model.name)}
+                  {@const verified = model.verified}
+                  {@const testing = isTesting(provider.id, model.name)}
+                  <span
+                    class="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] text-accent-foreground cursor-pointer select-none
+                      {verified?.status === 'ok' ? 'bg-green-500/15 border border-green-500/30' : ''}
+                      {verified?.status === 'error' ? 'bg-red-500/15 border border-red-500/30' : ''}
+                      {!verified && !testing ? 'bg-accent' : ''}
+                      {testing ? 'bg-accent animate-pulse' : ''}"
+                    title={verified ? `${verified.status === 'ok' ? '验证通过' : '验证失败'}${verified.latency_ms ? ' · ' + verified.latency_ms + 'ms' : ''}${verified.message ? ' · ' + verified.message : ''}` : '点击测试'}
+                    onclick={() => testModel(provider.id, model.name)}
+                  >
+                    {model.name}
+                    {#if model.capabilities?.includes('transcription')}
+                      <span class="text-[8px] opacity-70">T</span>
+                    {/if}
+                    {#if testing}
+                      <span class="animate-spin text-[9px]">⟳</span>
+                    {:else if verified?.status === 'ok'}
+                      <span class="text-green-500 text-[9px]">✓</span>
+                      <span class="text-[8px] text-green-500/70">{formatTestDate(verified.tested_at)}</span>
+                    {:else if verified?.status === 'error'}
+                      <span class="text-red-500 text-[9px]">✕</span>
+                      <span class="text-[8px] text-red-500/70">{formatTestDate(verified.tested_at)}</span>
+                    {/if}
+                    <button
+                      class="opacity-60 hover:opacity-100 transition-opacity"
+                      onclick={(e) => { e.stopPropagation(); handleRemoveModel(provider.id, model.name); }}
+                    >
+                      ✕
+                    </button>
+                  </span>
+                {/each}
+              </div>
+              <div class="flex items-center gap-1.5">
+                <button
+                  class="text-xs text-accent-foreground hover:underline"
+                  onclick={() => openAddModelDialog(provider.id)}
+                >
+                  + 添加模型
+                </button>
+                <span class="text-border">|</span>
+                <button
+                  class="text-xs text-accent-foreground hover:underline inline-flex items-center gap-0.5"
+                  onclick={() => testAllModels(provider)}
+                  disabled={provider.models.length === 0 || [...testingModels].some(k => k.startsWith(provider.id + '::'))}
+                >
+                  ⟳ 测试全部
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       {/each}
@@ -358,6 +533,132 @@
         type="button"
         class="rounded-md bg-foreground px-3 py-1.5 text-xs text-background hover:bg-foreground/90 transition-colors"
         onclick={handleAddProvider}
+      >
+        添加
+      </button>
+    {/snippet}
+  </Dialog>
+
+  <Dialog
+    open={showDeleteConfirm}
+    onOpenChange={(open) => { showDeleteConfirm = open; if (!open) pendingActionProviderId = ''; }}
+    title="删除 Provider"
+    description="确定要删除该 Provider 吗？此操作无法撤销。"
+  >
+    {#snippet footer()}
+      <button
+        type="button"
+        class="rounded-md border border-border px-3 py-1.5 text-xs text-foreground hover:bg-muted transition-colors"
+        onclick={() => { showDeleteConfirm = false; pendingActionProviderId = ''; }}
+      >
+        取消
+      </button>
+      <button
+        type="button"
+        class="rounded-md bg-destructive px-3 py-1.5 text-xs text-white hover:bg-destructive/90 transition-colors"
+        onclick={confirmRemoveProvider}
+      >
+        删除
+      </button>
+    {/snippet}
+  </Dialog>
+
+  <Dialog
+    open={showResetConfirm}
+    onOpenChange={(open) => { showResetConfirm = open; if (!open) pendingActionProviderId = ''; }}
+    title="重置 Provider"
+    description="确定要重置为默认设置吗？自定义的 Endpoint、API Key 和 Models 将被覆盖。"
+  >
+    {#snippet footer()}
+      <button
+        type="button"
+        class="rounded-md border border-border px-3 py-1.5 text-xs text-foreground hover:bg-muted transition-colors"
+        onclick={() => { showResetConfirm = false; pendingActionProviderId = ''; }}
+      >
+        取消
+      </button>
+      <button
+        type="button"
+        class="rounded-md bg-foreground px-3 py-1.5 text-xs text-background hover:bg-foreground/90 transition-colors"
+        onclick={confirmResetProvider}
+      >
+        重置
+      </button>
+    {/snippet}
+  </Dialog>
+
+  <Dialog
+    open={showRemoveModelConfirm}
+    onOpenChange={(open) => { showRemoveModelConfirm = open; if (!open) pendingRemoveModel = { providerId: '', modelName: '' }; }}
+    title="删除模型"
+    description="确定要删除该模型吗？此操作无法撤销。"
+  >
+    {#snippet footer()}
+      <button
+        type="button"
+        class="rounded-md border border-border px-3 py-1.5 text-xs text-foreground hover:bg-muted transition-colors"
+        onclick={() => { showRemoveModelConfirm = false; pendingRemoveModel = { providerId: '', modelName: '' }; }}
+      >
+        取消
+      </button>
+      <button
+        type="button"
+        class="rounded-md bg-destructive px-3 py-1.5 text-xs text-white hover:bg-destructive/90 transition-colors"
+        onclick={confirmRemoveModel}
+      >
+        删除
+      </button>
+    {/snippet}
+  </Dialog>
+
+  <Dialog
+    open={showAddModelDialog}
+    onOpenChange={(open) => { showAddModelDialog = open; if (!open) { addModelProviderId = ''; newModelName = ''; newModelCapabilities = []; } }}
+    title="添加模型"
+    description="为 Provider 添加新模型"
+  >
+    {#snippet children()}
+      <div>
+        <label for="model-name" class="block text-[11px] text-foreground-alt mb-1">模型名称</label>
+        <input
+          id="model-name"
+          class="flex h-8 w-full rounded-md border border-border-input bg-background px-3 py-1 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-1"
+          type="text"
+          placeholder="如：gpt-4o"
+          bind:value={newModelName}
+        />
+      </div>
+      <div>
+        <span class="block text-[11px] text-foreground-alt mb-1">能力</span>
+        <div class="flex flex-wrap gap-2">
+          {#each MODEL_CAPABILITIES as cap}
+            <label class="inline-flex items-center gap-1.5 text-xs text-foreground cursor-pointer">
+              <input
+                type="checkbox"
+                class="rounded border-border-input"
+                checked={newModelCapabilities.includes(cap.value)}
+                onchange={() => toggleCapability(cap.value)}
+              />
+              {cap.label}
+            </label>
+          {/each}
+        </div>
+      </div>
+    {/snippet}
+
+    {#snippet footer()}
+      <button
+        type="button"
+        class="rounded-md border border-border px-3 py-1.5 text-xs text-foreground hover:bg-muted transition-colors"
+        onclick={() => { showAddModelDialog = false; addModelProviderId = ''; newModelName = ''; newModelCapabilities = []; }}
+      >
+        取消
+      </button>
+      <button
+        type="button"
+        class="rounded-md bg-foreground px-3 py-1.5 text-xs text-background hover:bg-foreground/90 transition-colors"
+        onclick={confirmAddModel}
+        disabled={!newModelName.trim()}
       >
         添加
       </button>

@@ -1,0 +1,231 @@
+<script lang="ts">
+  import { onMount } from 'svelte';
+  import { invoke } from '@tauri-apps/api/core';
+  import { ScrollText } from 'lucide-svelte';
+
+  interface LogEntry {
+    ts: string;
+    module: string;
+    level: string;
+    msg: string;
+    meta?: Record<string, unknown>;
+  }
+
+  interface LogSession {
+    filename: string;
+    size_bytes: number;
+    entry_count: number;
+    first_ts?: string;
+    is_current: boolean;
+  }
+
+  const MODULES = ['all', 'connectivity', 'recording', 'ai', 'system'] as const;
+  const MODULE_COLORS: Record<string, string> = {
+    connectivity: 'text-blue-400',
+    recording: 'text-purple-400',
+    ai: 'text-amber-400',
+    system: 'text-muted-foreground',
+  };
+
+  let activeTab = $state<'current' | 'history'>('current');
+  let selectedModule = $state<string>('all');
+  let sessions = $state<LogSession[]>([]);
+  let entries = $state<LogEntry[]>([]);
+  let selectedSession = $state<string | null>(null);
+  let loading = $state(false);
+
+  let filteredEntries = $derived(
+    selectedModule === 'all'
+      ? entries
+      : entries.filter((e) => e.module === selectedModule)
+  );
+
+  let currentSession = $derived(sessions.find((s) => s.is_current));
+
+  onMount(async () => {
+    await loadSessions();
+    await loadCurrentLog();
+  });
+
+  async function loadSessions() {
+    try {
+      sessions = await invoke<LogSession[]>('get_log_sessions');
+    } catch (e) {
+      console.error('Failed to load log sessions:', e);
+    }
+  }
+
+  async function loadCurrentLog() {
+    loading = true;
+    try {
+      entries = await invoke<LogEntry[]>('get_log_content', { sessionFile: null });
+    } catch (e) {
+      console.error('Failed to load log content:', e);
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function loadSessionLog(filename: string) {
+    loading = true;
+    selectedSession = filename;
+    try {
+      entries = await invoke<LogEntry[]>('get_log_content', { sessionFile: filename });
+    } catch (e) {
+      console.error('Failed to load session log:', e);
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function switchTab(tab: 'current' | 'history') {
+    activeTab = tab;
+    if (tab === 'current') {
+      selectedSession = null;
+      await loadCurrentLog();
+    } else {
+      entries = [];
+      selectedSession = null;
+    }
+  }
+
+  function formatTimestamp(ts: string): string {
+    try {
+      const d = new Date(ts);
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    } catch {
+      return ts;
+    }
+  }
+
+  function formatSessionName(filename: string): string {
+    const match = filename.match(/talkshow-(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})/);
+    if (match) {
+      return `${match[1]}-${match[2]}-${match[3]} ${match[4]}:${match[5]}:${match[6]}`;
+    }
+    return filename;
+  }
+
+  function formatSize(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+
+  function levelColor(level: string): string {
+    switch (level) {
+      case 'error': return 'text-red-400';
+      case 'warn': return 'text-yellow-400';
+      default: return 'text-muted-foreground';
+    }
+  }
+
+  function metaSummary(meta: Record<string, unknown> | undefined): string {
+    if (!meta) return '';
+    const parts: string[] = [];
+    if (meta.provider_id) parts.push(String(meta.provider_id));
+    if (meta.model_name) parts.push(String(meta.model_name));
+    if (meta.latency_ms != null) parts.push(`${meta.latency_ms}ms`);
+    if (meta.error) parts.push(String(meta.error));
+    return parts.join(' · ');
+  }
+</script>
+
+<div class="max-w-[960px]">
+  <h2 class="text-xl font-semibold text-foreground m-0 mb-6">日志</h2>
+
+  <div class="flex items-center gap-3 mb-4">
+    <div class="flex gap-0.5 bg-muted rounded-md p-0.5">
+      <button
+        class="px-3 py-1 rounded text-xs transition-colors {activeTab === 'current' ? 'bg-background text-foreground font-medium' : 'text-muted-foreground hover:text-foreground'}"
+        onclick={() => switchTab('current')}
+      >
+        当前会话
+      </button>
+      <button
+        class="px-3 py-1 rounded text-xs transition-colors {activeTab === 'history' ? 'bg-background text-foreground font-medium' : 'text-muted-foreground hover:text-foreground'}"
+        onclick={() => switchTab('history')}
+      >
+        历史记录
+      </button>
+    </div>
+
+    <div class="flex gap-1">
+      {#each MODULES as mod}
+        <button
+          class="px-2.5 py-1 rounded text-[11px] transition-colors {selectedModule === mod ? 'bg-primary text-primary-foreground' : 'border border-border text-muted-foreground hover:text-foreground'}"
+          onclick={() => (selectedModule = mod)}
+        >
+          {mod === 'all' ? '全部' : mod}
+        </button>
+      {/each}
+    </div>
+
+    {#if currentSession && activeTab === 'current'}
+      <span class="ml-auto text-[11px] text-muted-foreground">
+        {filteredEntries.length} 条日志
+      </span>
+    {/if}
+  </div>
+
+  {#if activeTab === 'history' && !selectedSession}
+    <div class="space-y-1.5">
+      {#if sessions.length === 0}
+        <div class="text-sm text-muted-foreground py-8 text-center">暂无历史日志</div>
+      {:else}
+        {#each sessions as session}
+          <button
+            class="w-full flex items-center gap-4 px-4 py-3 rounded-lg border border-border bg-background-alt text-left transition-colors hover:bg-muted/50"
+            onclick={() => loadSessionLog(session.filename)}
+          >
+            <ScrollText size={16} class="shrink-0 text-muted-foreground" />
+            <div class="flex-1 min-w-0">
+              <div class="text-sm text-foreground font-medium">
+                {formatSessionName(session.filename)}
+                {#if session.is_current}
+                  <span class="text-[10px] text-green-400 ml-2 font-normal">当前</span>
+                {/if}
+              </div>
+              <div class="text-[11px] text-muted-foreground mt-0.5">
+                {session.entry_count} 条 · {formatSize(session.size_bytes)}
+              </div>
+            </div>
+          </button>
+        {/each}
+      {/if}
+    </div>
+  {:else}
+    {#if loading}
+      <div class="text-sm text-muted-foreground py-8 text-center">加载中...</div>
+    {:else if filteredEntries.length === 0}
+      <div class="text-sm text-muted-foreground py-8 text-center">暂无日志</div>
+    {:else}
+      <div class="border border-border rounded-lg overflow-hidden">
+        <div class="max-h-[calc(100vh-200px)] overflow-y-auto font-mono text-xs">
+          {#each filteredEntries as entry, i}
+            <div class="flex gap-3 px-4 py-1.5 border-b border-border last:border-b-0 hover:bg-muted/30">
+              <span class="text-muted-foreground whitespace-nowrap shrink-0">{formatTimestamp(entry.ts)}</span>
+              <span class="{levelColor(entry.level)} shrink-0 w-4 text-center">
+                {entry.level === 'error' ? '✕' : entry.level === 'warn' ? '!' : '·'}
+              </span>
+              <span class="{MODULE_COLORS[entry.module] || 'text-muted-foreground'} shrink-0 w-24">{entry.module}</span>
+              <span class="{entry.level === 'error' ? 'text-red-400' : 'text-foreground'} truncate">{entry.msg}</span>
+              <span class="text-muted-foreground text-[10px] ml-auto whitespace-nowrap shrink-0">
+                {metaSummary(entry.meta as Record<string, unknown> | undefined)}
+              </span>
+            </div>
+          {/each}
+        </div>
+      </div>
+
+      {#if activeTab === 'history' && selectedSession}
+        <button
+          class="mt-3 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          onclick={() => { selectedSession = null; entries = []; }}
+        >
+          ← 返回历史列表
+        </button>
+      {/if}
+    {/if}
+  {/if}
+</div>

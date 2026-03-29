@@ -7,7 +7,7 @@
     onOpenChange: (open: boolean) => void;
     title: string;
     description?: string;
-    children: import('svelte').Snippet;
+    children?: import('svelte').Snippet;
     footer?: import('svelte').Snippet;
   }
 
@@ -30,9 +30,11 @@
         </Dialog.Close>
       </div>
 
-      <div class="space-y-3">
-        {@render children()}
-      </div>
+      {#if children}
+        <div class="space-y-3">
+          {@render children()}
+        </div>
+      {/if}
 
       {#if footer}
         <div class="flex justify-end gap-2 mt-4 pt-3 border-t border-border">
