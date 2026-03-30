@@ -8,6 +8,7 @@ use rig::transcription::TranscriptionModel;
 use rig::OneOrMany;
 use rig::completion::message::Message;
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 
 use crate::config::ProviderConfig;
 use crate::logger::Logger;
@@ -18,6 +19,27 @@ pub enum AiError {
     MissingApiKey(String),
     FileReadError(String),
     RequestError(String),
+}
+
+type VertexClientCache = Arc<Mutex<Option<rig_vertexai::Client>>>;
+
+fn get_or_create_vertex_client(
+    logger: &Logger,
+    cache: &VertexClientCache,
+) -> Result<rig_vertexai::Client, AiError> {
+    let mut guard = cache.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(ref client) = *guard {
+        return Ok(client.clone());
+    }
+    let client = rig_vertexai::Client::builder()
+        .build()
+        .map_err(|e| {
+            logger.error("ai", "Vertex AI client 初始化失败", Some(serde_json::json!({ "error": e.to_string() })));
+            AiError::RequestError(format!("Vertex AI client init failed: {}", e))
+        })?;
+    *guard = Some(client.clone());
+    logger.info("ai", "Vertex AI client 已创建并缓存", None);
+    Ok(client)
 }
 
 impl std::fmt::Display for AiError {
@@ -37,6 +59,7 @@ pub async fn send_audio_prompt(
     text_prompt: &str,
     model_name: &str,
     provider: &ProviderConfig,
+    vertex_cache: &VertexClientCache,
 ) -> Result<String, AiError> {
     let audio_data = std::fs::read(audio_path)
         .map_err(|e| AiError::FileReadError(e.to_string()))?;
@@ -55,7 +78,10 @@ pub async fn send_audio_prompt(
     };
 
     match provider.provider_type.as_str() {
-        "vertex" => send_via_vertex(logger, &audio_b64, media_type, text_prompt, model_name).await,
+        "vertex" => {
+            let client = get_or_create_vertex_client(logger, vertex_cache)?;
+            send_via_vertex(logger, &client, &audio_b64, media_type, text_prompt, model_name).await
+        }
         "openai-compatible" => {
             let api_key = provider
                 .api_key
@@ -81,6 +107,7 @@ pub async fn send_audio_prompt(
 
 async fn send_via_vertex(
     logger: &Logger,
+    client: &rig_vertexai::Client,
     audio_b64: &str,
     media_type: &str,
     text_prompt: &str,
@@ -94,13 +121,6 @@ async fn send_via_vertex(
     })));
 
     let audio_mt: Option<AudioMediaType> = AudioMediaType::from_mime_type(media_type);
-
-    let client = rig_vertexai::Client::builder()
-        .build()
-        .map_err(|e| {
-            logger.error("ai", "Vertex AI client 初始化失败", Some(serde_json::json!({ "error": e.to_string() })));
-            AiError::RequestError(format!("Vertex AI client init failed: {}", e))
-        })?;
 
     let model = client.completion_model(model_name);
     let audio_content = UserContent::audio(audio_b64.to_string(), audio_mt);
@@ -226,9 +246,13 @@ pub async fn send_text_prompt(
     text_prompt: &str,
     model_name: &str,
     provider: &ProviderConfig,
+    vertex_cache: &VertexClientCache,
 ) -> Result<String, AiError> {
     match provider.provider_type.as_str() {
-        "vertex" => send_text_via_vertex(logger, text_prompt, model_name).await,
+        "vertex" => {
+            let client = get_or_create_vertex_client(logger, vertex_cache)?;
+            send_text_via_vertex(logger, &client, text_prompt, model_name).await
+        }
         "openai-compatible" => {
             let api_key = provider
                 .api_key
@@ -252,6 +276,7 @@ pub async fn send_text_prompt(
 
 async fn send_text_via_vertex(
     logger: &Logger,
+    client: &rig_vertexai::Client,
     text_prompt: &str,
     model_name: &str,
 ) -> Result<String, AiError> {
@@ -259,13 +284,6 @@ async fn send_text_via_vertex(
         "model": model_name,
         "prompt": text_prompt,
     })));
-
-    let client = rig_vertexai::Client::builder()
-        .build()
-        .map_err(|e| {
-            logger.error("ai", "Vertex AI client 初始化失败", Some(serde_json::json!({ "error": e.to_string() })));
-            AiError::RequestError(format!("Vertex AI client init failed: {}", e))
-        })?;
 
     let model = client.completion_model(model_name);
 
@@ -384,11 +402,13 @@ pub async fn send_audio_prompt_from_bytes(
     text_prompt: &str,
     model_name: &str,
     provider: &ProviderConfig,
+    vertex_cache: &VertexClientCache,
 ) -> Result<String, AiError> {
     match provider.provider_type.as_str() {
         "vertex" => {
             let audio_b64 = base64::engine::general_purpose::STANDARD.encode(audio_bytes);
-            send_via_vertex(logger, &audio_b64, media_type, text_prompt, model_name).await
+            let client = get_or_create_vertex_client(logger, vertex_cache)?;
+            send_via_vertex(logger, &client, &audio_b64, media_type, text_prompt, model_name).await
         }
         "openai-compatible" => {
             let api_key = provider

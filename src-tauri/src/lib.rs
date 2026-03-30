@@ -27,6 +27,10 @@ struct SenseVoiceState {
     language: Arc<Mutex<i32>>,
 }
 
+struct VertexClientState {
+    client: Arc<Mutex<Option<rig_vertexai::Client>>>,
+}
+
 struct ShortcutIds {
     toggle: u32,
     recording: u32,
@@ -98,7 +102,11 @@ fn stop_recording(
 
     match event_name {
         "recording:complete" => match recorder.lock() {
-            Ok(mut r) => match r.stop() {
+            Ok(mut r) => {
+                let save_start = Instant::now();
+                let stop_result = r.stop();
+                let save_elapsed = save_start.elapsed().as_millis();
+                match stop_result {
                 Ok(result) => {
                     println!(
                         "[TalkShow] Recording saved: {} ({}s, {})",
@@ -117,11 +125,14 @@ fn stop_recording(
                             "path": result.path.display().to_string(),
                             "duration_secs": result.duration_secs,
                             "format": result.format,
+                            "save_ms": save_elapsed,
                         })));
                     }
 
+                    let config_start = Instant::now();
                     let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
                     let app_config = config::load_config(&app_data_dir);
+                    let config_elapsed = config_start.elapsed().as_millis();
                     let transcription = &app_config.features.transcription;
                     let provider = app_config
                         .ai
@@ -136,6 +147,15 @@ fn stop_recording(
                     let skills_providers = app_config.ai.providers.clone();
                     let h = app_handle.clone();
                     tauri::async_runtime::spawn(async move {
+                        let pipeline_start = Instant::now();
+                        let _ = config_elapsed;
+
+                        if let Some(lg) = h.try_state::<Logger>() {
+                            lg.info("pipeline", "流水线启动", Some(serde_json::json!({
+                                "config_load_ms": config_elapsed,
+                            })));
+                        }
+
                         let provider = match provider {
                             Some(p) => p,
                             None => {
@@ -158,6 +178,7 @@ fn stop_recording(
                         }
 
                         let logger = h.state::<Logger>();
+                        let transcribe_start = Instant::now();
                         let text_result = if provider.provider_type == "sensevoice" {
                             let sv_state = h.state::<SenseVoiceState>();
                             let lang = *sv_state.language.lock().unwrap_or_else(|e| e.into_inner());
@@ -186,36 +207,50 @@ fn stop_recording(
                             }
                         } else {
                             let prompt = "请将这段音频转录为文字，只输出转录结果，不要添加任何解释。";
-                            ai::send_audio_prompt(&logger, &audio_path, prompt, &model_name, &provider).await.map_err(|e| e.to_string())
+                            ai::send_audio_prompt(&logger, &audio_path, prompt, &model_name, &provider, &h.state::<VertexClientState>().client).await.map_err(|e| e.to_string())
                         };
+                        let transcribe_elapsed = transcribe_start.elapsed().as_millis();
                         match text_result {
                             Ok(text) => {
                                 logger.info("ai", "AI 转写成功", Some(serde_json::json!({
+                                    "transcribe_ms": transcribe_elapsed,
                                     "response_length": text.len(),
                                     "response_preview": text.chars().take(100).collect::<String>(),
                                 })));
 
+                                let skills_start = Instant::now();
                                 let final_text = skills::process_with_skills(
                                     &logger,
                                     &skills_config,
                                     &skills_providers,
                                     &text,
+                                    &h.state::<VertexClientState>().client,
                                 )
                                 .await
                                 .unwrap_or_else(|e| {
                                     logger.error("skills", &format!("Skills 处理异常，使用原始文字: {}", e), None);
                                     text
                                 });
+                                let skills_elapsed = skills_start.elapsed().as_millis();
 
                                 if RECORDING.load(Ordering::Relaxed) {
                                     logger.info("ai", "录音已重新开始，丢弃当前 AI 结果", None);
                                     return;
                                 }
 
+                                let clipboard_start = Instant::now();
                                 match clipboard::write_and_paste(&final_text) {
                                     Ok(()) => {
+                                        let clipboard_elapsed = clipboard_start.elapsed().as_millis();
+                                        let total_elapsed = pipeline_start.elapsed().as_millis();
                                         logger.info("clipboard", "剪贴板写入并粘贴成功", Some(serde_json::json!({
                                             "text_length": final_text.len(),
+                                        })));
+                                        logger.info("pipeline", "流水线完成", Some(serde_json::json!({
+                                            "total_ms": total_elapsed,
+                                            "transcribe_ms": transcribe_elapsed,
+                                            "skills_ms": skills_elapsed,
+                                            "clipboard_ms": clipboard_elapsed,
                                         })));
                                         emit_indicator(&h, "indicator:done");
                                     }
@@ -227,7 +262,10 @@ fn stop_recording(
                                 }
                             }
                             Err(e) => {
-                                logger.error("ai", "AI 转写失败", Some(serde_json::json!({ "error": e.to_string() })));
+                                logger.error("ai", "AI 转写失败", Some(serde_json::json!({
+                                    "transcribe_ms": transcribe_elapsed,
+                                    "error": e.to_string(),
+                                })));
                                 show_notification(&h, "AI 处理失败", &e);
                                 destroy_indicator(&h);
                             }
@@ -250,6 +288,7 @@ fn stop_recording(
                     }
                     let _ = app_handle.emit("recording:error", e.to_string());
                     destroy_indicator(app_handle);
+                }
                 }
             },
             Err(_) => {
@@ -323,6 +362,7 @@ fn show_indicator(app_handle: &tauri::AppHandle) {
     .always_on_top(true)
     .skip_taskbar(true)
     .visible(false)
+    .focusable(false)
     .build();
 
     match window {
@@ -463,8 +503,9 @@ async fn test_model_connectivity(
     }
 
     let start = Instant::now();
+    let vertex_cache = app_handle.state::<VertexClientState>().client.clone();
     let result = if provider.provider_type == "vertex" {
-        ai::send_text_prompt(&logger, "Hi", &model_name, &provider).await
+        ai::send_text_prompt(&logger, "Hi", &model_name, &provider, &vertex_cache).await
     } else if is_transcription {
         let test_audio: &[u8] = include_bytes!("../assets/test.wav");
         ai::send_audio_prompt_from_bytes(
@@ -474,10 +515,11 @@ async fn test_model_connectivity(
             "请将这段音频转录为文字",
             &model_name,
             &provider,
+            &vertex_cache,
         )
         .await
     } else {
-        ai::send_text_prompt(&logger, "Hi", &model_name, &provider).await
+        ai::send_text_prompt(&logger, "Hi", &model_name, &provider, &vertex_cache).await
     };
     let latency = start.elapsed().as_millis() as u64;
 
@@ -843,6 +885,16 @@ pub fn run() {
                                             let _ =
                                                 tray.set_icon(Some(recording_icon_owned.clone()));
                                         }
+                                        let frontmost = std::process::Command::new("osascript")
+                                            .arg("-e")
+                                            .arg("tell application \"System Events\" to get name of first process whose frontmost is true")
+                                            .output()
+                                            .ok()
+                                            .filter(|o| o.status.success())
+                                            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
+                                        if let Some(ref app) = frontmost {
+                                            clipboard::save_target_app(app);
+                                        }
                                         play_sound("Ping.aiff");
                                         show_indicator(&app_handle);
                                         if let Some(logger) = app_handle.try_state::<Logger>() {
@@ -927,6 +979,11 @@ pub fn run() {
                 language: Arc::new(Mutex::new(0)),
             };
             app.manage(sensevoice_state);
+
+            let vertex_state = VertexClientState {
+                client: Arc::new(Mutex::new(None)),
+            };
+            app.manage(vertex_state);
 
             app.manage(logger);
 
