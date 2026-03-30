@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#30D158"/>
+      <stop offset="100%" stop-color="#28B44D"/>
+    </linearGradient>
+  </defs>
+  <!-- Squircle background -->
+  <rect width="1024" height="1024" rx="224" fill="url(#bg)"/>
+  <!-- Microphone head -->
+  <rect x="332.8" y="115.2" width="358.4" height="448" rx="179.2" fill="white" opacity="0.95"/>
+  <!-- Microphone stand arc -->
+  <path d="M268.8 524.8 C268.8 736, 755.2 736, 755.2 524.8" stroke="white" stroke-width="44.8" fill="none" opacity="0.95" stroke-linecap="round"/>
+  <!-- Bottom vertical line -->
+  <line x1="512" y1="691.2" x2="512" y2="864" stroke="white" stroke-width="44.8" opacity="0.95" stroke-linecap="round"/>
+  <!-- Bottom horizontal line -->
+  <line x1="396.8" y1="864" x2="627.2" y2="864" stroke="white" stroke-width="44.8" opacity="0.95" stroke-linecap="round"/>
+  <!-- Left particles (near to far, decreasing size and opacity) -->
+  <circle cx="153.6" cy="435.2" r="44.8" fill="white" opacity="0.55"/>
+  <circle cx="76.8" cy="524.8" r="32" fill="white" opacity="0.35"/>
+  <circle cx="51.2" cy="384" r="25.6" fill="white" opacity="0.22"/>
+  <!-- Right particles (mirror) -->
+  <circle cx="870.4" cy="435.2" r="44.8" fill="white" opacity="0.55"/>
+  <circle cx="947.2" cy="524.8" r="32" fill="white" opacity="0.35"/>
+  <circle cx="972.8" cy="384" r="25.6" fill="white" opacity="0.22"/>
+</svg>
