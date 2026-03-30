@@ -66,6 +66,7 @@ const MODEL_FILES: &[(&str, u64)] = &[
 ];
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum SenseVoiceError {
     ModelNotDownloaded,
     DownloadFailed(String),
@@ -108,6 +109,7 @@ pub fn model_status(app_data_dir: &PathBuf) -> SenseVoiceModelStatus {
 
 #[derive(serde::Serialize, Clone)]
 #[serde(tag = "status")]
+#[allow(dead_code)]
 pub enum SenseVoiceModelStatus {
     #[serde(rename = "not_downloaded")]
     NotDownloaded,
@@ -171,7 +173,7 @@ impl SenseVoiceEngine {
         feats_len: i32,
         language: i32,
     ) -> Result<Vec<i32>, SenseVoiceError> {
-        let (_, t_lfr, _) = feats.dim();
+        let (_, _t_lfr, _) = feats.dim();
         let feats_len_arr = Array1::from_vec(vec![feats_len]);
         let language_arr = Array1::from_vec(vec![language]);
         let textnorm_arr = Array1::from_vec(vec![14i32]);
@@ -502,6 +504,7 @@ pub async fn delete_sensevoice_model(
     Ok(())
 }
 
+#[allow(dead_code)]
 pub fn cleanup_tmp_files(app_data_dir: &PathBuf) {
     let dir = model_dir(app_data_dir);
     if let Ok(entries) = std::fs::read_dir(&dir) {
