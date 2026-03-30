@@ -4,6 +4,7 @@ mod config;
 mod logger;
 mod recording;
 mod sensevoice;
+mod skills;
 
 use logger::Logger;
 use recording::AudioRecorder;
