@@ -34,4 +34,12 @@ dasp_sample = "0.11"
 hound = "3.5"
 base64 = "0.22"
 chrono = { version = "0.4", features = ["serde"] }
+ort = { version = "2.0.0-rc.12", features = ["ndarray", "load-dynamic"] }
+ndarray = "0.17"
+rubato = "0.15"
+reqwest = { version = "0.12", features = ["stream"] }
+sentencepiece = "0.13"
+futures-util = "0.3"
+regex = "1"
+kaldi-native-fbank = "0.1"
 

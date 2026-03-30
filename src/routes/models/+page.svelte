@@ -5,8 +5,10 @@
   import PasswordInput from '$lib/components/ui/password-input/index.svelte';
   import Dialog from '$lib/components/ui/dialog/index.svelte';
   import { invoke } from '@tauri-apps/api/core';
+  import { listen } from '@tauri-apps/api/event';
   import { Plus, RotateCcw } from 'lucide-svelte';
   import type { ProviderConfig, AppConfig, ModelConfig, ModelVerified } from '$lib/stores/config';
+  import { SENSEVOICE_LANGUAGES } from '$lib/stores/config';
 
   let showAddDialog = $state(false);
   let newProvider = $state({
@@ -26,15 +28,57 @@
   let showRemoveModelConfirm = $state(false);
   let pendingRemoveModel = $state<{ providerId: string; modelName: string }>({ providerId: '', modelName: '' });
   let testingModels = $state<Set<string>>(new Set());
+  let vertexEnvInfo = $state<{ project: string; location: string } | null>(null);
+  let sensevoiceStatus = $state<{ status: string; size_bytes?: number } | null>(null);
+  let sensevoiceDownloading = $state(false);
+  let sensevoiceDownloadProgress = $state({ file: '', percent: 0, downloaded: 0, total: 0 });
+  let sensevoiceLanguage = $state(0);
+
+  async function loadSenseVoiceStatus() {
+    try {
+      sensevoiceStatus = await invoke<{ status: string; size_bytes?: number }>('get_sensevoice_status');
+    } catch {
+      sensevoiceStatus = null;
+    }
+  }
+
+  async function downloadSenseVoice() {
+    sensevoiceDownloading = true;
+    try {
+      await invoke('download_sensevoice_model');
+      await loadSenseVoiceStatus();
+    } catch (e) {
+      console.error('Download failed:', e);
+    } finally {
+      sensevoiceDownloading = false;
+    }
+  }
+
+  async function deleteSenseVoiceModel() {
+    try {
+      await invoke('delete_sensevoice_model');
+      await loadSenseVoiceStatus();
+    } catch (e) {
+      console.error('Delete failed:', e);
+    }
+  }
 
   const PROVIDER_TYPES = [
     { value: 'openai-compatible', label: 'OpenAI Compatible' },
-    { value: 'anthropic-compatible', label: 'Anthropic Compatible' },
-    { value: 'stubbed', label: 'Stubbed' }
+    { value: 'anthropic-compatible', label: 'Anthropic Compatible' }
   ];
 
-  onMount(() => {
+  onMount(async () => {
     config.load();
+    try {
+      vertexEnvInfo = await invoke<{ project: string; location: string }>('get_vertex_env_info');
+    } catch {
+      vertexEnvInfo = null;
+    }
+    await loadSenseVoiceStatus();
+    listen('sensevoice:download-progress', (event) => {
+      sensevoiceDownloadProgress = event.payload as any;
+    });
   });
 
   function buildTranscriptionGroups() {
@@ -367,6 +411,52 @@
             {/if}
           </div>
 
+          {#if provider.type === 'sensevoice'}
+            <div class="mb-2.5">
+              <label class="block text-[11px] text-foreground-alt mb-1">模型状态</label>
+              <div class="text-[10px] bg-background rounded-md border border-border p-2 space-y-1">
+                {#if sensevoiceStatus?.status === 'ready'}
+                  <div class="flex items-center justify-between">
+                    <span class="text-green-500">已就绪</span>
+                    <span class="text-muted-foreground">{(sensevoiceStatus!.size_bytes! / 1024 / 1024).toFixed(0)} MB</span>
+                  </div>
+                  <button
+                    class="text-xs text-red-400 hover:text-red-300 transition-colors"
+                    onclick={deleteSenseVoiceModel}
+                  >
+                    删除模型
+                  </button>
+                {:else if sensevoiceDownloading}
+                  <div>
+                    <div class="text-muted-foreground mb-1">下载中: {sensevoiceDownloadProgress.file}</div>
+                    <div class="w-full bg-border rounded-full h-1.5">
+                      <div class="bg-accent-foreground h-1.5 rounded-full transition-all" style="width: {sensevoiceDownloadProgress.percent}%"></div>
+                    </div>
+                    <div class="text-muted-foreground mt-0.5">{sensevoiceDownloadProgress.percent.toFixed(1)}%</div>
+                  </div>
+                {:else}
+                  <button
+                    class="text-xs text-accent-foreground hover:underline"
+                    onclick={downloadSenseVoice}
+                  >
+                    下载模型 (约 242 MB)
+                  </button>
+                {/if}
+              </div>
+            </div>
+            <div class="mb-2.5">
+              <label class="block text-[11px] text-foreground-alt mb-1">转写语言</label>
+              <select
+                class="flex h-7 w-full rounded-md border border-border-input bg-background px-2 py-1 text-xs ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20"
+                bind:value={sensevoiceLanguage}
+              >
+                {#each SENSEVOICE_LANGUAGES as lang}
+                  <option value={lang.value}>{lang.label}</option>
+                {/each}
+              </select>
+            </div>
+          {/if}
+
           {#if needsApiKey(provider)}
             <div class="mb-2.5">
               <label class="block text-[11px] text-foreground-alt mb-1">API Key</label>
@@ -378,15 +468,26 @@
             </div>
           {/if}
 
-          <div class="mb-2.5">
-            <label class="block text-[11px] text-foreground-alt mb-1">Endpoint</label>
-            <input
-              class="flex h-8 w-full rounded-md border border-border-input bg-background px-3 py-1 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-1"
-              type="text"
-              value={provider.endpoint}
-              onchange={(e) => handleProviderFieldChange(provider.id, 'endpoint', (e.target as HTMLInputElement).value)}
-            />
-          </div>
+          {#if provider.type === 'vertex'}
+            <div class="mb-2.5">
+              <label class="block text-[11px] text-foreground-alt mb-1">Vertex AI 配置</label>
+              <div class="text-[10px] text-muted-foreground space-y-0.5 bg-background rounded-md border border-border p-2">
+                <div>GOOGLE_CLOUD_PROJECT: <span class="text-foreground">{vertexEnvInfo?.project || '未设置'}</span></div>
+                <div>GOOGLE_CLOUD_LOCATION: <span class="text-foreground">{vertexEnvInfo?.location || 'global'}</span></div>
+                <div class="text-muted-foreground/70 mt-1">认证: <code class="text-[9px] bg-background px-1 py-0.5 rounded border border-border">gcloud auth application-default login</code></div>
+              </div>
+            </div>
+          {:else if provider.type !== 'sensevoice'}
+            <div class="mb-2.5">
+              <label class="block text-[11px] text-foreground-alt mb-1">Endpoint</label>
+              <input
+                class="flex h-8 w-full rounded-md border border-border-input bg-background px-3 py-1 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-1"
+                type="text"
+                value={provider.endpoint}
+                onchange={(e) => handleProviderFieldChange(provider.id, 'endpoint', (e.target as HTMLInputElement).value)}
+              />
+            </div>
+          {/if}
 
           <div>
             <label class="block text-[11px] text-foreground-alt mb-1">Models</label>

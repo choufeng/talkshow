@@ -13,7 +13,7 @@ fn builtin_providers() -> Vec<ProviderConfig> {
             id: "vertex".to_string(),
             provider_type: "vertex".to_string(),
             name: "Vertex AI".to_string(),
-            endpoint: "https://aiplatform.googleapis.com/v1".to_string(),
+            endpoint: String::new(),
             api_key: None,
             models: vec![ModelConfig {
                 name: "gemini-2.0-flash".to_string(),
@@ -33,16 +33,45 @@ fn builtin_providers() -> Vec<ProviderConfig> {
                 verified: None,
             }],
         },
+        ProviderConfig {
+            id: "sensevoice".to_string(),
+            provider_type: "sensevoice".to_string(),
+            name: "SenseVoice (本地)".to_string(),
+            endpoint: String::new(),
+            api_key: None,
+            models: vec![ModelConfig {
+                name: "SenseVoice-Small".to_string(),
+                capabilities: vec!["transcription".to_string()],
+                verified: None,
+            }],
+        },
     ]
 }
 
 fn merge_builtin_providers(mut providers: Vec<ProviderConfig>) -> Vec<ProviderConfig> {
+    let builtins = builtin_providers();
+    let builtin_map: std::collections::HashMap<String, ProviderConfig> =
+        builtins.into_iter().map(|p| (p.id.clone(), p)).collect();
+
+    let builtin_ids: std::collections::HashSet<String> = builtin_map.keys().cloned().collect();
     let user_ids: std::collections::HashSet<String> =
         providers.iter().map(|p| p.id.clone()).collect();
-    let missing: Vec<ProviderConfig> = builtin_providers()
-        .into_iter()
+
+    let missing: Vec<ProviderConfig> = builtin_map
+        .values()
         .filter(|p| !user_ids.contains(&p.id))
+        .cloned()
         .collect();
+
+    for provider in &mut providers {
+        if let Some(builtin) = builtin_map.get(&provider.id) {
+            if builtin_ids.contains(&provider.id) {
+                provider.provider_type = builtin.provider_type.clone();
+                provider.endpoint = builtin.endpoint.clone();
+            }
+        }
+    }
+
     let mut result = missing;
     result.append(&mut providers);
     result

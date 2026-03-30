@@ -3,9 +3,11 @@ mod clipboard;
 mod config;
 mod logger;
 mod recording;
+mod sensevoice;
 
 use logger::Logger;
 use recording::AudioRecorder;
+use sensevoice::SenseVoiceEngine;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
@@ -18,6 +20,11 @@ const TRAY_ID: &str = "main";
 
 static RECORDING: AtomicBool = AtomicBool::new(false);
 static LAST_REC_PRESS: Mutex<Option<Instant>> = Mutex::new(None);
+
+struct SenseVoiceState {
+    engine: Arc<Mutex<Option<SenseVoiceEngine>>>,
+    language: Arc<Mutex<i32>>,
+}
 
 struct ShortcutIds {
     toggle: u32,
@@ -82,6 +89,12 @@ fn stop_recording(
         .and_then(|mut start| start.take().map(|s| s.elapsed().as_secs()))
         .unwrap_or(0);
 
+    let logger = app_handle.try_state::<Logger>();
+
+    if let Some(ref lg) = logger {
+        lg.info("recording", &format!("录音停止 ({})", event_name), Some(serde_json::json!({ "duration_secs": duration })));
+    }
+
     match event_name {
         "recording:complete" => match recorder.lock() {
             Ok(mut r) => match r.stop() {
@@ -96,6 +109,14 @@ fn stop_recording(
                         show_notification(&app_handle, "FLAC 编码不可用", "已保存为 WAV 格式");
                     }
                     let _ = app_handle.emit("recording:complete", &result);
+
+                    if let Some(ref lg) = logger {
+                        lg.info("recording", "录音文件已保存", Some(serde_json::json!({
+                            "path": result.path.display().to_string(),
+                            "duration_secs": result.duration_secs,
+                            "format": result.format,
+                        })));
+                    }
 
                     let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
                     let app_config = config::load_config(&app_data_dir);
@@ -115,29 +136,91 @@ fn stop_recording(
                             Some(p) => p,
                             None => {
                                 show_notification(&h, "AI 处理失败", "未找到配置的 AI 提供商");
+                                if let Some(lg) = h.try_state::<Logger>() {
+                                    lg.error("ai", "未找到配置的 AI 提供商", None);
+                                }
                                 return;
                             }
                         };
-                        let prompt = "请将这段音频转录为文字，只输出转录结果，不要添加任何解释。";
-                        match ai::send_audio_prompt(&audio_path, prompt, &model_name, &provider).await {
+
+                        if let Some(lg) = h.try_state::<Logger>() {
+                            lg.info("ai", "开始发送 AI 转写请求", Some(serde_json::json!({
+                                "provider_id": provider.id,
+                                "provider_type": provider.provider_type,
+                                "model": model_name,
+                                "audio_path": audio_path.display().to_string(),
+                            })));
+                        }
+
+                        let logger = h.state::<Logger>();
+                        let text_result = if provider.provider_type == "sensevoice" {
+                            let sv_state = h.state::<SenseVoiceState>();
+                            let lang = *sv_state.language.lock().unwrap_or_else(|e| e.into_inner());
+                            let app_data_dir = h.path().app_data_dir().unwrap_or_default();
+                            let mdl_dir = app_data_dir.join("models").join("sensevoice");
+                            {
+                                let guard = sv_state.engine.lock().unwrap_or_else(|e| e.into_inner());
+                                if guard.is_none() {
+                                    drop(guard);
+                                    match SenseVoiceEngine::new(&mdl_dir) {
+                                        Ok(e) => {
+                                            let mut g = sv_state.engine.lock().unwrap_or_else(|e| e.into_inner());
+                                            *g = Some(e);
+                                            logger.info("sensevoice", "SenseVoice 引擎加载完成", None);
+                                        }
+                                        Err(e) => {
+                                            logger.error("sensevoice", "SenseVoice 引擎加载失败", Some(serde_json::json!({ "error": e.to_string() })));
+                                        }
+                                    }
+                                }
+                            }
+                            let mut guard = sv_state.engine.lock().unwrap_or_else(|e| e.into_inner());
+                            match guard.as_mut() {
+                                Some(engine) => engine.transcribe(&audio_path, lang).map_err(|e| e.to_string()),
+                                None => Err("SenseVoice 引擎未初始化".to_string()),
+                            }
+                        } else {
+                            let prompt = "请将这段音频转录为文字，只输出转录结果，不要添加任何解释。";
+                            ai::send_audio_prompt(&logger, &audio_path, prompt, &model_name, &provider).await.map_err(|e| e.to_string())
+                        };
+                        match text_result {
                             Ok(text) => {
-                                if let Err(e) = clipboard::write_and_paste(&text) {
-                                    show_notification(&h, "剪贴板写入失败", &e);
+                                logger.info("ai", "AI 转写成功", Some(serde_json::json!({
+                                    "response_length": text.len(),
+                                    "response_preview": text.chars().take(100).collect::<String>(),
+                                })));
+                                match clipboard::write_and_paste(&text) {
+                                    Ok(()) => {
+                                        logger.info("clipboard", "剪贴板写入并粘贴成功", Some(serde_json::json!({
+                                            "text_length": text.len(),
+                                        })));
+                                    }
+                                    Err(e) => {
+                                        logger.error("clipboard", "剪贴板写入/粘贴失败", Some(serde_json::json!({ "error": e })));
+                                        show_notification(&h, "剪贴板写入失败", &e);
+                                    }
                                 }
                             }
                             Err(e) => {
-                                show_notification(&h, "AI 处理失败", &e.to_string());
+                                logger.error("ai", "AI 转写失败", Some(serde_json::json!({ "error": e.to_string() })));
+                                show_notification(&h, "AI 处理失败", &e);
                             }
                         }
                     });
                 }
                 Err(recording::RecordingError::TooShort) => {
+                    if let Some(ref lg) = logger {
+                        lg.info("recording", "录音时间过短，已丢弃", Some(serde_json::json!({ "duration_secs": duration })));
+                    }
                     let cancelled = recording::RecordingCancelled {
                         duration_secs: duration,
                     };
                     let _ = app_handle.emit("recording:cancel", cancelled);
                 }
                 Err(e) => {
+                    if let Some(ref lg) = logger {
+                        lg.error("recording", "录音停止失败", Some(serde_json::json!({ "error": e.to_string() })));
+                    }
                     let _ = app_handle.emit("recording:error", e.to_string());
                 }
             },
@@ -150,6 +233,9 @@ fn stop_recording(
                 let _duration = r.cancel();
             }
             println!("[TalkShow] Recording cancelled ({}s)", duration);
+            if let Some(ref lg) = logger {
+                lg.info("recording", "录音已取消", Some(serde_json::json!({ "duration_secs": duration })));
+            }
             let cancelled = recording::RecordingCancelled {
                 duration_secs: duration,
             };
@@ -274,11 +360,21 @@ async fn test_model_connectivity(
         })),
     );
 
-    let test_audio: &[u8] = include_bytes!("../assets/test.wav");
+    if provider.provider_type == "sensevoice" {
+        return Ok(TestResult {
+            status: "ok".to_string(),
+            latency_ms: Some(0),
+            message: "本地模型，无需连通性测试".to_string(),
+        });
+    }
 
     let start = Instant::now();
-    let result = if is_transcription {
+    let result = if provider.provider_type == "vertex" {
+        ai::send_text_prompt(&logger, "Hi", &model_name, &provider).await
+    } else if is_transcription {
+        let test_audio: &[u8] = include_bytes!("../assets/test.wav");
         ai::send_audio_prompt_from_bytes(
+            &logger,
             test_audio,
             "audio/wav",
             "请将这段音频转录为文字",
@@ -287,7 +383,7 @@ async fn test_model_connectivity(
         )
         .await
     } else {
-        ai::send_text_prompt("Hi", &model_name, &provider).await
+        ai::send_text_prompt(&logger, "Hi", &model_name, &provider).await
     };
     let latency = start.elapsed().as_millis() as u64;
 
@@ -347,6 +443,20 @@ async fn test_model_connectivity(
     })
 }
 
+#[derive(serde::Serialize, Clone)]
+struct VertexEnvInfo {
+    project: String,
+    location: String,
+}
+
+#[tauri::command]
+fn get_vertex_env_info() -> VertexEnvInfo {
+    let project = std::env::var("GOOGLE_CLOUD_PROJECT").unwrap_or_default();
+    let location = std::env::var("GOOGLE_CLOUD_LOCATION")
+        .unwrap_or_else(|_| "global".to_string());
+    VertexEnvInfo { project, location }
+}
+
 fn show_notification(app_handle: &tauri::AppHandle, title: &str, body: &str) {
     use tauri_plugin_notification::NotificationExt;
     app_handle
@@ -380,6 +490,10 @@ pub fn run() {
             update_shortcut,
             save_config_cmd,
             test_model_connectivity,
+            get_vertex_env_info,
+            sensevoice::get_sensevoice_status,
+            sensevoice::download_sensevoice_model,
+            sensevoice::delete_sensevoice_model,
             logger::get_log_sessions,
             logger::get_log_content
         ])
@@ -553,6 +667,9 @@ pub fn run() {
                                                 tray.set_icon(Some(recording_icon_owned.clone()));
                                         }
                                         play_sound("Ping.aiff");
+                                        if let Some(logger) = app_handle.try_state::<Logger>() {
+                                            logger.info("recording", "录音开始", None);
+                                        }
                                         let h = app_handle.clone();
                                         let esc = esc_shortcut_handler.clone();
                                         std::thread::spawn(move || {
@@ -567,6 +684,9 @@ pub fn run() {
                                             .map(|e| e.to_string())
                                             .unwrap_or_else(|| "Unknown error".into());
                                         eprintln!("Failed to start recording: {}", err_detail);
+                                        if let Some(logger) = app_handle.try_state::<Logger>() {
+                                            logger.error("recording", "录音启动失败", Some(serde_json::json!({ "error": err_detail })));
+                                        }
                                         show_notification(&app_handle, "录音失败", &err_detail);
                                     }
                                 }
@@ -623,6 +743,12 @@ pub fn run() {
                     }
                 });
             }
+
+            let sensevoice_state = SenseVoiceState {
+                engine: Arc::new(Mutex::new(None)),
+                language: Arc::new(Mutex::new(0)),
+            };
+            app.manage(sensevoice_state);
 
             app.manage(logger);
 

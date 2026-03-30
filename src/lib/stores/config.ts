@@ -52,7 +52,7 @@ export const BUILTIN_PROVIDERS: ProviderConfig[] = [
     id: 'vertex',
     type: 'vertex',
     name: 'Vertex AI',
-    endpoint: 'https://aiplatform.googleapis.com/v1',
+    endpoint: '',
     models: [{ name: 'gemini-2.0-flash', capabilities: ['transcription'] }]
   },
   {
@@ -62,6 +62,13 @@ export const BUILTIN_PROVIDERS: ProviderConfig[] = [
     endpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
     api_key: '',
     models: [{ name: 'qwen2-audio-instruct', capabilities: ['transcription'] }]
+  },
+  {
+    id: 'sensevoice',
+    type: 'sensevoice',
+    name: 'SenseVoice (本地)',
+    endpoint: '',
+    models: [{ name: 'SenseVoice-Small', capabilities: ['transcription'] }]
   }
 ];
 
@@ -85,7 +92,14 @@ function migrateModels(providers: ProviderConfig[]): ProviderConfig[] {
 function mergeBuiltinProviders(providers: ProviderConfig[]): ProviderConfig[] {
   const userIds = new Set(providers.map((p) => p.id));
   const missing = BUILTIN_PROVIDERS.filter((p) => !userIds.has(p.id));
-  return [...missing, ...providers];
+  const corrected = providers.map((p) => {
+    const builtin = BUILTIN_PROVIDERS.find((b) => b.id === p.id);
+    if (builtin) {
+      return { ...p, type: builtin.type, endpoint: builtin.endpoint };
+    }
+    return p;
+  });
+  return [...missing, ...corrected];
 }
 
 function createConfigStore() {
@@ -142,5 +156,22 @@ function createConfigStore() {
     }
   };
 }
+
+export interface SenseVoiceModelStatus {
+  status: 'not_downloaded' | 'downloading' | 'ready' | 'error';
+  file?: string;
+  percent?: number;
+  downloaded?: number;
+  total?: number;
+  size_bytes?: number;
+  message?: string;
+}
+
+export const SENSEVOICE_LANGUAGES = [
+  { value: 0, label: '自动检测' },
+  { value: 3, label: '中文' },
+  { value: 4, label: '英文' },
+  { value: 11, label: '日文' },
+];
 
 export const config = createConfigStore();
