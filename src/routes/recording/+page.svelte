@@ -103,6 +103,7 @@
     margin: 0;
     padding: 0;
     background: transparent !important;
+    border: none !important;
     overflow: hidden;
     user-select: none;
     -webkit-user-select: none;

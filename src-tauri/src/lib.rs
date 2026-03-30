@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{image::Image, Emitter, Listener, Manager, WebviewWindow, WebviewWindowBuilder};
+use tauri::{image::Image, Emitter, Listener, Manager, WebviewWindow, WebviewWindowBuilder, window::Color};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 const TRAY_ID: &str = "main";
@@ -318,6 +318,7 @@ fn show_indicator(app_handle: &tauri::AppHandle) {
     .transparent(true)
     .decorations(false)
     .shadow(false)
+    .background_color(Color(0, 0, 0, 0))
     .resizable(false)
     .always_on_top(true)
     .skip_taskbar(true)
