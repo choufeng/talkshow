@@ -10,6 +10,7 @@
   let seconds = $state(0);
   let intervalId: ReturnType<typeof setInterval> | null = null;
   let visible = $state(true);
+  let closeTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
   function formatTime(totalSeconds: number): string {
     const mins = Math.floor(totalSeconds / 60);
@@ -19,6 +20,10 @@
 
   function startTimer() {
     if (intervalId) clearInterval(intervalId);
+    if (closeTimeoutId) {
+      clearTimeout(closeTimeoutId);
+      closeTimeoutId = null;
+    }
     seconds = 0;
     intervalId = setInterval(() => {
       seconds++;
@@ -36,24 +41,33 @@
     appWindow.emit("indicator:cancel", { phase });
   }
 
-  listen("indicator:recording", () => {
-    phase = "recording";
-    visible = true;
-    startTimer();
-  });
-
-  listen("indicator:processing", () => {
-    phase = "processing";
-    stopTimer();
-  });
-
-  listen("indicator:done", () => {
+  function scheduleClose() {
     visible = false;
-    setTimeout(() => appWindow.close(), 200);
-  });
+    closeTimeoutId = setTimeout(() => appWindow.close(), 200);
+  }
 
-  listen("indicator:error", () => {
-    appWindow.close();
+  $effect(() => {
+    const unsubs: Array<() => void> = [];
+
+    (async () => {
+      unsubs.push(
+        await listen("indicator:recording", () => {
+          phase = "recording";
+          visible = true;
+          startTimer();
+        }),
+      );
+      unsubs.push(
+        await listen("indicator:processing", () => {
+          phase = "processing";
+          stopTimer();
+        }),
+      );
+      unsubs.push(await listen("indicator:done", scheduleClose));
+      unsubs.push(await listen("indicator:error", () => appWindow.close()));
+    })();
+
+    return () => unsubs.forEach((fn) => fn());
   });
 
   startTimer();
