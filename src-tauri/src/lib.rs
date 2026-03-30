@@ -300,8 +300,8 @@ fn show_indicator(app_handle: &tauri::AppHandle) {
             let scale = m.scale_factor();
             let screen_w = size.width as f64 / scale;
             let screen_h = size.height as f64 / scale;
-            let win_w = 160.0;
-            let win_h = 44.0;
+            let win_w = 180.0;
+            let win_h = 48.0;
             let bottom_margin = 24.0;
             ((screen_w - win_w) / 2.0, screen_h - win_h - bottom_margin)
         }
@@ -313,7 +313,7 @@ fn show_indicator(app_handle: &tauri::AppHandle) {
         INDICATOR_LABEL,
         tauri::WebviewUrl::App("/recording".into()),
     )
-    .inner_size(160.0, 44.0)
+    .inner_size(180.0, 48.0)
     .position(x, y)
     .transparent(true)
     .decorations(false)
