@@ -99,17 +99,13 @@
 </div>
 
 <style>
-  :global(body) {
+  :global(html), :global(body) {
     margin: 0;
     padding: 0;
-    background: transparent;
+    background: transparent !important;
     overflow: hidden;
     user-select: none;
     -webkit-user-select: none;
-  }
-
-  :global(html) {
-    background: transparent;
   }
 
   .indicator {

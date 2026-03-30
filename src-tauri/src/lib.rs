@@ -299,14 +299,13 @@ fn show_indicator(app_handle: &tauri::AppHandle) {
             let size = m.size();
             let scale = m.scale_factor();
             let screen_w = size.width as f64 / scale;
+            let screen_h = size.height as f64 / scale;
             let win_w = 160.0;
-            #[cfg(target_os = "macos")]
-            let top_offset = 33.0;
-            #[cfg(not(target_os = "macos"))]
-            let top_offset = 12.0;
-            (screen_w - win_w - 12.0, top_offset)
+            let win_h = 44.0;
+            let bottom_margin = 24.0;
+            ((screen_w - win_w) / 2.0, screen_h - win_h - bottom_margin)
         }
-        None => (800.0, 33.0),
+        None => (620.0, 700.0),
     };
 
     let window = WebviewWindowBuilder::new(
@@ -318,6 +317,7 @@ fn show_indicator(app_handle: &tauri::AppHandle) {
     .position(x, y)
     .transparent(true)
     .decorations(false)
+    .shadow(false)
     .resizable(false)
     .always_on_top(true)
     .skip_taskbar(true)
