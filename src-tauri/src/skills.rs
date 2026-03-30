@@ -7,9 +7,7 @@ const SKILLS_TIMEOUT_SECS: u64 = 10;
 fn get_frontmost_app() -> Result<(String, String), String> {
     let output = std::process::Command::new("osascript")
         .arg("-e")
-        .arg(
-            "tell application \"System Events\" to get {name, bundle identifier} of first process whose frontmost is true",
-        )
+        .arg("tell application \"System Events\" to get name of first process whose frontmost is true")
         .output()
         .map_err(|e| format!("Failed to get frontmost app: {}", e))?;
 
@@ -18,11 +16,19 @@ fn get_frontmost_app() -> Result<(String, String), String> {
         return Err(format!("osascript failed: {}", stderr));
     }
 
-    let result = String::from_utf8_lossy(&output.stdout);
-    let parts: Vec<&str> = result.trim().split(", ").collect();
+    let app_name = String::from_utf8_lossy(&output.stdout).trim().to_string();
 
-    let app_name = parts.first().unwrap_or(&"Unknown").to_string();
-    let bundle_id = parts.get(1).unwrap_or(&"unknown").to_string();
+    let bundle_output = std::process::Command::new("osascript")
+        .arg("-e")
+        .arg(format!("tell application \"System Events\" to get bundle identifier of process \"{}\"", app_name))
+        .output()
+        .map_err(|e| format!("Failed to get bundle id: {}", e))?;
+
+    let bundle_id = if bundle_output.status.success() {
+        String::from_utf8_lossy(&bundle_output.stdout).trim().to_string()
+    } else {
+        "unknown".to_string()
+    };
 
     Ok((app_name, bundle_id))
 }
