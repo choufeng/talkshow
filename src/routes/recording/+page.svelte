@@ -80,8 +80,15 @@
 >
   {#if phase === "recording"}
     <div class="status">
-      <span class="pulse-dot"></span>
+      <svg class="neon-ring" width="24" height="24" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="8" fill="none" stroke="#ff0055" stroke-width="1.5">
+          <animate attributeName="r" values="7;9;7" dur="1.2s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="1;0.5;1" dur="1.2s" repeatCount="indefinite"/>
+        </circle>
+        <circle cx="12" cy="12" r="3" fill="#ff0055"/>
+      </svg>
       <span class="timer">{formatTime(seconds)}</span>
+      <span class="rec-label">REC</span>
     </div>
   {:else}
     <div class="status">
@@ -139,35 +146,27 @@
     justify-content: center;
   }
 
-  .pulse-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: #ef4444;
-    box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
-    animation: pulse 1.5s ease-in-out infinite;
-  }
-
-  @keyframes pulse {
-    0%,
-    100% {
-      opacity: 1;
-      transform: scale(1);
-    }
-    50% {
-      opacity: 0.4;
-      transform: scale(0.85);
-    }
+  .neon-ring {
+    filter: drop-shadow(0 0 4px rgba(255, 0, 85, 0.6));
+    flex-shrink: 0;
   }
 
   .timer {
     font-family: -apple-system, BlinkMacSystemFont, "SF Mono", "Menlo", "Consolas", monospace;
     font-size: 13px;
-    color: #f1f5f9;
+    color: #ff0055;
     font-weight: 500;
     font-variant-numeric: tabular-nums;
     min-width: 36px;
     text-align: center;
+    text-shadow: 0 0 6px rgba(255, 0, 85, 0.4);
+  }
+
+  .rec-label {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Mono", "Menlo", "Consolas", monospace;
+    font-size: 8px;
+    color: rgba(255, 0, 85, 0.4);
+    letter-spacing: 2px;
   }
 
   .spinner {
