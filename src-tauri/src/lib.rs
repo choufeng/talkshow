@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{image::Image, Emitter, Manager, WebviewWindow};
+use tauri::{image::Image, Emitter, Listener, Manager, WebviewWindow, WebviewWindowBuilder, window::Color};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 const TRAY_ID: &str = "main";
@@ -25,6 +25,10 @@ static LAST_REC_PRESS: Mutex<Option<Instant>> = Mutex::new(None);
 struct SenseVoiceState {
     engine: Arc<Mutex<Option<SenseVoiceEngine>>>,
     language: Arc<Mutex<i32>>,
+}
+
+struct VertexClientState {
+    client: Arc<Mutex<Option<rig_vertexai::Client>>>,
 }
 
 struct ShortcutIds {
@@ -98,7 +102,11 @@ fn stop_recording(
 
     match event_name {
         "recording:complete" => match recorder.lock() {
-            Ok(mut r) => match r.stop() {
+            Ok(mut r) => {
+                let save_start = Instant::now();
+                let stop_result = r.stop();
+                let save_elapsed = save_start.elapsed().as_millis();
+                match stop_result {
                 Ok(result) => {
                     println!(
                         "[TalkShow] Recording saved: {} ({}s, {})",
@@ -110,17 +118,21 @@ fn stop_recording(
                         show_notification(&app_handle, "FLAC 编码不可用", "已保存为 WAV 格式");
                     }
                     let _ = app_handle.emit("recording:complete", &result);
+                    emit_indicator(app_handle, "indicator:processing");
 
                     if let Some(ref lg) = logger {
                         lg.info("recording", "录音文件已保存", Some(serde_json::json!({
                             "path": result.path.display().to_string(),
                             "duration_secs": result.duration_secs,
                             "format": result.format,
+                            "save_ms": save_elapsed,
                         })));
                     }
 
+                    let config_start = Instant::now();
                     let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
                     let app_config = config::load_config(&app_data_dir);
+                    let config_elapsed = config_start.elapsed().as_millis();
                     let transcription = &app_config.features.transcription;
                     let provider = app_config
                         .ai
@@ -135,6 +147,15 @@ fn stop_recording(
                     let skills_providers = app_config.ai.providers.clone();
                     let h = app_handle.clone();
                     tauri::async_runtime::spawn(async move {
+                        let pipeline_start = Instant::now();
+                        let _ = config_elapsed;
+
+                        if let Some(lg) = h.try_state::<Logger>() {
+                            lg.info("pipeline", "流水线启动", Some(serde_json::json!({
+                                "config_load_ms": config_elapsed,
+                            })));
+                        }
+
                         let provider = match provider {
                             Some(p) => p,
                             None => {
@@ -142,6 +163,7 @@ fn stop_recording(
                                 if let Some(lg) = h.try_state::<Logger>() {
                                     lg.error("ai", "未找到配置的 AI 提供商", None);
                                 }
+                                destroy_indicator(&h);
                                 return;
                             }
                         };
@@ -156,6 +178,7 @@ fn stop_recording(
                         }
 
                         let logger = h.state::<Logger>();
+                        let transcribe_start = Instant::now();
                         let text_result = if provider.provider_type == "sensevoice" {
                             let sv_state = h.state::<SenseVoiceState>();
                             let lang = *sv_state.language.lock().unwrap_or_else(|e| e.into_inner());
@@ -184,42 +207,67 @@ fn stop_recording(
                             }
                         } else {
                             let prompt = "请将这段音频转录为文字，只输出转录结果，不要添加任何解释。";
-                            ai::send_audio_prompt(&logger, &audio_path, prompt, &model_name, &provider).await.map_err(|e| e.to_string())
+                            ai::send_audio_prompt(&logger, &audio_path, prompt, &model_name, &provider, &h.state::<VertexClientState>().client).await.map_err(|e| e.to_string())
                         };
+                        let transcribe_elapsed = transcribe_start.elapsed().as_millis();
                         match text_result {
                             Ok(text) => {
                                 logger.info("ai", "AI 转写成功", Some(serde_json::json!({
+                                    "transcribe_ms": transcribe_elapsed,
                                     "response_length": text.len(),
                                     "response_preview": text.chars().take(100).collect::<String>(),
                                 })));
 
+                                let skills_start = Instant::now();
                                 let final_text = skills::process_with_skills(
                                     &logger,
                                     &skills_config,
                                     &skills_providers,
                                     &text,
+                                    &h.state::<VertexClientState>().client,
                                 )
                                 .await
                                 .unwrap_or_else(|e| {
                                     logger.error("skills", &format!("Skills 处理异常，使用原始文字: {}", e), None);
                                     text
                                 });
+                                let skills_elapsed = skills_start.elapsed().as_millis();
 
+                                if RECORDING.load(Ordering::Relaxed) {
+                                    logger.info("ai", "录音已重新开始，丢弃当前 AI 结果", None);
+                                    return;
+                                }
+
+                                let clipboard_start = Instant::now();
                                 match clipboard::write_and_paste(&final_text) {
                                     Ok(()) => {
+                                        let clipboard_elapsed = clipboard_start.elapsed().as_millis();
+                                        let total_elapsed = pipeline_start.elapsed().as_millis();
                                         logger.info("clipboard", "剪贴板写入并粘贴成功", Some(serde_json::json!({
                                             "text_length": final_text.len(),
                                         })));
+                                        logger.info("pipeline", "流水线完成", Some(serde_json::json!({
+                                            "total_ms": total_elapsed,
+                                            "transcribe_ms": transcribe_elapsed,
+                                            "skills_ms": skills_elapsed,
+                                            "clipboard_ms": clipboard_elapsed,
+                                        })));
+                                        emit_indicator(&h, "indicator:done");
                                     }
                                     Err(e) => {
                                         logger.error("clipboard", "剪贴板写入/粘贴失败", Some(serde_json::json!({ "error": e })));
                                         show_notification(&h, "剪贴板写入失败", &e);
+                                        destroy_indicator(&h);
                                     }
                                 }
                             }
                             Err(e) => {
-                                logger.error("ai", "AI 转写失败", Some(serde_json::json!({ "error": e.to_string() })));
+                                logger.error("ai", "AI 转写失败", Some(serde_json::json!({
+                                    "transcribe_ms": transcribe_elapsed,
+                                    "error": e.to_string(),
+                                })));
                                 show_notification(&h, "AI 处理失败", &e);
+                                destroy_indicator(&h);
                             }
                         }
                     });
@@ -232,16 +280,20 @@ fn stop_recording(
                         duration_secs: duration,
                     };
                     let _ = app_handle.emit("recording:cancel", cancelled);
+                    destroy_indicator(app_handle);
                 }
                 Err(e) => {
                     if let Some(ref lg) = logger {
                         lg.error("recording", "录音停止失败", Some(serde_json::json!({ "error": e.to_string() })));
                     }
                     let _ = app_handle.emit("recording:error", e.to_string());
+                    destroy_indicator(app_handle);
+                }
                 }
             },
             Err(_) => {
                 let _ = app_handle.emit("recording:error", "Recording lock poisoned");
+                destroy_indicator(app_handle);
             }
         },
         "recording:cancel" => {
@@ -256,6 +308,7 @@ fn stop_recording(
                 duration_secs: duration,
             };
             let _ = app_handle.emit("recording:cancel", cancelled);
+            destroy_indicator(app_handle);
         }
         _ => {}
     }
@@ -265,6 +318,71 @@ fn restore_default_tray(app_handle: &tauri::AppHandle, default_icon: Image) {
     if let Some(tray) = app_handle.tray_by_id("main") {
         let _ = tray.set_icon(Some(default_icon));
         let _ = tray.set_tooltip(Some("TalkShow"));
+    }
+}
+
+const INDICATOR_LABEL: &str = "recording-indicator";
+
+fn show_indicator(app_handle: &tauri::AppHandle) {
+    let existing = app_handle.get_webview_window(INDICATOR_LABEL);
+    if existing.is_some() {
+        let _ = app_handle.emit_to(INDICATOR_LABEL, "indicator:recording", ());
+        return;
+    }
+
+    let main_window = app_handle.get_webview_window("main");
+    let monitor = main_window.as_ref().and_then(|w| w.primary_monitor().ok().flatten());
+
+    let (x, y) = match &monitor {
+        Some(m) => {
+            let size = m.size();
+            let scale = m.scale_factor();
+            let screen_w = size.width as f64 / scale;
+            let screen_h = size.height as f64 / scale;
+            let win_w = 180.0;
+            let win_h = 48.0;
+            let bottom_margin = 24.0;
+            ((screen_w - win_w) / 2.0, screen_h - win_h - bottom_margin)
+        }
+        None => (620.0, 700.0),
+    };
+
+    let window = WebviewWindowBuilder::new(
+        app_handle,
+        INDICATOR_LABEL,
+        tauri::WebviewUrl::App("/recording".into()),
+    )
+    .inner_size(180.0, 48.0)
+    .position(x, y)
+    .transparent(true)
+    .decorations(false)
+    .shadow(false)
+    .background_color(Color(0, 0, 0, 0))
+    .resizable(false)
+    .always_on_top(true)
+    .skip_taskbar(true)
+    .visible(false)
+    .focusable(false)
+    .build();
+
+    match window {
+        Ok(w) => {
+            let _ = w.show();
+            let _ = app_handle.emit_to(INDICATOR_LABEL, "indicator:recording", ());
+        }
+        Err(e) => {
+            eprintln!("Failed to create indicator window: {}", e);
+        }
+    }
+}
+
+fn emit_indicator(app_handle: &tauri::AppHandle, event: &str) {
+    let _ = app_handle.emit_to(INDICATOR_LABEL, event, ());
+}
+
+fn destroy_indicator(app_handle: &tauri::AppHandle) {
+    if let Some(w) = app_handle.get_webview_window(INDICATOR_LABEL) {
+        let _ = w.close();
     }
 }
 
@@ -385,8 +503,9 @@ async fn test_model_connectivity(
     }
 
     let start = Instant::now();
+    let vertex_cache = app_handle.state::<VertexClientState>().client.clone();
     let result = if provider.provider_type == "vertex" {
-        ai::send_text_prompt(&logger, "Hi", &model_name, &provider).await
+        ai::send_text_prompt(&logger, "Hi", &model_name, &provider, &vertex_cache).await
     } else if is_transcription {
         let test_audio: &[u8] = include_bytes!("../assets/test.wav");
         ai::send_audio_prompt_from_bytes(
@@ -396,10 +515,11 @@ async fn test_model_connectivity(
             "请将这段音频转录为文字",
             &model_name,
             &provider,
+            &vertex_cache,
         )
         .await
     } else {
-        ai::send_text_prompt(&logger, "Hi", &model_name, &provider).await
+        ai::send_text_prompt(&logger, "Hi", &model_name, &provider, &vertex_cache).await
     };
     let latency = start.elapsed().as_millis() as u64;
 
@@ -648,6 +768,34 @@ pub fn run() {
             }
             let esc_id = esc_shortcut.id();
 
+            {
+                let app_handle_cancel = app.handle().clone();
+                let recorder_cancel = recorder.clone();
+                let recording_start_cancel = recording_start.clone();
+                let esc_cancel = esc_shortcut.clone();
+                let default_icon_cancel = default_icon_owned.clone();
+                let _ = app.listen("indicator:cancel", move |_event| {
+                    let is_recording = RECORDING.load(Ordering::Relaxed);
+                    if is_recording {
+                        stop_recording(
+                            &app_handle_cancel,
+                            &recorder_cancel,
+                            &recording_start_cancel,
+                            "recording:cancel",
+                        );
+                        play_sound("Pop.aiff");
+                        let h = app_handle_cancel.clone();
+                        let esc = esc_cancel.clone();
+                        std::thread::spawn(move || {
+                            let _ = h.global_shortcut().unregister(esc);
+                        });
+                        restore_default_tray(&app_handle_cancel, default_icon_cancel.clone());
+                    } else {
+                        destroy_indicator(&app_handle_cancel);
+                    }
+                });
+            }
+
             let app_handle = app.handle().clone();
             let recording_start_handler = recording_start.clone();
             let recorder_handler = recorder.clone();
@@ -737,7 +885,18 @@ pub fn run() {
                                             let _ =
                                                 tray.set_icon(Some(recording_icon_owned.clone()));
                                         }
+                                        let frontmost = std::process::Command::new("osascript")
+                                            .arg("-e")
+                                            .arg("tell application \"System Events\" to get name of first process whose frontmost is true")
+                                            .output()
+                                            .ok()
+                                            .filter(|o| o.status.success())
+                                            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
+                                        if let Some(ref app) = frontmost {
+                                            clipboard::save_target_app(app);
+                                        }
                                         play_sound("Ping.aiff");
+                                        show_indicator(&app_handle);
                                         if let Some(logger) = app_handle.try_state::<Logger>() {
                                             logger.info("recording", "录音开始", None);
                                         }
@@ -820,6 +979,11 @@ pub fn run() {
                 language: Arc::new(Mutex::new(0)),
             };
             app.manage(sensevoice_state);
+
+            let vertex_state = VertexClientState {
+                client: Arc::new(Mutex::new(None)),
+            };
+            app.manage(vertex_state);
 
             app.manage(logger);
 

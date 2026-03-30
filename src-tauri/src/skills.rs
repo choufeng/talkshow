@@ -1,5 +1,8 @@
 use crate::config::{ProviderConfig, Skill, SkillsConfig};
 use crate::logger::Logger;
+use std::sync::{Arc, Mutex};
+
+type VertexClientCache = Arc<Mutex<Option<rig_vertexai::Client>>>;
 
 const SKILLS_BASE_TIMEOUT_SECS: u64 = 15;
 const SKILLS_PER_SKILL_TIMEOUT_SECS: u64 = 5;
@@ -71,6 +74,7 @@ pub async fn process_with_skills(
     skills_config: &SkillsConfig,
     providers: &[ProviderConfig],
     transcription: &str,
+    vertex_cache: &VertexClientCache,
 ) -> Result<String, String> {
     if !skills_config.enabled {
         return Ok(transcription.to_string());
@@ -149,7 +153,7 @@ pub async fn process_with_skills(
 
     let result = tokio::time::timeout(
         std::time::Duration::from_secs(timeout_secs),
-        crate::ai::send_text_prompt(logger, &full_prompt, &skills_config.model, provider),
+        crate::ai::send_text_prompt(logger, &full_prompt, &skills_config.model, provider, vertex_cache),
     )
     .await;
 

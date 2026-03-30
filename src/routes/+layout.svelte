@@ -7,6 +7,8 @@
 
   let { children }: { children: Snippet } = $props();
 
+  let isFloatingIndicator = $derived($page.url.pathname === '/recording');
+
   let activeMenu = $derived(
     $page.url.pathname === '/settings' ? 'settings' :
     $page.url.pathname === '/skills' ? 'skills' :
@@ -19,6 +21,9 @@
   }
 </script>
 
+{#if isFloatingIndicator}
+  {@render children()}
+{:else}
 <div class="flex h-screen w-screen overflow-hidden">
   <aside class="w-40 bg-background-alt border-r border-border flex flex-col">
     <div class="px-5 py-4 font-semibold text-sm text-foreground border-b border-border">
@@ -66,3 +71,4 @@
     {@render children()}
   </main>
 </div>
+{/if}
