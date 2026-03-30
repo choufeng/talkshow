@@ -131,6 +131,8 @@ fn stop_recording(
 
                     let audio_path = result.path.clone();
                     let model_name = transcription.model.clone();
+                    let skills_config = app_config.features.skills.clone();
+                    let skills_providers = app_config.ai.providers.clone();
                     let h = app_handle.clone();
                     tauri::async_runtime::spawn(async move {
                         let provider = match provider {
@@ -190,10 +192,23 @@ fn stop_recording(
                                     "response_length": text.len(),
                                     "response_preview": text.chars().take(100).collect::<String>(),
                                 })));
-                                match clipboard::write_and_paste(&text) {
+
+                                let final_text = skills::process_with_skills(
+                                    &logger,
+                                    &skills_config,
+                                    &skills_providers,
+                                    &text,
+                                )
+                                .await
+                                .unwrap_or_else(|e| {
+                                    logger.error("skills", &format!("Skills 处理异常，使用原始文字: {}", e), None);
+                                    text
+                                });
+
+                                match clipboard::write_and_paste(&final_text) {
                                     Ok(()) => {
                                         logger.info("clipboard", "剪贴板写入并粘贴成功", Some(serde_json::json!({
-                                            "text_length": text.len(),
+                                            "text_length": final_text.len(),
                                         })));
                                     }
                                     Err(e) => {
