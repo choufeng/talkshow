@@ -121,8 +121,73 @@ pub struct TranscriptionConfig {
 
 #[derive(Serialize, Deserialize, Clone, Default)]
 #[serde(default)]
+pub struct Skill {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub prompt: String,
+    pub builtin: bool,
+    pub enabled: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(default)]
+pub struct SkillsConfig {
+    pub enabled: bool,
+    pub skills: Vec<Skill>,
+    pub provider_id: String,
+    pub model: String,
+}
+
+impl Default for SkillsConfig {
+    fn default() -> Self {
+        SkillsConfig {
+            enabled: true,
+            skills: vec![
+                Skill {
+                    id: "builtin-fillers".to_string(),
+                    name: "语气词剔除".to_string(),
+                    description: "去除嗯、啊等无意义口头语气词".to_string(),
+                    prompt: "去除文本中的「嗯」、「啊」、「那个」、「就是」、「然后」等无意义的口头语气词。保留语义完整性和自然节奏。".to_string(),
+                    builtin: true,
+                    enabled: true,
+                },
+                Skill {
+                    id: "builtin-typos".to_string(),
+                    name: "错别字修正".to_string(),
+                    description: "识别并修正文本中的错别字".to_string(),
+                    prompt: "识别并修正文本中的错别字、同音错误和常见输入错误。只修正明确的错误，不要改变原文的语义和表达风格。".to_string(),
+                    builtin: true,
+                    enabled: true,
+                },
+                Skill {
+                    id: "builtin-polish".to_string(),
+                    name: "口语润色".to_string(),
+                    description: "保持口语化但更流畅".to_string(),
+                    prompt: "保持口语化的风格，但使表达更流畅自然。修正语病和不通顺的地方，不改变说话者的原意和语气。".to_string(),
+                    builtin: true,
+                    enabled: false,
+                },
+                Skill {
+                    id: "builtin-formal".to_string(),
+                    name: "书面格式化".to_string(),
+                    description: "口语转书面表达".to_string(),
+                    prompt: "将口语化的表达转换为规范的书面表达，适合邮件和文档场景。添加适当的标点符号，调整句式结构，使其更正式。".to_string(),
+                    builtin: true,
+                    enabled: false,
+                },
+            ],
+            provider_id: String::new(),
+            model: String::new(),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(default)]
 pub struct FeaturesConfig {
     pub transcription: TranscriptionConfig,
+    pub skills: SkillsConfig,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -147,6 +212,7 @@ impl Default for AppConfig {
                     provider_id: "vertex".to_string(),
                     model: "gemini-2.0-flash".to_string(),
                 },
+                skills: SkillsConfig::default(),
             },
         }
     }
