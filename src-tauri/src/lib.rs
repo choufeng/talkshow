@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{image::Image, Emitter, Manager, WebviewWindow};
+use tauri::{image::Image, Emitter, Listener, Manager, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 const TRAY_ID: &str = "main";
@@ -110,6 +110,7 @@ fn stop_recording(
                         show_notification(&app_handle, "FLAC 编码不可用", "已保存为 WAV 格式");
                     }
                     let _ = app_handle.emit("recording:complete", &result);
+                    emit_indicator(app_handle, "indicator:processing");
 
                     if let Some(ref lg) = logger {
                         lg.info("recording", "录音文件已保存", Some(serde_json::json!({
@@ -142,6 +143,7 @@ fn stop_recording(
                                 if let Some(lg) = h.try_state::<Logger>() {
                                     lg.error("ai", "未找到配置的 AI 提供商", None);
                                 }
+                                destroy_indicator(&h);
                                 return;
                             }
                         };
@@ -205,21 +207,30 @@ fn stop_recording(
                                     text
                                 });
 
+                                if RECORDING.load(Ordering::Relaxed) {
+                                    logger.info("ai", "录音已重新开始，丢弃当前 AI 结果", None);
+                                    emit_indicator(&h, "indicator:done");
+                                    return;
+                                }
+
                                 match clipboard::write_and_paste(&final_text) {
                                     Ok(()) => {
                                         logger.info("clipboard", "剪贴板写入并粘贴成功", Some(serde_json::json!({
                                             "text_length": final_text.len(),
                                         })));
+                                        emit_indicator(&h, "indicator:done");
                                     }
                                     Err(e) => {
                                         logger.error("clipboard", "剪贴板写入/粘贴失败", Some(serde_json::json!({ "error": e })));
                                         show_notification(&h, "剪贴板写入失败", &e);
+                                        destroy_indicator(&h);
                                     }
                                 }
                             }
                             Err(e) => {
                                 logger.error("ai", "AI 转写失败", Some(serde_json::json!({ "error": e.to_string() })));
                                 show_notification(&h, "AI 处理失败", &e);
+                                destroy_indicator(&h);
                             }
                         }
                     });
@@ -238,10 +249,12 @@ fn stop_recording(
                         lg.error("recording", "录音停止失败", Some(serde_json::json!({ "error": e.to_string() })));
                     }
                     let _ = app_handle.emit("recording:error", e.to_string());
+                    destroy_indicator(app_handle);
                 }
             },
             Err(_) => {
                 let _ = app_handle.emit("recording:error", "Recording lock poisoned");
+                destroy_indicator(app_handle);
             }
         },
         "recording:cancel" => {
@@ -256,6 +269,7 @@ fn stop_recording(
                 duration_secs: duration,
             };
             let _ = app_handle.emit("recording:cancel", cancelled);
+            destroy_indicator(app_handle);
         }
         _ => {}
     }
@@ -265,6 +279,69 @@ fn restore_default_tray(app_handle: &tauri::AppHandle, default_icon: Image) {
     if let Some(tray) = app_handle.tray_by_id("main") {
         let _ = tray.set_icon(Some(default_icon));
         let _ = tray.set_tooltip(Some("TalkShow"));
+    }
+}
+
+const INDICATOR_LABEL: &str = "recording-indicator";
+
+fn show_indicator(app_handle: &tauri::AppHandle) {
+    let existing = app_handle.get_webview_window(INDICATOR_LABEL);
+    if existing.is_some() {
+        let _ = app_handle.emit_to(INDICATOR_LABEL, "indicator:recording", ());
+        return;
+    }
+
+    let main_window = app_handle.get_webview_window("main");
+    let monitor = main_window.as_ref().and_then(|w| w.primary_monitor().ok().flatten());
+
+    let (x, y) = match &monitor {
+        Some(m) => {
+            let size = m.size();
+            let scale = m.scale_factor();
+            let screen_w = size.width as f64 / scale;
+            let win_w = 160.0;
+            #[cfg(target_os = "macos")]
+            let top_offset = 33.0;
+            #[cfg(not(target_os = "macos"))]
+            let top_offset = 12.0;
+            (screen_w - win_w - 12.0, top_offset)
+        }
+        None => (800.0, 33.0),
+    };
+
+    let window = WebviewWindowBuilder::new(
+        app_handle,
+        INDICATOR_LABEL,
+        tauri::WebviewUrl::App("/recording".into()),
+    )
+    .inner_size(160.0, 44.0)
+    .position(x, y)
+    .transparent(true)
+    .decorations(false)
+    .resizable(false)
+    .always_on_top(true)
+    .skip_taskbar(true)
+    .visible(false)
+    .build();
+
+    match window {
+        Ok(w) => {
+            let _ = w.show();
+            let _ = app_handle.emit_to(INDICATOR_LABEL, "indicator:recording", ());
+        }
+        Err(e) => {
+            eprintln!("Failed to create indicator window: {}", e);
+        }
+    }
+}
+
+fn emit_indicator(app_handle: &tauri::AppHandle, event: &str) {
+    let _ = app_handle.emit_to(INDICATOR_LABEL, event, ());
+}
+
+fn destroy_indicator(app_handle: &tauri::AppHandle) {
+    if let Some(w) = app_handle.get_webview_window(INDICATOR_LABEL) {
+        let _ = w.close();
     }
 }
 
@@ -648,6 +725,34 @@ pub fn run() {
             }
             let esc_id = esc_shortcut.id();
 
+            {
+                let app_handle_cancel = app.handle().clone();
+                let recorder_cancel = recorder.clone();
+                let recording_start_cancel = recording_start.clone();
+                let esc_cancel = esc_shortcut.clone();
+                let default_icon_cancel = default_icon_owned.clone();
+                let _ = app.listen("indicator:cancel", move |_event| {
+                    let is_recording = RECORDING.load(Ordering::Relaxed);
+                    if is_recording {
+                        stop_recording(
+                            &app_handle_cancel,
+                            &recorder_cancel,
+                            &recording_start_cancel,
+                            "recording:cancel",
+                        );
+                        play_sound("Pop.aiff");
+                        let h = app_handle_cancel.clone();
+                        let esc = esc_cancel.clone();
+                        std::thread::spawn(move || {
+                            let _ = h.global_shortcut().unregister(esc);
+                        });
+                        restore_default_tray(&app_handle_cancel, default_icon_cancel.clone());
+                    } else {
+                        destroy_indicator(&app_handle_cancel);
+                    }
+                });
+            }
+
             let app_handle = app.handle().clone();
             let recording_start_handler = recording_start.clone();
             let recorder_handler = recorder.clone();
@@ -738,6 +843,7 @@ pub fn run() {
                                                 tray.set_icon(Some(recording_icon_owned.clone()));
                                         }
                                         play_sound("Ping.aiff");
+                                        show_indicator(&app_handle);
                                         if let Some(logger) = app_handle.try_state::<Logger>() {
                                             logger.info("recording", "录音开始", None);
                                         }
