@@ -32,8 +32,25 @@ export interface TranscriptionConfig {
   model: string;
 }
 
+export interface Skill {
+  id: string;
+  name: string;
+  description: string;
+  prompt: string;
+  builtin: boolean;
+  enabled: boolean;
+}
+
+export interface SkillsConfig {
+  enabled: boolean;
+  skills: Skill[];
+  provider_id: string;
+  model: string;
+}
+
 export interface FeaturesConfig {
   transcription: TranscriptionConfig;
+  skills: SkillsConfig;
 }
 
 export interface AppConfig {
@@ -113,6 +130,12 @@ function createConfigStore() {
       transcription: {
         provider_id: 'vertex',
         model: 'gemini-2.0-flash'
+      },
+      skills: {
+        enabled: true,
+        skills: [],
+        provider_id: '',
+        model: ''
       }
     }
   });

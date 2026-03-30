@@ -4,6 +4,7 @@ mod config;
 mod logger;
 mod recording;
 mod sensevoice;
+mod skills;
 
 use logger::Logger;
 use recording::AudioRecorder;
@@ -130,6 +131,8 @@ fn stop_recording(
 
                     let audio_path = result.path.clone();
                     let model_name = transcription.model.clone();
+                    let skills_config = app_config.features.skills.clone();
+                    let skills_providers = app_config.ai.providers.clone();
                     let h = app_handle.clone();
                     tauri::async_runtime::spawn(async move {
                         let provider = match provider {
@@ -189,10 +192,23 @@ fn stop_recording(
                                     "response_length": text.len(),
                                     "response_preview": text.chars().take(100).collect::<String>(),
                                 })));
-                                match clipboard::write_and_paste(&text) {
+
+                                let final_text = skills::process_with_skills(
+                                    &logger,
+                                    &skills_config,
+                                    &skills_providers,
+                                    &text,
+                                )
+                                .await
+                                .unwrap_or_else(|e| {
+                                    logger.error("skills", &format!("Skills 处理异常，使用原始文字: {}", e), None);
+                                    text
+                                });
+
+                                match clipboard::write_and_paste(&final_text) {
                                     Ok(()) => {
                                         logger.info("clipboard", "剪贴板写入并粘贴成功", Some(serde_json::json!({
-                                            "text_length": text.len(),
+                                            "text_length": final_text.len(),
                                         })));
                                     }
                                     Err(e) => {
@@ -457,6 +473,56 @@ fn get_vertex_env_info() -> VertexEnvInfo {
     VertexEnvInfo { project, location }
 }
 
+#[tauri::command]
+fn get_skills_config(app_handle: tauri::AppHandle) -> config::SkillsConfig {
+    let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
+    let app_config = config::load_config(&app_data_dir);
+    app_config.features.skills
+}
+
+#[tauri::command]
+fn save_skills_config(app_handle: tauri::AppHandle, skills_config: config::SkillsConfig) -> Result<(), String> {
+    let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
+    let mut app_config = config::load_config(&app_data_dir);
+    app_config.features.skills = skills_config;
+    config::save_config(&app_data_dir, &app_config)
+}
+
+#[tauri::command]
+fn add_skill(app_handle: tauri::AppHandle, skill: config::Skill) -> Result<(), String> {
+    let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
+    let mut app_config = config::load_config(&app_data_dir);
+    app_config.features.skills.skills.push(skill);
+    config::save_config(&app_data_dir, &app_config)
+}
+
+#[tauri::command]
+fn update_skill(app_handle: tauri::AppHandle, skill: config::Skill) -> Result<(), String> {
+    let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
+    let mut app_config = config::load_config(&app_data_dir);
+    if let Some(existing) = app_config.features.skills.skills.iter_mut().find(|s| s.id == skill.id) {
+        *existing = skill;
+        config::save_config(&app_data_dir, &app_config)
+    } else {
+        Err(format!("Skill not found: {}", skill.id))
+    }
+}
+
+#[tauri::command]
+fn delete_skill(app_handle: tauri::AppHandle, skill_id: String) -> Result<(), String> {
+    let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
+    let mut app_config = config::load_config(&app_data_dir);
+    let skill = app_config.features.skills.skills.iter().find(|s| s.id == skill_id);
+    if skill.is_none() {
+        return Err(format!("Skill not found: {}", skill_id));
+    }
+    if skill.unwrap().builtin {
+        return Err("Cannot delete builtin skill".to_string());
+    }
+    app_config.features.skills.skills.retain(|s| s.id != skill_id);
+    config::save_config(&app_data_dir, &app_config)
+}
+
 fn show_notification(app_handle: &tauri::AppHandle, title: &str, body: &str) {
     use tauri_plugin_notification::NotificationExt;
     app_handle
@@ -491,6 +557,11 @@ pub fn run() {
             save_config_cmd,
             test_model_connectivity,
             get_vertex_env_info,
+            get_skills_config,
+            save_skills_config,
+            add_skill,
+            update_skill,
+            delete_skill,
             sensevoice::get_sensevoice_status,
             sensevoice::download_sensevoice_model,
             sensevoice::delete_sensevoice_model,

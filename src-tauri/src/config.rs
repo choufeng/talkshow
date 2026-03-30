@@ -121,8 +121,73 @@ pub struct TranscriptionConfig {
 
 #[derive(Serialize, Deserialize, Clone, Default)]
 #[serde(default)]
+pub struct Skill {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub prompt: String,
+    pub builtin: bool,
+    pub enabled: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(default)]
+pub struct SkillsConfig {
+    pub enabled: bool,
+    pub skills: Vec<Skill>,
+    pub provider_id: String,
+    pub model: String,
+}
+
+impl Default for SkillsConfig {
+    fn default() -> Self {
+        SkillsConfig {
+            enabled: true,
+            skills: vec![
+                Skill {
+                    id: "builtin-fillers".to_string(),
+                    name: "语气词剔除".to_string(),
+                    description: "去除嗯、啊、那个、就是等无意义口头语气词".to_string(),
+                    prompt: "去除中文口语中常见的无意义语气词和填充词，包括但不限于：\n\"嗯\"、\"啊\"、\"额\"、\"呃\"、\"那个\"、\"就是\"、\"然后\"、\"对吧\"、\"的话\"、\"怎么说呢\"。\n注意保留有实际语义的词语，例如\"然后\"在表示时间顺序时应保留。不要改变原文的语义和语气。".to_string(),
+                    builtin: true,
+                    enabled: true,
+                },
+                Skill {
+                    id: "builtin-typos".to_string(),
+                    name: "错别字修正".to_string(),
+                    description: "修正错别字、同音错误和输入法错误".to_string(),
+                    prompt: "识别并修正文本中的错别字、同音错误和常见输入法导致的文字错误。\n只修正明确的错误，不要对有歧义的内容做主观改动。\n常见的同音错误示例：\"的/地/得\"、\"做/作\"、\"在/再\"、\"已/以\"、\"即/既\"。".to_string(),
+                    builtin: true,
+                    enabled: true,
+                },
+                Skill {
+                    id: "builtin-polish".to_string(),
+                    name: "口语润色".to_string(),
+                    description: "保持口语化风格，使表达更流畅自然".to_string(),
+                    prompt: "保持口语化的表达风格，但使语句更流畅自然。\n具体做法：去除重复表达、调整语序使其更通顺、适当添加标点使句子结构更清晰。\n不要改变原文的口语化特征，不要转换为书面语。".to_string(),
+                    builtin: true,
+                    enabled: false,
+                },
+                Skill {
+                    id: "builtin-formal".to_string(),
+                    name: "书面格式化".to_string(),
+                    description: "口语转书面表达，适合邮件和文档场景".to_string(),
+                    prompt: "将口语化的表达转换为规范的书面表达，适合邮件、文档、报告等正式场景。\n具体做法：\n- 将口语化的词汇替换为正式表达\n- 调整句子结构使其符合书面语法\n- 适当分段和添加标点\n- 保持原文的完整语义，不添加或删除信息".to_string(),
+                    builtin: true,
+                    enabled: false,
+                },
+            ],
+            provider_id: String::new(),
+            model: String::new(),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(default)]
 pub struct FeaturesConfig {
     pub transcription: TranscriptionConfig,
+    pub skills: SkillsConfig,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -147,6 +212,7 @@ impl Default for AppConfig {
                     provider_id: "vertex".to_string(),
                     model: "gemini-2.0-flash".to_string(),
                 },
+                skills: SkillsConfig::default(),
             },
         }
     }

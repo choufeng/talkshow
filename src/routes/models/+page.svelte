@@ -106,6 +106,7 @@
     const newConfig: AppConfig = {
       ...$config,
       features: {
+        ...$config.features,
         transcription: { provider_id: providerId, model }
       }
     };
