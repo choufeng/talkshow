@@ -112,6 +112,8 @@ pub async fn process_with_skills(
         })),
     );
 
+    let start = std::time::Instant::now();
+
     let skills_owned: Vec<Skill> = enabled_skills.into_iter().cloned().collect();
     let (system_prompt, user_message) =
         assemble_skills_prompt(&skills_owned, transcription, &app_name, &bundle_id);
@@ -141,12 +143,15 @@ pub async fn process_with_skills(
     )
     .await;
 
+    let elapsed_ms = start.elapsed().as_millis();
+
     match result {
         Ok(Ok(text)) => {
             logger.info(
                 "skills",
                 "LLM 调用成功",
                 Some(serde_json::json!({
+                    "elapsed_ms": elapsed_ms,
                     "original_length": transcription.len(),
                     "processed_length": text.len(),
                     "original_preview": transcription.chars().take(50).collect::<String>(),
@@ -159,7 +164,7 @@ pub async fn process_with_skills(
             logger.error(
                 "skills",
                 "LLM 调用失败，回退原始文字",
-                Some(serde_json::json!({ "error": e.to_string() })),
+                Some(serde_json::json!({ "elapsed_ms": elapsed_ms, "error": e.to_string() })),
             );
             Ok(transcription.to_string())
         }
@@ -167,7 +172,7 @@ pub async fn process_with_skills(
             logger.error(
                 "skills",
                 "LLM 调用超时，回退原始文字",
-                Some(serde_json::json!({ "timeout_secs": SKILLS_TIMEOUT_SECS })),
+                Some(serde_json::json!({ "elapsed_ms": elapsed_ms, "timeout_secs": SKILLS_TIMEOUT_SECS })),
             );
             Ok(transcription.to_string())
         }
