@@ -92,7 +92,60 @@
     </div>
   {:else}
     <div class="status">
-      <span class="spinner"></span>
+      <svg class="jellyfish" width="28" height="28" viewBox="0 0 28 28" style="overflow:visible">
+        <defs>
+          <filter id="jg-bell">
+            <feGaussianBlur stdDeviation="2.5" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <filter id="jg-tent">
+            <feGaussianBlur stdDeviation="1.5" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <radialGradient id="jbell-grad" cx="50%" cy="40%" r="50%">
+            <stop offset="0%" style="stop-color:#00c8ff;stop-opacity:0.3"/>
+            <stop offset="100%" style="stop-color:#00c8ff;stop-opacity:0.05"/>
+          </radialGradient>
+        </defs>
+        <g class="jellyfish-body">
+          <path class="jelly-bell" d="M5,16 Q5,5 14,5 Q23,5 23,16 Q19,19 14,17 Q9,19 5,16 Z"
+                fill="url(#jbell-grad)" stroke="#00c8ff" stroke-width="1.2" filter="url(#jg-bell)">
+            <animate attributeName="d"
+              values="M5,16 Q5,5 14,5 Q23,5 23,16 Q19,19 14,17 Q9,19 5,16 Z;
+                      M5,15 Q6,7 14,7 Q22,7 23,15 Q19,17 14,15 Q9,17 5,15 Z;
+                      M5,16 Q5,5 14,5 Q23,5 23,16 Q19,19 14,17 Q9,19 5,16 Z"
+              dur="2s" repeatCount="indefinite"/>
+          </path>
+          <ellipse cx="14" cy="12" rx="4" ry="3" fill="#00c8ff" opacity="0.15" filter="url(#jg-tent)">
+            <animate attributeName="ry" values="3;2;3" dur="2s" repeatCount="indefinite"/>
+          </ellipse>
+          <path d="M8,16.5 Q6,22 8,27" fill="none" stroke="#00c8ff" stroke-width="0.8" stroke-linecap="round" filter="url(#jg-tent)" opacity="0.5">
+            <animate attributeName="d"
+              values="M8,16.5 Q6,22 8,27;M8,15.5 Q5,21 7,26;M8,16.5 Q6,22 8,27"
+              dur="2.5s" repeatCount="indefinite"/>
+          </path>
+          <path d="M11,17 Q9,23 10,28" fill="none" stroke="#00c8ff" stroke-width="1" stroke-linecap="round" filter="url(#jg-tent)" opacity="0.7">
+            <animate attributeName="d"
+              values="M11,17 Q9,23 10,28;M11,16 Q8,22 9,27;M11,17 Q9,23 10,28"
+              dur="2.2s" repeatCount="indefinite"/>
+          </path>
+          <path d="M14,17.5 Q13,24 14,28" fill="none" stroke="#00c8ff" stroke-width="1.2" stroke-linecap="round" filter="url(#jg-tent)" opacity="0.8">
+            <animate attributeName="d"
+              values="M14,17.5 Q13,24 14,28;M14,16.5 Q12,23 13,27;M14,17.5 Q13,24 14,28"
+              dur="2s" repeatCount="indefinite"/>
+          </path>
+          <path d="M17,17 Q19,23 18,28" fill="none" stroke="#00c8ff" stroke-width="1" stroke-linecap="round" filter="url(#jg-tent)" opacity="0.7">
+            <animate attributeName="d"
+              values="M17,17 Q19,23 18,28;M17,16 Q20,22 19,27;M17,17 Q19,23 18,28"
+              dur="2.2s" repeatCount="indefinite"/>
+          </path>
+          <path d="M20,16.5 Q22,22 20,27" fill="none" stroke="#00c8ff" stroke-width="0.8" stroke-linecap="round" filter="url(#jg-tent)" opacity="0.5">
+            <animate attributeName="d"
+              values="M20,16.5 Q22,22 20,27;M20,15.5 Q23,21 21,26;M20,16.5 Q22,22 20,27"
+              dur="2.5s" repeatCount="indefinite"/>
+          </path>
+        </g>
+      </svg>
       <span class="label">处理中</span>
     </div>
   {/if}
@@ -169,25 +222,29 @@
     letter-spacing: 2px;
   }
 
-  .spinner {
-    width: 14px;
-    height: 14px;
-    border: 2px solid rgba(99, 102, 241, 0.3);
-    border-top-color: #6366f1;
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
+  .indicator.processing {
+    width: 180px;
   }
 
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
+  .jellyfish {
+    flex-shrink: 0;
+  }
+
+  .jellyfish-body {
+    animation: jelly-swim 2s ease-in-out infinite;
+  }
+
+  @keyframes jelly-swim {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-2px); }
   }
 
   .label {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Mono", "Menlo", "Consolas", monospace;
     font-size: 13px;
-    color: #a5b4fc;
+    color: #00c8ff;
     font-weight: 500;
+    text-shadow: 0 0 6px rgba(0, 200, 255, 0.4);
   }
 
   .btn {
