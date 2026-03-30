@@ -1,17 +1,68 @@
 use ndarray::{Array1, Array2, Array3};
 use ort::session::Session;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{Emitter, Manager};
+
+static ORT_INITIALIZED: AtomicBool = AtomicBool::new(false);
+
+fn find_onnxruntime_dylib() -> Option<PathBuf> {
+    let candidates: Vec<PathBuf> = vec![
+        PathBuf::from("/opt/homebrew/lib/libonnxruntime.dylib"),
+        PathBuf::from("/usr/local/lib/libonnxruntime.dylib"),
+    ];
+    for candidate in &candidates {
+        if candidate.exists() {
+            return Some(candidate.clone());
+        }
+    }
+    if let Ok(output) = std::process::Command::new("python3")
+        .args(["-c", "import onnxruntime; import os; print(os.path.dirname(onnxruntime.__file__))"])
+        .output()
+    {
+        if output.status.success() {
+            let dir = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            let path = PathBuf::from(&dir).join("capi");
+            if let Ok(entries) = std::fs::read_dir(&path) {
+                for entry in entries.flatten() {
+                    let name = entry.file_name();
+                    let name_str = name.to_string_lossy();
+                    if name_str.starts_with("libonnxruntime") && name_str.ends_with(".dylib") {
+                        return Some(entry.path());
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+fn ensure_ort_initialized() -> Result<(), SenseVoiceError> {
+    if ORT_INITIALIZED.load(Ordering::Acquire) {
+        return Ok(());
+    }
+    if let Some(dylib_path) = find_onnxruntime_dylib() {
+        ort::init_from(&dylib_path)
+            .map_err(|e| SenseVoiceError::LoadFailed(format!("Failed to load ONNX Runtime from {}: {}", dylib_path.display(), e)))?
+            .commit();
+        ORT_INITIALIZED.store(true, Ordering::Release);
+        Ok(())
+    } else {
+        Err(SenseVoiceError::LoadFailed(
+            "ONNX Runtime 动态库未找到。请通过 `brew install onnxruntime` 或 `pip3 install onnxruntime` 安装。".to_string()
+        ))
+    }
+}
 
 const MODEL_DIR_NAME: &str = "sensevoice";
 const HF_REPO: &str = "haixuantao/SenseVoiceSmall-onnx";
 
-const MODEL_FILES: &[(&str, &str)] = &[
-    ("model_quant.onnx", "241MB"),
-    ("config.yaml", "1.86KB"),
-    ("am.mvn", "11.2KB"),
-    ("chn_jpn_yue_eng_ko_spectok.bpe.model", "377KB"),
-    ("tokens.json", "352KB"),
+const MODEL_FILES: &[(&str, u64)] = &[
+    ("model_quant.onnx", 241_216_270),
+    ("config.yaml", 1_855),
+    ("am.mvn", 11_203),
+    ("chn_jpn_yue_eng_ko_spectok.bpe.model", 377_341),
+    ("tokens.json", 352_064),
 ];
 
 #[derive(Debug)]
@@ -77,6 +128,8 @@ pub struct SenseVoiceEngine {
 
 impl SenseVoiceEngine {
     pub fn new(model_dir: &PathBuf) -> Result<Self, SenseVoiceError> {
+        ensure_ort_initialized()?;
+
         let onnx_path = model_dir.join("model_quant.onnx");
         let session = Session::builder()
             .map_err(|e| SenseVoiceError::LoadFailed(e.to_string()))?
@@ -96,9 +149,9 @@ impl SenseVoiceEngine {
         })
     }
 
-    pub fn transcribe(&mut self, wav_path: &PathBuf, language: i32) -> Result<String, SenseVoiceError> {
-        let waveform = load_wav(wav_path)?;
-        let waveform_16k = resample_to_16k(&waveform)?;
+    pub fn transcribe(&mut self, audio_path: &PathBuf, language: i32) -> Result<String, SenseVoiceError> {
+        let (waveform, sample_rate) = load_audio(audio_path)?;
+        let waveform_16k = resample_to_16k(&waveform, sample_rate)?;
         if waveform_16k.len() < 4800 {
             return Ok(String::new());
         }
@@ -190,10 +243,31 @@ fn parse_cmvn(mvn_path: &PathBuf) -> Result<(Array1<f64>, Array1<f64>), String> 
     Ok((Array1::from_vec(means), Array1::from_vec(vars)))
 }
 
-fn load_wav(path: &PathBuf) -> Result<Vec<f32>, SenseVoiceError> {
-    let mut reader = hound::WavReader::open(path)
+fn load_audio(path: &PathBuf) -> Result<(Vec<f32>, u32), SenseVoiceError> {
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+    let (wav_path, converted) = if ext == "wav" {
+        (path.clone(), false)
+    } else {
+        let tmp_dir = std::env::temp_dir().join("talkshow");
+        let _ = std::fs::create_dir_all(&tmp_dir);
+        let tmp_wav = tmp_dir.join(format!("{}_sensevoice.wav", path.file_stem().and_then(|s| s.to_str()).unwrap_or("tmp")));
+        let output = std::process::Command::new("ffmpeg")
+            .args(["-y", "-i"])
+            .arg(path)
+            .args(["-ar", "16000", "-ac", "1", "-f", "wav"])
+            .arg(&tmp_wav)
+            .output()
+            .map_err(|e| SenseVoiceError::InvalidAudio(format!("ffmpeg failed: {}", e)))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(SenseVoiceError::InvalidAudio(format!("ffmpeg conversion failed: {}", stderr)));
+        }
+        (tmp_wav, true)
+    };
+    let mut reader = hound::WavReader::open(&wav_path)
         .map_err(|e| SenseVoiceError::InvalidAudio(e.to_string()))?;
     let spec = reader.spec();
+    let sample_rate = spec.sample_rate;
     let samples: Vec<f32> = match spec.sample_format {
         hound::SampleFormat::Int => {
             let max_val = 2i32.pow(spec.bits_per_sample as u32 - 1) as f32;
@@ -208,12 +282,15 @@ fn load_wav(path: &PathBuf) -> Result<Vec<f32>, SenseVoiceError> {
                 .collect()
         }
     };
-    Ok(samples)
+    if converted {
+        let _ = std::fs::remove_file(&wav_path);
+    }
+    Ok((samples, sample_rate))
 }
 
-fn resample_to_16k(samples: &[f32]) -> Result<Vec<f32>, SenseVoiceError> {
+fn resample_to_16k(samples: &[f32], src_rate: u32) -> Result<Vec<f32>, SenseVoiceError> {
     use rubato::{FftFixedInOut, Resampler};
-    let src_rate = 48000usize;
+    let src_rate = src_rate as usize;
     let dst_rate = 16000usize;
     if src_rate == dst_rate {
         return Ok(samples.to_vec());
@@ -370,10 +447,19 @@ pub async fn download_sensevoice_model(
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
 
     let client = reqwest::Client::new();
-    for &(filename, _) in MODEL_FILES {
+    for &(filename, expected_size) in MODEL_FILES {
         let file_path = dir.join(filename);
-        if file_path.exists() {
+        let is_valid = match std::fs::metadata(&file_path) {
+            Ok(meta) => meta.len() == expected_size,
+            Err(_) => false,
+        };
+        if is_valid {
             continue;
+        }
+        let _ = std::fs::remove_file(&file_path);
+        let tmp_path = dir.join(format!("{}.tmp", filename));
+        if tmp_path.exists() {
+            let _ = std::fs::remove_file(&tmp_path);
         }
         let url = format!("https://huggingface.co/{}/resolve/main/{}", HF_REPO, filename);
         let response = client.get(&url).send().await.map_err(|e| e.to_string())?;
@@ -381,7 +467,7 @@ pub async fn download_sensevoice_model(
         let mut downloaded: u64 = 0;
         let mut stream = response.bytes_stream();
         use futures_util::StreamExt;
-        let file = std::fs::File::create(&file_path).map_err(|e| e.to_string())?;
+        let file = std::fs::File::create(&tmp_path).map_err(|e| e.to_string())?;
         use tokio::io::AsyncWriteExt;
         let mut async_file = tokio::fs::File::from_std(file);
         while let Some(chunk) = stream.next().await {
@@ -397,6 +483,8 @@ pub async fn download_sensevoice_model(
             }));
         }
         async_file.flush().await.map_err(|e| e.to_string())?;
+        drop(async_file);
+        std::fs::rename(&tmp_path, &file_path).map_err(|e| e.to_string())?;
     }
     let _ = app_handle.emit("sensevoice:download-complete", serde_json::json!({}));
     Ok(())
@@ -412,4 +500,17 @@ pub async fn delete_sensevoice_model(
         std::fs::remove_dir_all(&dir).map_err(|e| e.to_string())?;
     }
     Ok(())
+}
+
+pub fn cleanup_tmp_files(app_data_dir: &PathBuf) {
+    let dir = model_dir(app_data_dir);
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        for entry in entries.flatten() {
+            if let Some(name) = entry.file_name().to_str() {
+                if name.ends_with(".tmp") {
+                    let _ = std::fs::remove_file(entry.path());
+                }
+            }
+        }
+    }
 }
