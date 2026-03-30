@@ -3,12 +3,13 @@
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import type { Snippet } from 'svelte';
-  import { House, Settings, Bot, ScrollText } from 'lucide-svelte';
+  import { House, Settings, Bot, ScrollText, Sparkles } from 'lucide-svelte';
 
   let { children }: { children: Snippet } = $props();
 
   let activeMenu = $derived(
     $page.url.pathname === '/settings' ? 'settings' :
+    $page.url.pathname === '/skills' ? 'skills' :
     $page.url.pathname === '/models' ? 'models' :
     $page.url.pathname === '/logs' ? 'logs' : 'home'
   );
@@ -37,6 +38,13 @@
       >
         <Bot size={18} class="shrink-0" />
         <span>模型</span>
+      </button>
+      <button
+        class="flex items-center gap-2 px-5 py-2.5 w-full text-sm text-foreground text-left transition-colors {activeMenu === 'skills' ? 'bg-muted border-l-[3px] border-l-accent-foreground' : 'hover:bg-muted/50 border-l-[3px] border-l-transparent'}"
+        onclick={() => navigateTo('/skills')}
+      >
+        <Sparkles size={18} class="shrink-0" />
+        <span>技能</span>
       </button>
       <button
         class="flex items-center gap-2 px-5 py-2.5 w-full text-sm text-foreground text-left transition-colors {activeMenu === 'settings' ? 'bg-muted border-l-[3px] border-l-accent-foreground' : 'hover:bg-muted/50 border-l-[3px] border-l-transparent'}"
