@@ -209,7 +209,6 @@ fn stop_recording(
 
                                 if RECORDING.load(Ordering::Relaxed) {
                                     logger.info("ai", "录音已重新开始，丢弃当前 AI 结果", None);
-                                    emit_indicator(&h, "indicator:done");
                                     return;
                                 }
 
@@ -243,6 +242,7 @@ fn stop_recording(
                         duration_secs: duration,
                     };
                     let _ = app_handle.emit("recording:cancel", cancelled);
+                    destroy_indicator(app_handle);
                 }
                 Err(e) => {
                     if let Some(ref lg) = logger {
