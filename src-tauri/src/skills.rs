@@ -1,7 +1,8 @@
 use crate::config::{ProviderConfig, Skill, SkillsConfig};
 use crate::logger::Logger;
 
-const SKILLS_TIMEOUT_SECS: u64 = 10;
+const SKILLS_BASE_TIMEOUT_SECS: u64 = 15;
+const SKILLS_PER_SKILL_TIMEOUT_SECS: u64 = 5;
 
 #[cfg(target_os = "macos")]
 fn get_frontmost_app() -> Result<(String, String), String> {
@@ -143,8 +144,11 @@ pub async fn process_with_skills(
 
     let full_prompt = format!("{}\n\n输入文本：\n{}", system_prompt, user_message);
 
+    let timeout_secs = SKILLS_BASE_TIMEOUT_SECS
+        + (skills_owned.len() as u64) * SKILLS_PER_SKILL_TIMEOUT_SECS;
+
     let result = tokio::time::timeout(
-        std::time::Duration::from_secs(SKILLS_TIMEOUT_SECS),
+        std::time::Duration::from_secs(timeout_secs),
         crate::ai::send_text_prompt(logger, &full_prompt, &skills_config.model, provider),
     )
     .await;
@@ -178,7 +182,7 @@ pub async fn process_with_skills(
             logger.error(
                 "skills",
                 "LLM 调用超时，回退原始文字",
-                Some(serde_json::json!({ "elapsed_ms": elapsed_ms, "timeout_secs": SKILLS_TIMEOUT_SECS })),
+                Some(serde_json::json!({ "elapsed_ms": elapsed_ms, "timeout_secs": timeout_secs })),
             );
             Ok(transcription.to_string())
         }
