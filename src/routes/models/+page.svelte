@@ -471,7 +471,7 @@
     <div class="text-xs text-muted-foreground uppercase tracking-wider mb-3">Providers</div>
     <div class="grid grid-cols-2 gap-4">
       {#each $config.ai.providers || [] as provider (provider.id)}
-        <div class="rounded-xl border border-border bg-background-alt p-5">
+        <div class="rounded-xl border border-border bg-background-alt p-5 overflow-hidden">
           <div class="flex justify-between items-start mb-4">
             <div>
               <div class="text-[15px] font-semibold text-foreground">{provider.name}</div>
