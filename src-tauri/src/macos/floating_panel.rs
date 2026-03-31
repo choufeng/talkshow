@@ -1,4 +1,3 @@
-#[cfg(target_os = "macos")]
 use objc2_app_kit::{NSWindow, NSWindowStyleMask};
 use tauri::WebviewWindow;
 
