@@ -647,6 +647,17 @@ fn save_skills_config(app_handle: tauri::AppHandle, skills_config: config::Skill
 }
 
 #[tauri::command]
+fn save_transcription_config(
+    app_handle: tauri::AppHandle,
+    transcription: config::TranscriptionConfig,
+) -> Result<(), String> {
+    let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
+    let mut app_config = config::load_config(&app_data_dir);
+    app_config.features.transcription = transcription;
+    config::save_config(&app_data_dir, &app_config)
+}
+
+#[tauri::command]
 fn add_skill(app_handle: tauri::AppHandle, skill: config::Skill) -> Result<(), String> {
     let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
     let mut app_config = config::load_config(&app_data_dir);
@@ -717,6 +728,7 @@ pub fn run() {
             get_vertex_env_info,
             get_skills_config,
             save_skills_config,
+            save_transcription_config,
             add_skill,
             update_skill,
             delete_skill,
