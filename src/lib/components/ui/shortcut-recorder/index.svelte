@@ -106,12 +106,12 @@
 
 <div class="rounded-xl border border-border bg-background-alt p-6 mb-5">
   <div>
-    <h4 class="text-base font-semibold text-foreground m-0">{label}</h4>
-    <p class="text-sm text-foreground-alt m-0 mt-1">{description}</p>
+    <h4 class="text-subheading font-semibold text-foreground m-0">{label}</h4>
+    <p class="text-body text-foreground-alt m-0 mt-1">{description}</p>
   </div>
   <div class="flex items-center gap-3 mt-4">
     {#if isRecording}
-      <div         class="rounded-md px-5 py-2.5 text-base min-w-[130px] text-center bg-gradient-to-b from-btn-primary-from to-btn-primary-to text-white shadow-btn-primary">
+      <div         class="rounded-md px-5 py-2.5 text-subheading min-w-[130px] text-center bg-gradient-to-b from-btn-primary-from to-btn-primary-to text-white shadow-btn-primary">
         请按下快捷键...
       </div>
     {:else}
@@ -123,14 +123,14 @@
     {/if}
     {#if isRecording}
       <button
-        class="inline-flex items-center justify-center rounded-md bg-gradient-to-b from-btn-secondary-from to-btn-secondary-to border border-btn-secondary-border px-5 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:opacity-90 shadow-btn-secondary"
+        class="inline-flex items-center justify-center rounded-md bg-gradient-to-b from-btn-secondary-from to-btn-secondary-to border border-btn-secondary-border px-5 py-2.5 text-body font-medium text-accent-foreground transition-colors hover:opacity-90 shadow-btn-secondary"
         onclick={cancelRecording}
       >
         取消
       </button>
     {:else}
       <button
-        class="inline-flex items-center justify-center rounded-md bg-gradient-to-b from-btn-primary-from to-btn-primary-to px-5 py-2.5 text-sm font-medium text-white transition-colors hover:opacity-90 shadow-btn-primary"
+        class="inline-flex items-center justify-center rounded-md bg-gradient-to-b from-btn-primary-from to-btn-primary-to px-5 py-2.5 text-body font-medium text-white transition-colors hover:opacity-90 shadow-btn-primary"
         onclick={startRecording}
       >
         修改
@@ -138,6 +138,6 @@
     {/if}
   </div>
   {#if error}
-    <p class="text-sm text-destructive m-0 mt-2">{error}</p>
+    <p class="text-body text-destructive m-0 mt-2">{error}</p>
   {/if}
 </div>

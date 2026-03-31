@@ -205,10 +205,17 @@ impl Default for SkillsConfig {
 
 #[derive(Serialize, Deserialize, Clone, Default)]
 #[serde(default)]
+pub struct RecordingFeaturesConfig {
+    pub auto_mute: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(default)]
 pub struct FeaturesConfig {
     pub transcription: TranscriptionConfig,
     pub translation: TranslationConfig,
     pub skills: SkillsConfig,
+    pub recording: RecordingFeaturesConfig,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -242,6 +249,7 @@ impl Default for AppConfig {
                     target_lang: "English".to_string(),
                 },
                 skills: SkillsConfig::default(),
+                recording: RecordingFeaturesConfig::default(),
             },
         }
     }

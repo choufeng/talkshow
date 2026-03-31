@@ -50,7 +50,7 @@
   </div>
   {#if isInputVisible}
     <input
-      class="flex h-7 w-full rounded-md border border-border-input bg-background px-2 py-1 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-1"
+      class="flex h-7 w-full rounded-md border border-border-input bg-background px-2 py-1 text-caption ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-1"
       type="text"
       {placeholder}
       bind:value={inputValue}
@@ -59,7 +59,7 @@
     />
   {:else}
     <button
-      class="text-xs text-accent-foreground hover:underline"
+      class="text-caption text-accent-foreground hover:underline"
       onclick={showInput}
     >
       + 添加模型

@@ -149,18 +149,18 @@
 </script>
 
 <div class="max-w-[960px]">
-  <h2 class="text-2xl font-semibold text-foreground m-0 mb-8">日志</h2>
+  <h2 class="text-title font-semibold text-foreground m-0 mb-8">日志</h2>
 
   <div class="flex items-center gap-3 mb-5">
     <div class="flex gap-0.5 bg-muted rounded-md p-0.5">
       <button
-        class="px-4 py-1.5 rounded text-sm transition-colors {activeTab === 'current' ? 'bg-background text-foreground font-medium' : 'text-muted-foreground hover:text-foreground'}"
+        class="px-4 py-1.5 rounded text-body transition-colors {activeTab === 'current' ? 'bg-background text-foreground font-medium' : 'text-muted-foreground hover:text-foreground'}"
         onclick={() => switchTab('current')}
       >
         当前会话
       </button>
       <button
-        class="px-4 py-1.5 rounded text-sm transition-colors {activeTab === 'history' ? 'bg-background text-foreground font-medium' : 'text-muted-foreground hover:text-foreground'}"
+        class="px-4 py-1.5 rounded text-body transition-colors {activeTab === 'history' ? 'bg-background text-foreground font-medium' : 'text-muted-foreground hover:text-foreground'}"
         onclick={() => switchTab('history')}
       >
         历史记录
@@ -170,7 +170,7 @@
     <div class="flex gap-1">
       {#each MODULES as mod}
         <button
-          class="px-3 py-1.5 rounded text-xs transition-colors {selectedModule === mod ? 'bg-gradient-to-b from-btn-primary-from to-btn-primary-to text-white font-medium shadow-btn-primary' : 'border border-border text-muted-foreground hover:text-foreground'}"
+          class="px-3 py-1.5 rounded text-caption transition-colors {selectedModule === mod ? 'bg-gradient-to-b from-btn-primary-from to-btn-primary-to text-white font-medium shadow-btn-primary' : 'border border-border text-muted-foreground hover:text-foreground'}"
           onclick={() => (selectedModule = mod)}
         >
           {mod === 'all' ? '全部' : mod}
@@ -179,11 +179,11 @@
     </div>
 
     {#if currentSession && activeTab === 'current'}
-      <span class="ml-auto text-xs text-muted-foreground">
+      <span class="ml-auto text-caption text-muted-foreground">
         {filteredEntries.length} 条日志
       </span>
       <button
-        class="px-3 py-1 rounded text-xs border border-btn-secondary-border bg-gradient-to-b from-btn-secondary-from to-btn-secondary-to text-accent-foreground hover:opacity-90 transition-colors shadow-btn-secondary"
+        class="px-3 py-1 rounded text-caption border border-btn-secondary-border bg-gradient-to-b from-btn-secondary-from to-btn-secondary-to text-accent-foreground hover:opacity-90 transition-colors shadow-btn-secondary"
         onclick={copyAll}
         disabled={copied}
       >
@@ -210,7 +210,7 @@
                   <span class="text-[11px] text-green-400 ml-2 font-normal">当前</span>
                 {/if}
               </div>
-              <div class="text-sm text-muted-foreground mt-0.5">
+              <div class="text-body text-muted-foreground mt-0.5">
                 {session.entry_count} 条 · {formatSize(session.size_bytes)}
               </div>
             </div>
@@ -225,7 +225,7 @@
       <div class="text-base text-muted-foreground py-12 text-center">暂无日志</div>
     {:else}
       <div class="border border-border rounded-xl overflow-hidden">
-        <div class="max-h-[calc(100vh-200px)] overflow-y-auto font-mono text-sm">
+        <div class="max-h-[calc(100vh-200px)] overflow-y-auto font-mono text-body">
           {#each filteredEntries as entry, i}
             <div class="flex gap-3 px-5 py-2 border-b border-border last:border-b-0 hover:bg-muted/30">
               <span class="text-muted-foreground whitespace-nowrap shrink-0">{formatTimestamp(entry.ts)}</span>
@@ -244,7 +244,7 @@
 
       {#if activeTab === 'history' && selectedSession}
         <button
-          class="mt-3 text-sm text-accent-foreground hover:opacity-80 transition-colors"
+          class="mt-3 text-body text-accent-foreground hover:opacity-80 transition-colors"
           onclick={() => { selectedSession = null; entries = []; }}
         >
           ← 返回历史列表

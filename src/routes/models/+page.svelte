@@ -6,7 +6,7 @@
   import Dialog from '$lib/components/ui/dialog/index.svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { listen } from '@tauri-apps/api/event';
-  import { Plus, RotateCcw } from 'lucide-svelte';
+  import { Plus, RotateCcw, Mic, Languages } from 'lucide-svelte';
   import type { ProviderConfig, AppConfig, ModelConfig, ModelVerified } from '$lib/stores/config';
   import { SENSEVOICE_LANGUAGES } from '$lib/stores/config';
 
@@ -429,16 +429,31 @@
 </script>
 
 <div class="max-w-[800px]">
-  <h2 class="text-2xl font-semibold text-foreground m-0 mb-8">模型</h2>
+  <h2 class="text-title font-semibold text-foreground m-0 mb-8">模型</h2>
 
   <section class="mb-10">
-    <div class="rounded-xl border border-border bg-background-alt p-5">
-      <div class="text-sm font-semibold text-foreground mb-4">AI 服务</div>
-      <div class="mb-5">
-        <div class="text-xs text-muted-foreground uppercase tracking-wider mb-3">转写服务</div>
-        <div class="flex flex-col gap-5">
-        <div>
-          <label class="block text-sm text-foreground-alt mb-1.5">转写模型</label>
+    <!-- 共享标题栏 -->
+    <div class="rounded-t-xl border border-border border-b-0 bg-muted p-4 flex justify-between items-center">
+      <span class="text-subheading font-semibold text-foreground">AI 服务</span>
+      <span class="text-caption text-muted-foreground">配置转写和翻译功能</span>
+    </div>
+    
+    <!-- 横向卡片容器 -->
+    <div class="flex flex-col sm:flex-row border border-border rounded-b-xl bg-background-alt overflow-hidden ai-service-container">
+      <!-- 左侧卡片：AI 转写 -->
+      <div class="flex-1 p-5 border-r border-border">
+        <div class="flex items-center gap-3 mb-5">
+          <div class="w-9 h-9 bg-accent/10 rounded-lg flex items-center justify-center">
+            <Mic class="w-4 h-4 text-accent-foreground" />
+          </div>
+          <div>
+            <div class="text-subheading font-semibold text-foreground">AI 转写</div>
+            <div class="text-caption text-muted-foreground">语音转文字 + 润色</div>
+          </div>
+        </div>
+        
+        <div class="mb-5">
+          <label class="block text-body text-foreground-alt mb-1.5">转写模型</label>
           <GroupedSelect
             value={getTranscriptionValue()}
             groups={buildTranscriptionGroups()}
@@ -447,10 +462,10 @@
           />
         </div>
 
-        <div class="flex items-center justify-between">
+        <div class="flex items-center justify-between mb-5">
           <div>
             <div class="text-[15px] font-semibold text-foreground">启用润色</div>
-            <div class="text-sm text-foreground-alt">转写后自动使用 LLM 润色文字</div>
+            <div class="text-body text-foreground-alt">转写后自动使用 LLM 润色文字</div>
           </div>
           <button
             class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-2 {$config.features.transcription.polish_enabled ? 'bg-gradient-to-b from-btn-primary-from to-btn-primary-to shadow-btn-primary' : 'bg-gradient-to-b from-toggle-off-from to-toggle-off-to shadow-btn-secondary'}"
@@ -464,7 +479,7 @@
 
         {#if $config.features.transcription.polish_enabled}
         <div>
-          <label class="block text-sm text-foreground-alt mb-1.5">润色模型</label>
+          <label class="block text-body text-foreground-alt mb-1.5">润色模型</label>
           <GroupedSelect
             value={getPolishValue()}
             groups={buildPolishGroups()}
@@ -473,31 +488,44 @@
           />
         </div>
         {/if}
-        <div>
-          <div class="text-xs text-muted-foreground uppercase tracking-wider mb-3 mt-5">AI 翻译</div>
-          <div>
-            <label class="block text-sm text-foreground-alt mb-1.5">目标语言</label>
-            <select
-              class="flex h-9 w-full rounded-md border border-border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20"
-              value={$config.features.translation?.target_lang || 'English'}
-              onchange={(e) => handleTargetLangChange((e.target as HTMLSelectElement).value)}
-            >
-              {#each TRANSLATE_LANGUAGES as lang}
-                <option value={lang}>{lang}</option>
-              {/each}
-            </select>
+      </div>
+      
+      <!-- 右侧卡片：AI 翻译 -->
+      <div class="flex-1 p-5">
+        <div class="flex items-center gap-3 mb-5">
+          <div class="w-9 h-9 bg-accent/10 rounded-lg flex items-center justify-center">
+            <Languages class="w-4 h-4 text-accent-foreground" />
           </div>
-          <div class="text-xs text-muted-foreground mt-1.5">
-            翻译模型复用润色模型：{$config.features.transcription.polish_model || '未配置'}
+          <div>
+            <div class="text-subheading font-semibold text-foreground">AI 翻译</div>
+            <div class="text-caption text-muted-foreground">实时翻译转写内容</div>
           </div>
         </div>
+        
+        <div class="mb-5">
+          <label class="block text-body text-foreground-alt mb-1.5">目标语言</label>
+          <select
+            class="flex h-9 w-full rounded-md border border-border-input bg-background px-3 py-2 text-body ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20"
+            value={$config.features.translation?.target_lang || 'English'}
+            onchange={(e) => handleTargetLangChange((e.target as HTMLSelectElement).value)}
+          >
+            {#each TRANSLATE_LANGUAGES as lang}
+              <option value={lang}>{lang}</option>
+            {/each}
+          </select>
+        </div>
+        
+        <div class="p-3 bg-muted rounded-lg border border-dashed border-border">
+          <div class="text-caption text-muted-foreground mb-1">翻译模型</div>
+          <div class="text-body text-muted-foreground">复用润色模型：{$config.features.transcription.polish_model || '未配置'}</div>
+          <div class="text-caption text-muted-foreground/70 mt-1">启用润色后，翻译将使用相同的模型</div>
         </div>
       </div>
     </div>
   </section>
 
   <section>
-    <div class="text-xs text-muted-foreground uppercase tracking-wider mb-3">Providers</div>
+    <div class="text-caption text-muted-foreground uppercase tracking-wider mb-3">Providers</div>
     <div class="grid grid-cols-2 gap-4">
       {#each $config.ai.providers || [] as provider (provider.id)}
         <div class="rounded-xl border border-border bg-background-alt p-5 overflow-hidden">
@@ -508,7 +536,7 @@
             </div>
             {#if isBuiltinProvider(provider.id)}
               <button
-                class="text-xs text-muted-foreground hover:text-foreground transition-colors p-0.5"
+                class="text-caption text-muted-foreground hover:text-foreground transition-colors p-0.5"
                 onclick={() => handleResetProvider(provider.id)}
                 title="重置为默认"
               >
@@ -516,7 +544,7 @@
               </button>
             {:else}
               <button
-                class="text-xs text-muted-foreground hover:text-destructive transition-colors p-0.5"
+                class="text-caption text-muted-foreground hover:text-destructive transition-colors p-0.5"
                 onclick={() => handleRemoveProvider(provider.id)}
               >
                 ✕
@@ -526,7 +554,7 @@
 
           {#if provider.type === 'sensevoice'}
             <div class="mb-3">
-              <label class="block text-sm text-foreground-alt mb-1">模型状态</label>
+              <label class="block text-body text-foreground-alt mb-1">模型状态</label>
               <div class="text-[11px] bg-background rounded-md border border-border p-2 space-y-1">
                 {#if sensevoiceStatus?.status === 'ready'}
                   <div class="flex items-center justify-between">
@@ -534,7 +562,7 @@
                     <span class="text-muted-foreground">{(sensevoiceStatus!.size_bytes! / 1024 / 1024).toFixed(0)} MB</span>
                   </div>
                   <button
-                    class="text-xs text-red-400 hover:text-red-300 transition-colors"
+                    class="text-caption text-red-400 hover:text-red-300 transition-colors"
                     onclick={deleteSenseVoiceModel}
                   >
                     删除模型
@@ -549,7 +577,7 @@
                   </div>
                 {:else}
                   <button
-                    class="text-xs text-accent-foreground hover:underline"
+class="text-caption text-accent-foreground hover:underline"
                     onclick={downloadSenseVoice}
                   >
                     下载模型 (约 242 MB)
@@ -558,9 +586,9 @@
               </div>
             </div>
             <div class="mb-3">
-              <label class="block text-sm text-foreground-alt mb-1">转写语言</label>
+              <label class="block text-body text-foreground-alt mb-1">转写语言</label>
               <select
-                class="flex h-9 w-full rounded-md border border-border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20"
+class="flex h-9 w-full rounded-md border border-border-input bg-background px-3 py-2 text-body ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20"
                 bind:value={sensevoiceLanguage}
               >
                 {#each SENSEVOICE_LANGUAGES as lang}
@@ -572,7 +600,7 @@
 
           {#if needsApiKey(provider)}
             <div class="mb-3">
-              <label class="block text-sm text-foreground-alt mb-1">API Key</label>
+              <label class="block text-body text-foreground-alt mb-1">API Key</label>
               <EditableField
                 value={provider.api_key || ''}
                 placeholder="sk-..."
@@ -584,7 +612,7 @@
 
           {#if provider.type === 'vertex'}
             <div class="mb-3">
-              <label class="block text-sm text-foreground-alt mb-1">Vertex AI 配置</label>
+              <label class="block text-body text-foreground-alt mb-1">Vertex AI 配置</label>
               <div class="text-[11px] text-muted-foreground space-y-0.5 bg-background rounded-md border border-border p-2">
                 <div>GOOGLE_CLOUD_PROJECT: <span class="text-foreground">{vertexEnvInfo?.project || '未设置'}</span></div>
                 <div>GOOGLE_CLOUD_LOCATION: <span class="text-foreground">{vertexEnvInfo?.location || 'global'}</span></div>
@@ -593,7 +621,7 @@
             </div>
           {:else if provider.type !== 'sensevoice'}
             <div class="mb-3">
-              <label class="block text-sm text-foreground-alt mb-1">Endpoint</label>
+              <label class="block text-body text-foreground-alt mb-1">Endpoint</label>
               <EditableField
                 value={provider.endpoint}
                 placeholder="https://api.example.com/v1"
@@ -604,7 +632,7 @@
           {/if}
 
           <div>
-            <label class="block text-sm text-foreground-alt mb-1">Models</label>
+            <label class="block text-body text-foreground-alt mb-1">Models</label>
             <div class="mt-1">
               <div class="flex flex-wrap gap-1 mb-1">
                 {#each provider.models || [] as model (model.name)}
@@ -646,14 +674,14 @@
               {#if provider.type !== 'sensevoice'}
               <div class="flex items-center gap-1.5">
                 <button
-                  class="text-xs text-accent-foreground hover:underline"
+                  class="text-caption text-accent-foreground hover:underline"
                   onclick={() => openAddModelDialog(provider.id)}
                 >
                   + 添加模型
                 </button>
                 <span class="text-border">|</span>
                 <button
-                  class="text-xs text-accent-foreground hover:underline inline-flex items-center gap-0.5"
+                  class="text-caption text-accent-foreground hover:underline inline-flex items-center gap-0.5"
                   onclick={() => testAllModels(provider)}
                   disabled={provider.models.length === 0 || [...testingModels].some(k => k.startsWith(provider.id + '::'))}
                 >
@@ -670,7 +698,7 @@
         onclick={() => (showAddDialog = true)}
       >
         <Plus class="h-6 w-6 text-muted-foreground" />
-        <span class="text-sm text-muted-foreground">添加 Provider</span>
+        <span class="text-body text-muted-foreground">添加 Provider</span>
       </button>
     </div>
   </section>
@@ -682,22 +710,22 @@
   >
     {#snippet children()}
       <div>
-        <label for="provider-name" class="block text-sm text-foreground-alt mb-1">Name</label>
+        <label for="provider-name" class="block text-body text-foreground-alt mb-1">Name</label>
         <input
           id="provider-name"
-          class="flex h-10 w-full rounded-md border border-border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-1"
+          class="flex h-10 w-full rounded-md border border-border-input bg-background px-3 py-2 text-body ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-1"
           type="text"
           placeholder="如：阿里云"
           value={newProvider.name}
           oninput={(e) => handleNameInput((e.target as HTMLInputElement).value)}
         />
         {#if formErrors.name}
-          <p class="text-xs text-destructive mt-0.5">{formErrors.name}</p>
+          <p class="text-caption text-destructive mt-0.5">{formErrors.name}</p>
         {/if}
       </div>
 
       <div>
-        <span class="block text-sm text-foreground-alt mb-1">Type</span>
+        <span class="block text-body text-foreground-alt mb-1">Type</span>
         <GroupedSelect
           value={newProvider.type}
           groups={[{ label: '', items: PROVIDER_TYPES }]}
@@ -705,37 +733,37 @@
           onChange={handleTypeChange}
         />
         {#if formErrors.type}
-          <p class="text-xs text-destructive mt-0.5">{formErrors.type}</p>
+          <p class="text-caption text-destructive mt-0.5">{formErrors.type}</p>
         {/if}
       </div>
 
       <div>
-        <label for="provider-id" class="block text-sm text-foreground-alt mb-1">ID</label>
+        <label for="provider-id" class="block text-body text-foreground-alt mb-1">ID</label>
         <input
           id="provider-id"
-          class="flex h-10 w-full rounded-md border border-border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-1"
+          class="flex h-10 w-full rounded-md border border-border-input bg-background px-3 py-2 text-body ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-1"
           type="text"
           placeholder="如：ali-yun"
           value={newProvider.id}
           oninput={(e) => { newProvider.id = (e.target as HTMLInputElement).value; formErrors = { ...formErrors, id: '' }; }}
         />
         {#if formErrors.id}
-          <p class="text-xs text-destructive mt-0.5">{formErrors.id}</p>
+          <p class="text-caption text-destructive mt-0.5">{formErrors.id}</p>
         {/if}
       </div>
 
       <div>
-        <label for="provider-endpoint" class="block text-sm text-foreground-alt mb-1">Endpoint</label>
+        <label for="provider-endpoint" class="block text-body text-foreground-alt mb-1">Endpoint</label>
         <input
           id="provider-endpoint"
-          class="flex h-10 w-full rounded-md border border-border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-1"
+          class="flex h-10 w-full rounded-md border border-border-input bg-background px-3 py-2 text-body ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-1"
           type="text"
           placeholder="https://api.example.com/v1"
           value={newProvider.endpoint}
           oninput={(e) => { newProvider.endpoint = (e.target as HTMLInputElement).value; formErrors = { ...formErrors, endpoint: '' }; }}
         />
         {#if formErrors.endpoint}
-          <p class="text-xs text-destructive mt-0.5">{formErrors.endpoint}</p>
+          <p class="text-caption text-destructive mt-0.5">{formErrors.endpoint}</p>
         {/if}
       </div>
     {/snippet}
@@ -743,14 +771,14 @@
     {#snippet footer()}
       <button
         type="button"
-        class="rounded-md border border-border px-4 py-2 text-sm text-foreground hover:bg-muted transition-colors"
+        class="rounded-md border border-border px-4 py-2 text-body text-foreground hover:bg-muted transition-colors"
         onclick={() => handleDialogOpenChange(false)}
       >
         取消
       </button>
       <button
         type="button"
-        class="rounded-md bg-foreground px-4 py-2 text-sm text-background hover:bg-foreground/90 transition-colors"
+        class="rounded-md bg-foreground px-4 py-2 text-body text-background hover:bg-foreground/90 transition-colors"
         onclick={handleAddProvider}
       >
         添加
@@ -767,14 +795,14 @@
     {#snippet footer()}
       <button
         type="button"
-        class="rounded-md border border-border px-4 py-2 text-sm text-foreground hover:bg-muted transition-colors"
+        class="rounded-md border border-border px-4 py-2 text-body text-foreground hover:bg-muted transition-colors"
         onclick={() => { showDeleteConfirm = false; pendingActionProviderId = ''; }}
       >
         取消
       </button>
       <button
         type="button"
-        class="rounded-md bg-destructive px-4 py-2 text-sm text-white hover:bg-destructive/90 transition-colors"
+        class="rounded-md bg-destructive px-4 py-2 text-body text-white hover:bg-destructive/90 transition-colors"
         onclick={confirmRemoveProvider}
       >
         删除
@@ -791,14 +819,14 @@
     {#snippet footer()}
       <button
         type="button"
-        class="rounded-md border border-border px-4 py-2 text-sm text-foreground hover:bg-muted transition-colors"
+        class="rounded-md border border-border px-4 py-2 text-body text-foreground hover:bg-muted transition-colors"
         onclick={() => { showResetConfirm = false; pendingActionProviderId = ''; }}
       >
         取消
       </button>
       <button
         type="button"
-        class="rounded-md bg-foreground px-4 py-2 text-sm text-background hover:bg-foreground/90 transition-colors"
+        class="rounded-md bg-foreground px-4 py-2 text-body text-background hover:bg-foreground/90 transition-colors"
         onclick={confirmResetProvider}
       >
         重置
@@ -815,14 +843,14 @@
     {#snippet footer()}
       <button
         type="button"
-        class="rounded-md border border-border px-4 py-2 text-sm text-foreground hover:bg-muted transition-colors"
+        class="rounded-md border border-border px-4 py-2 text-body text-foreground hover:bg-muted transition-colors"
         onclick={() => { showRemoveModelConfirm = false; pendingRemoveModel = { providerId: '', modelName: '' }; }}
       >
         取消
       </button>
       <button
         type="button"
-        class="rounded-md bg-destructive px-4 py-2 text-sm text-white hover:bg-destructive/90 transition-colors"
+        class="rounded-md bg-destructive px-4 py-2 text-body text-white hover:bg-destructive/90 transition-colors"
         onclick={confirmRemoveModel}
       >
         删除
@@ -838,20 +866,20 @@
   >
     {#snippet children()}
       <div>
-        <label for="model-name" class="block text-sm text-foreground-alt mb-1">模型名称</label>
+        <label for="model-name" class="block text-body text-foreground-alt mb-1">模型名称</label>
         <input
           id="model-name"
-          class="flex h-10 w-full rounded-md border border-border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-1"
+          class="flex h-10 w-full rounded-md border border-border-input bg-background px-3 py-2 text-body ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-1"
           type="text"
           placeholder="如：gpt-4o"
           bind:value={newModelName}
         />
       </div>
       <div>
-        <span class="block text-sm text-foreground-alt mb-1">能力</span>
+        <span class="block text-body text-foreground-alt mb-1">能力</span>
         <div class="flex flex-wrap gap-2">
           {#each MODEL_CAPABILITIES as cap}
-            <label class="inline-flex items-center gap-1.5 text-xs text-foreground cursor-pointer">
+            <label class="inline-flex items-center gap-1.5 text-caption text-foreground cursor-pointer">
               <input
                 type="checkbox"
                 class="rounded border-border-input"
@@ -868,14 +896,14 @@
     {#snippet footer()}
       <button
         type="button"
-        class="rounded-md border border-border px-4 py-2 text-sm text-foreground hover:bg-muted transition-colors"
+        class="rounded-md border border-border px-4 py-2 text-body text-foreground hover:bg-muted transition-colors"
         onclick={() => { showAddModelDialog = false; addModelProviderId = ''; newModelName = ''; newModelCapabilities = []; }}
       >
         取消
       </button>
       <button
         type="button"
-        class="rounded-md bg-foreground px-4 py-2 text-sm text-background hover:bg-foreground/90 transition-colors"
+        class="rounded-md bg-foreground px-4 py-2 text-body text-background hover:bg-foreground/90 transition-colors"
         onclick={confirmAddModel}
         disabled={!newModelName.trim()}
       >
@@ -884,3 +912,20 @@
     {/snippet}
   </Dialog>
 </div>
+
+<style>
+  @media (max-width: 640px) {
+    .ai-service-container {
+      flex-direction: column;
+    }
+    
+    .ai-service-container > div {
+      border-right: none;
+      border-bottom: 1px solid var(--border);
+    }
+    
+    .ai-service-container > div:last-child {
+      border-bottom: none;
+    }
+  }
+</style>

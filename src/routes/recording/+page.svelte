@@ -1,5 +1,6 @@
 <script lang="ts">
   import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
 
   const appWindow = getCurrentWindow();
@@ -10,7 +11,20 @@
   let seconds = $state(0);
   let intervalId: ReturnType<typeof setInterval> | null = null;
   let visible = $state(true);
+  let replaceMode = $state(false);
+  let selectedPreview = $state("");
   let closeTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  async function fetchReplaceModeState() {
+    try {
+      const state = await invoke<{ replaceMode: boolean; selectedPreview: string }>("get_replace_mode_state");
+      replaceMode = state.replaceMode;
+      selectedPreview = state.selectedPreview;
+    } catch {
+    }
+  }
+
+  fetchReplaceModeState();
 
   function formatTime(totalSeconds: number): string {
     const mins = Math.floor(totalSeconds / 60);
@@ -54,6 +68,8 @@
         await listen("indicator:recording", () => {
           phase = "recording";
           visible = true;
+          replaceMode = false;
+          selectedPreview = "";
           startTimer();
         }),
       );
@@ -63,7 +79,9 @@
           stopTimer();
         }),
       );
-      unsubs.push(await listen("indicator:done", scheduleClose));
+      unsubs.push(
+        await listen("indicator:done", scheduleClose),
+      );
       unsubs.push(await listen("indicator:error", () => appWindow.close()));
     })();
 
@@ -73,19 +91,20 @@
   startTimer();
 </script>
 
-<div
-  class="indicator"
-  class:processing={phase === "processing"}
-  class:fade-out={!visible}
->
+  <div
+    class="indicator"
+    class:processing={phase === "processing"}
+    class:fade-out={!visible}
+    style="--accent-color: {replaceMode ? '#f59e0b' : '#ff0055'}; --accent-shadow: {replaceMode ? 'rgba(245, 158, 11, 0.6)' : 'rgba(255, 0, 85, 0.6)'}; --accent-text-shadow: {replaceMode ? 'rgba(245, 158, 11, 0.4)' : 'rgba(255, 0, 85, 0.4)'}"
+  >
   {#if phase === "recording"}
     <div class="status">
       <svg class="neon-ring" width="24" height="24" viewBox="0 0 24 24">
-        <circle cx="12" cy="12" r="8" fill="none" stroke="#ff0055" stroke-width="1.5">
+        <circle cx="12" cy="12" r="8" fill="none" stroke="var(--accent-color)" stroke-width="1.5">
           <animate attributeName="r" values="7;9;7" dur="1.2s" repeatCount="indefinite"/>
           <animate attributeName="opacity" values="1;0.5;1" dur="1.2s" repeatCount="indefinite"/>
         </circle>
-        <circle cx="12" cy="12" r="3" fill="#ff0055"/>
+        <circle cx="12" cy="12" r="3" fill="var(--accent-color)"/>
       </svg>
       <span class="timer">{formatTime(seconds)}</span>
       <span class="rec-label">REC</span>
@@ -200,25 +219,25 @@
   }
 
   .neon-ring {
-    filter: drop-shadow(0 0 4px rgba(255, 0, 85, 0.6));
+    filter: drop-shadow(0 0 4px var(--accent-shadow));
     flex-shrink: 0;
   }
 
   .timer {
     font-family: -apple-system, BlinkMacSystemFont, "SF Mono", "Menlo", "Consolas", monospace;
     font-size: 13px;
-    color: #ff0055;
+    color: var(--accent-color);
     font-weight: 500;
     font-variant-numeric: tabular-nums;
     min-width: 36px;
     text-align: center;
-    text-shadow: 0 0 6px rgba(255, 0, 85, 0.4);
+    text-shadow: 0 0 6px var(--accent-text-shadow);
   }
 
   .rec-label {
     font-family: -apple-system, BlinkMacSystemFont, "SF Mono", "Menlo", "Consolas", monospace;
     font-size: 8px;
-    color: rgba(255, 0, 85, 0.4);
+    color: var(--accent-text-shadow);
     letter-spacing: 2px;
   }
 
