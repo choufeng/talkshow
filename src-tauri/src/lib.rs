@@ -639,7 +639,8 @@ fn get_skills_config(app_handle: tauri::AppHandle) -> config::SkillsConfig {
 }
 
 #[tauri::command]
-fn save_skills_config(app_handle: tauri::AppHandle, skills_config: config::SkillsConfig) -> Result<(), String> {
+fn save_skills_config(app_handle: tauri::AppHandle, mut skills_config: config::SkillsConfig) -> Result<(), String> {
+    skills_config.enabled = true;
     let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
     let mut app_config = config::load_config(&app_data_dir);
     app_config.features.skills = skills_config;
@@ -662,6 +663,7 @@ fn add_skill(app_handle: tauri::AppHandle, skill: config::Skill) -> Result<(), S
     let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
     let mut app_config = config::load_config(&app_data_dir);
     app_config.features.skills.skills.push(skill);
+    app_config.features.skills.enabled = true;
     config::save_config(&app_data_dir, &app_config)
 }
 
@@ -671,6 +673,7 @@ fn update_skill(app_handle: tauri::AppHandle, skill: config::Skill) -> Result<()
     let mut app_config = config::load_config(&app_data_dir);
     if let Some(existing) = app_config.features.skills.skills.iter_mut().find(|s| s.id == skill.id) {
         *existing = skill;
+        app_config.features.skills.enabled = true;
         config::save_config(&app_data_dir, &app_config)
     } else {
         Err(format!("Skill not found: {}", skill.id))
@@ -689,6 +692,7 @@ fn delete_skill(app_handle: tauri::AppHandle, skill_id: String) -> Result<(), St
         return Err("Cannot delete builtin skill".to_string());
     }
     app_config.features.skills.skills.retain(|s| s.id != skill_id);
+    app_config.features.skills.enabled = true;
     config::save_config(&app_data_dir, &app_config)
 }
 
