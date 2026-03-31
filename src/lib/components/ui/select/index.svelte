@@ -48,14 +48,14 @@
       <Select.Viewport>
         {#each groups as group}
           <Select.Group>
-            <Select.GroupHeading class="px-3 py-2 text-xs font-medium text-muted-foreground">
+            <Select.GroupHeading class="px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/60">
               {group.label}
             </Select.GroupHeading>
             {#each group.items as item}
               <Select.Item
                 value={item.value}
                 label={item.label}
-                class="relative flex w-full cursor-default select-none items-center rounded py-2 pl-3 pr-8 text-sm outline-none data-highlighted:bg-muted data-highlighted:text-foreground data-disabled:pointer-events-none data-disabled:opacity-50"
+                class="relative flex w-full cursor-default select-none items-center rounded-md py-2 pl-3 pr-8 text-sm font-medium text-foreground outline-none data-highlighted:bg-gradient-to-b data-highlighted:from-btn-primary-from data-highlighted:to-btn-primary-to data-highlighted:text-white data-highlighted:shadow-btn-primary data-disabled:pointer-events-none data-disabled:opacity-50"
               >
                 {#snippet children({ selected })}
                   <span class="absolute right-2 flex h-3.5 w-3.5 items-center justify-center">
