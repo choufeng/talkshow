@@ -96,13 +96,13 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-<div class="rounded-lg border border-border bg-background-alt p-5 mb-4">
+<div class="rounded-xl border border-border bg-background-alt p-6 mb-5">
   <div>
-    <h4 class="text-sm font-semibold text-foreground m-0">{label}</h4>
-    <p class="text-[13px] text-foreground-alt m-0 mt-1">{description}</p>
+    <h4 class="text-base font-semibold text-foreground m-0">{label}</h4>
+    <p class="text-sm text-foreground-alt m-0 mt-1">{description}</p>
   </div>
-  <div class="flex items-center gap-3 mt-3">
-    <div class="rounded-md px-4 py-2 font-mono text-sm min-w-[120px] text-center {isRecording ? 'bg-accent text-accent-foreground' : 'bg-muted text-foreground'}">
+  <div class="flex items-center gap-3 mt-4">
+    <div class="rounded-md px-5 py-2.5 font-mono text-base min-w-[130px] text-center {isRecording ? 'bg-accent text-accent-foreground' : 'bg-muted text-foreground'}">
       {#if isRecording}
         请按下快捷键...
       {:else}
@@ -111,14 +111,14 @@
     </div>
     {#if isRecording}
       <button
-        class="inline-flex items-center justify-center rounded-md border border-accent-foreground bg-accent-foreground px-4 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent-foreground/90"
+        class="inline-flex items-center justify-center rounded-md border border-accent-foreground bg-accent-foreground px-5 py-2.5 text-sm font-medium text-accent transition-colors hover:bg-accent-foreground/90"
         onclick={cancelRecording}
       >
         取消
       </button>
     {:else}
       <button
-        class="inline-flex items-center justify-center rounded-md border border-border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted hover:border-foreground/20"
+        class="inline-flex items-center justify-center rounded-md border border-border-input bg-background px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted hover:border-foreground/20"
         onclick={startRecording}
       >
         修改
@@ -126,6 +126,6 @@
     {/if}
   </div>
   {#if error}
-    <p class="text-xs text-destructive m-0 mt-2">{error}</p>
+    <p class="text-sm text-destructive m-0 mt-2">{error}</p>
   {/if}
 </div>
