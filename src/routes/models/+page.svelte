@@ -6,7 +6,7 @@
   import Dialog from '$lib/components/ui/dialog/index.svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { listen } from '@tauri-apps/api/event';
-  import { Plus, RotateCcw } from 'lucide-svelte';
+  import { Plus, RotateCcw, Mic, Languages } from 'lucide-svelte';
   import type { ProviderConfig, AppConfig, ModelConfig, ModelVerified } from '$lib/stores/config';
   import { SENSEVOICE_LANGUAGES } from '$lib/stores/config';
 
@@ -433,7 +433,7 @@
 
   <section class="mb-10">
     <!-- 共享标题栏 -->
-    <div class="rounded-t-xl border border-border border-b-0 bg-gray-100 p-4 flex justify-between items-center">
+    <div class="rounded-t-xl border border-border border-b-0 bg-muted p-4 flex justify-between items-center">
       <span class="text-sm font-semibold text-foreground">AI 服务</span>
       <span class="text-xs text-muted-foreground">配置转写和翻译功能</span>
     </div>
@@ -443,8 +443,8 @@
       <!-- 左侧卡片：AI 转写 -->
       <div class="flex-1 p-5 border-r border-border">
         <div class="flex items-center gap-2 mb-4">
-          <div class="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center">
-            <span class="text-base">🎙️</span>
+          <div class="w-8 h-8 bg-accent/10 rounded-lg flex items-center justify-center">
+            <Mic class="w-4 h-4 text-accent-foreground" />
           </div>
           <div>
             <div class="text-sm font-semibold text-foreground">AI 转写</div>
@@ -493,8 +493,8 @@
       <!-- 右侧卡片：AI 翻译 -->
       <div class="flex-1 p-5">
         <div class="flex items-center gap-2 mb-4">
-          <div class="w-8 h-8 bg-orange-50 rounded-lg flex items-center justify-center">
-            <span class="text-base">🌐</span>
+          <div class="w-8 h-8 bg-accent/10 rounded-lg flex items-center justify-center">
+            <Languages class="w-4 h-4 text-accent-foreground" />
           </div>
           <div>
             <div class="text-sm font-semibold text-foreground">AI 翻译</div>
@@ -515,7 +515,7 @@
           </select>
         </div>
         
-        <div class="p-3 bg-gray-50 rounded-lg border border-dashed border-gray-200">
+        <div class="p-3 bg-muted rounded-lg border border-dashed border-border">
           <div class="text-xs text-muted-foreground mb-1">翻译模型</div>
           <div class="text-sm text-muted-foreground">复用润色模型：{$config.features.transcription.polish_model || '未配置'}</div>
           <div class="text-xs text-muted-foreground/70 mt-1">启用润色后，翻译将使用相同的模型</div>
