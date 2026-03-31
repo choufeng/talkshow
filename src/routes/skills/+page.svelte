@@ -1,11 +1,10 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { config } from '$lib/stores/config';
-  import GroupedSelect from '$lib/components/ui/select/index.svelte';
   import Dialog from '$lib/components/ui/dialog/index.svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { Plus, Pencil, Trash2 } from 'lucide-svelte';
-  import type { Skill, SkillsConfig, AppConfig, ProviderConfig, ModelConfig } from '$lib/stores/config';
+  import type { Skill, AppConfig } from '$lib/stores/config';
 
   let showEditDialog = $state(false);
   let showDeleteConfirm = $state(false);
@@ -38,52 +37,6 @@
       features: {
         ...$config.features,
         skills: { ...$config.features.skills, skills: newSkills }
-      }
-    };
-    config.save(newConfig);
-  }
-
-  function buildProviderGroups() {
-    return ($config.ai.providers || [])
-      .filter((p: ProviderConfig) => p.type !== 'sensevoice')
-      .map((p: ProviderConfig) => ({
-        label: p.name,
-        items: [{ value: p.id, label: p.name }]
-      }));
-  }
-
-  function buildModelGroups() {
-    const providerId = $config.features.skills.provider_id;
-    const provider = ($config.ai.providers || []).find((p: ProviderConfig) => p.id === providerId);
-    if (!provider) return [];
-    return [{
-      label: provider.name,
-      items: (provider.models || []).map((m: ModelConfig) => ({
-        value: m.name,
-        label: m.name
-      }))
-    }];
-  }
-
-  function handleProviderChange(providerId: string) {
-    const provider = ($config.ai.providers || []).find((p: ProviderConfig) => p.id === providerId);
-    const firstModel = provider?.models?.[0]?.name || '';
-    const newConfig: AppConfig = {
-      ...$config,
-      features: {
-        ...$config.features,
-        skills: { ...$config.features.skills, provider_id: providerId, model: firstModel }
-      }
-    };
-    config.save(newConfig);
-  }
-
-  function handleModelChange(model: string) {
-    const newConfig: AppConfig = {
-      ...$config,
-      features: {
-        ...$config.features,
-        skills: { ...$config.features.skills, model }
       }
     };
     config.save(newConfig);
@@ -183,32 +136,6 @@
         >
           <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out {$config.features.skills.enabled ? 'translate-x-5' : 'translate-x-0'}"></span>
         </button>
-      </div>
-    </div>
-  </section>
-
-  <section class="mb-10">
-    <div class="text-xs text-muted-foreground uppercase tracking-wider mb-3">LLM 服务</div>
-    <div class="rounded-xl border border-border bg-background-alt p-5">
-      <div class="grid grid-cols-2 gap-4">
-        <div>
-          <label class="block text-sm text-foreground-alt mb-1.5">Provider</label>
-          <GroupedSelect
-            value={$config.features.skills.provider_id}
-            groups={buildProviderGroups()}
-            placeholder="选择 Provider"
-            onChange={handleProviderChange}
-          />
-        </div>
-        <div>
-          <label class="block text-sm text-foreground-alt mb-1.5">Model</label>
-          <GroupedSelect
-            value={$config.features.skills.model}
-            groups={buildModelGroups()}
-            placeholder="选择模型"
-            onChange={handleModelChange}
-          />
-        </div>
       </div>
     </div>
   </section>
