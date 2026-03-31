@@ -242,6 +242,8 @@ fn stop_recording(
                                 })));
 
                                 let skills_start = Instant::now();
+                                let selected_text = clipboard::get_saved_selected_text();
+                                let selected_text_ref = selected_text.as_deref();
                                 let mut final_text = skills::process_with_skills(
                                     &logger,
                                     &skills_config,
@@ -249,6 +251,7 @@ fn stop_recording(
                                     &skills_providers,
                                     &text,
                                     &h.state::<VertexClientState>().client,
+                                    selected_text_ref,
                                 )
                                 .await
                                 .unwrap_or_else(|e| {

@@ -47,6 +47,7 @@ fn assemble_skills_prompt(
     transcription: &str,
     app_name: &str,
     bundle_id: &str,
+    selected_text: Option<&str>,
 ) -> (String, String) {
     let mut system_prompt = String::from(
         "你是一个语音转文字的文本处理助手。请根据以下规则处理用户的输入文本。\n\n",
@@ -56,6 +57,12 @@ fn assemble_skills_prompt(
         "当前用户正在使用的应用是：{} ({})\n",
         app_name, bundle_id
     ));
+    if let Some(selected) = selected_text {
+        system_prompt.push_str(&format!(
+            "用户选中了以下文字，准备用语音替换它。请在处理转写结果时考虑这个上下文，使替换后的文本自然衔接。\n选中的原文：「{}」\n",
+            selected
+        ));
+    }
     system_prompt.push_str("请仅应用与当前场景相关的规则，跳过不适用的规则。");
 
     for skill in skills {
@@ -76,6 +83,7 @@ pub async fn process_with_skills(
     providers: &[ProviderConfig],
     transcription: &str,
     vertex_cache: &VertexClientCache,
+    selected_text: Option<&str>,
 ) -> Result<String, String> {
     if !skills_config.enabled {
         return Ok(transcription.to_string());
@@ -128,7 +136,7 @@ pub async fn process_with_skills(
 
     let skills_owned: Vec<Skill> = enabled_skills.into_iter().cloned().collect();
     let (system_prompt, user_message) =
-        assemble_skills_prompt(&skills_owned, transcription, &app_name, &bundle_id);
+        assemble_skills_prompt(&skills_owned, transcription, &app_name, &bundle_id, selected_text);
 
     let provider = match providers
         .iter()
