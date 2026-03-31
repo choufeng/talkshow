@@ -442,8 +442,8 @@
     <div class="flex flex-col sm:flex-row border border-border rounded-b-xl bg-background-alt overflow-hidden ai-service-container">
       <!-- 左侧卡片：AI 转写 -->
       <div class="flex-1 p-5 border-r border-border">
-        <div class="flex items-center gap-2 mb-4">
-          <div class="w-8 h-8 bg-accent/10 rounded-lg flex items-center justify-center">
+        <div class="flex items-center gap-3 mb-5">
+          <div class="w-9 h-9 bg-accent/10 rounded-lg flex items-center justify-center">
             <Mic class="w-4 h-4 text-accent-foreground" />
           </div>
           <div>
@@ -452,7 +452,7 @@
           </div>
         </div>
         
-        <div class="mb-4">
+        <div class="mb-5">
           <label class="block text-sm text-foreground-alt mb-1.5">转写模型</label>
           <GroupedSelect
             value={getTranscriptionValue()}
@@ -462,7 +462,7 @@
           />
         </div>
 
-        <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center justify-between mb-5">
           <div>
             <div class="text-[15px] font-semibold text-foreground">启用润色</div>
             <div class="text-sm text-foreground-alt">转写后自动使用 LLM 润色文字</div>
@@ -492,8 +492,8 @@
       
       <!-- 右侧卡片：AI 翻译 -->
       <div class="flex-1 p-5">
-        <div class="flex items-center gap-2 mb-4">
-          <div class="w-8 h-8 bg-accent/10 rounded-lg flex items-center justify-center">
+        <div class="flex items-center gap-3 mb-5">
+          <div class="w-9 h-9 bg-accent/10 rounded-lg flex items-center justify-center">
             <Languages class="w-4 h-4 text-accent-foreground" />
           </div>
           <div>
@@ -502,7 +502,7 @@
           </div>
         </div>
         
-        <div class="mb-4">
+        <div class="mb-5">
           <label class="block text-sm text-foreground-alt mb-1.5">目标语言</label>
           <select
             class="flex h-9 w-full rounded-md border border-border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20"
