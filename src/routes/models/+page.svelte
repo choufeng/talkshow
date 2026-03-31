@@ -421,9 +421,11 @@
   <h2 class="text-2xl font-semibold text-foreground m-0 mb-8">模型</h2>
 
   <section class="mb-10">
-    <div class="text-xs text-muted-foreground uppercase tracking-wider mb-3">转写服务</div>
     <div class="rounded-xl border border-border bg-background-alt p-5">
-      <div class="flex flex-col gap-5">
+      <div class="text-sm font-semibold text-foreground mb-4">AI 服务</div>
+      <div class="mb-5">
+        <div class="text-xs text-muted-foreground uppercase tracking-wider mb-3">转写服务</div>
+        <div class="flex flex-col gap-5">
         <div>
           <label class="block text-sm text-foreground-alt mb-1.5">转写模型</label>
           <GroupedSelect
@@ -460,6 +462,7 @@
           />
         </div>
         {/if}
+        </div>
       </div>
     </div>
   </section>
@@ -578,13 +581,13 @@
                   {@const verified = model.verified}
                   {@const testing = isTesting(provider.id, model.name)}
                   <span
-                    class="inline-flex items-center gap-1 rounded px-2.5 py-1 text-[11px] text-accent-foreground cursor-pointer select-none
+                    class="inline-flex items-center gap-1 rounded px-2.5 py-1 text-[11px] text-accent-foreground {provider.type !== 'sensevoice' ? 'cursor-pointer' : 'cursor-default'} select-none
                       {verified?.status === 'ok' ? 'bg-green-500/15 border border-green-500/30' : ''}
                       {verified?.status === 'error' ? 'bg-red-500/15 border border-red-500/30' : ''}
                       {!verified && !testing ? 'bg-accent' : ''}
                       {testing ? 'bg-accent animate-pulse' : ''}"
-                    title={verified ? `${verified.status === 'ok' ? '验证通过' : '验证失败'}${verified.latency_ms ? ' · ' + verified.latency_ms + 'ms' : ''}${verified.message ? ' · ' + verified.message : ''}` : '点击测试'}
-                    onclick={() => testModel(provider.id, model.name)}
+                    title={provider.type === 'sensevoice' ? '' : verified ? `${verified.status === 'ok' ? '验证通过' : '验证失败'}${verified.latency_ms ? ' · ' + verified.latency_ms + 'ms' : ''}${verified.message ? ' · ' + verified.message : ''}` : '点击测试'}
+                    onclick={() => { if (provider.type !== 'sensevoice') testModel(provider.id, model.name); }}
                   >
                     {model.name}
                     {#if model.capabilities?.includes('transcription')}
@@ -599,15 +602,18 @@
                       <span class="text-red-500 text-[10px]">✕</span>
                       <span class="text-[9px] text-red-500/70">{formatTestDate(verified.tested_at)}</span>
                     {/if}
+                    {#if provider.type !== 'sensevoice'}
                     <button
                       class="opacity-60 hover:opacity-100 transition-opacity"
                       onclick={(e) => { e.stopPropagation(); handleRemoveModel(provider.id, model.name); }}
                     >
                       ✕
                     </button>
+                    {/if}
                   </span>
                 {/each}
               </div>
+              {#if provider.type !== 'sensevoice'}
               <div class="flex items-center gap-1.5">
                 <button
                   class="text-xs text-accent-foreground hover:underline"
@@ -624,6 +630,7 @@
                   ⟳ 测试全部
                 </button>
               </div>
+              {/if}
             </div>
           </div>
         </div>
