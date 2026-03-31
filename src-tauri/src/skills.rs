@@ -154,7 +154,7 @@ pub async fn process_with_skills(
 
     let result = tokio::time::timeout(
         std::time::Duration::from_secs(timeout_secs),
-        crate::ai::send_text_prompt(logger, &full_prompt, &transcription_config.polish_model, provider, vertex_cache),
+        crate::ai::send_text_prompt(logger, &full_prompt, &transcription_config.polish_model, provider, vertex_cache, crate::ai::ThinkingMode::Disabled),
     )
     .await;
 

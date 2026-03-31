@@ -543,7 +543,7 @@ async fn test_model_connectivity(
     let start = Instant::now();
     let vertex_cache = app_handle.state::<VertexClientState>().client.clone();
     let result = if provider.provider_type == "vertex" {
-        ai::send_text_prompt(&logger, "Hi", &model_name, &provider, &vertex_cache).await
+        ai::send_text_prompt(&logger, "Hi", &model_name, &provider, &vertex_cache, ai::ThinkingMode::Disabled).await
     } else if is_transcription {
         let test_audio: &[u8] = include_bytes!("../assets/test.wav");
         ai::send_audio_prompt_from_bytes(
@@ -557,7 +557,7 @@ async fn test_model_connectivity(
         )
         .await
     } else {
-        ai::send_text_prompt(&logger, "Hi", &model_name, &provider, &vertex_cache).await
+        ai::send_text_prompt(&logger, "Hi", &model_name, &provider, &vertex_cache, ai::ThinkingMode::Disabled).await
     };
     let latency = start.elapsed().as_millis() as u64;
 
