@@ -35,12 +35,32 @@ export interface TranscriptionConfig {
   polish_model: string;
 }
 
+export interface TranslationConfig {
+  target_lang: string;
+}
+
+export const TRANSLATE_LANGUAGES = [
+  'English',
+  '中文',
+  '日本語',
+  '한국어',
+  'Français',
+  'Deutsch',
+  'Español',
+  'Português',
+  'Italiano',
+  'Русский',
+  'العربية',
+  'हिन्दी',
+];
+
 export interface Skill {
   id: string;
   name: string;
   description: string;
   prompt: string;
   builtin: boolean;
+  editable: boolean;
   enabled: boolean;
 }
 
@@ -51,12 +71,14 @@ export interface SkillsConfig {
 
 export interface FeaturesConfig {
   transcription: TranscriptionConfig;
+  translation: TranslationConfig;
   skills: SkillsConfig;
 }
 
 export interface AppConfig {
   shortcut: string;
   recording_shortcut: string;
+  translate_shortcut: string;
   ai: AiConfig;
   features: FeaturesConfig;
 }
@@ -125,6 +147,7 @@ function createConfigStore() {
   const { subscribe, set, update } = writable<AppConfig>({
     shortcut: 'Control+Shift+Quote',
     recording_shortcut: 'Control+Backslash',
+    translate_shortcut: 'Control+Shift+T',
     ai: {
       providers: BUILTIN_PROVIDERS.map((p) => ({ ...p }))
     },
@@ -135,6 +158,9 @@ function createConfigStore() {
         polish_enabled: true,
         polish_provider_id: '',
         polish_model: ''
+      },
+      translation: {
+        target_lang: 'English'
       },
       skills: {
         enabled: true,
@@ -156,14 +182,16 @@ function createConfigStore() {
         console.error('Failed to load config:', error);
       }
     },
-    updateShortcut: async (type: 'toggle' | 'recording', shortcut: string) => {
+    updateShortcut: async (type: 'toggle' | 'recording' | 'translate', shortcut: string) => {
       try {
         await invoke('update_shortcut', { shortcutType: type, shortcut });
         update(config => {
           if (type === 'toggle') {
             return { ...config, shortcut };
-          } else {
+          } else if (type === 'recording') {
             return { ...config, recording_shortcut: shortcut };
+          } else {
+            return { ...config, translate_shortcut: shortcut };
           }
         });
       } catch (error) {
