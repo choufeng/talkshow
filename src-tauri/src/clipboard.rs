@@ -19,10 +19,13 @@ pub fn get_saved_selected_text() -> Option<String> {
     SELECTED_TEXT.lock().ok().and_then(|g| g.clone())
 }
 
-pub fn clear_selected_text() {
-    if let Ok(mut guard) = SELECTED_TEXT.lock() {
-        *guard = None;
-    }
+#[tauri::command]
+pub fn get_replace_mode_state() -> serde_json::Value {
+    let text = SELECTED_TEXT.lock().ok().and_then(|g| g.clone());
+    serde_json::json!({
+        "replaceMode": text.is_some(),
+        "selectedPreview": text.map(|t| t.chars().take(50).collect::<String>()).unwrap_or_default()
+    })
 }
 
 pub fn write_and_paste(text: &str) -> Result<(), String> {
@@ -57,26 +60,33 @@ fn simulate_paste() {
 }
 
 #[cfg(target_os = "macos")]
-pub fn detect_selected_text(app_name: &str) -> Option<String> {
-    let output = std::process::Command::new("osascript")
+pub fn detect_selected_text(_app_name: &str) -> Option<String> {
+    let original_clipboard = arboard::Clipboard::new()
+        .ok()
+        .and_then(|mut cb| cb.get_text().ok());
+
+    let _ = std::process::Command::new("osascript")
         .arg("-e")
-        .arg(format!(
-            "tell application \"{}\" to get selection",
-            app_name
-        ))
-        .output()
-        .ok()?;
+        .arg("tell application \"System Events\" to keystroke \"c\" using command down")
+        .output();
 
-    if !output.status.success() {
-        return None;
+    std::thread::sleep(std::time::Duration::from_millis(50));
+
+    let copied = arboard::Clipboard::new()
+        .ok()
+        .and_then(|mut cb| cb.get_text().ok());
+
+    if let Some(ref original) = original_clipboard {
+        if let Ok(mut cb) = arboard::Clipboard::new() {
+            let _ = cb.set_text(original);
+        }
     }
 
-    let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if text.is_empty() {
-        return None;
+    match (original_clipboard, copied) {
+        (Some(ref orig), Some(ref new)) if orig != new => Some(new.clone()),
+        (None, Some(new)) if !new.is_empty() => Some(new),
+        _ => None,
     }
-
-    Some(text)
 }
 
 #[cfg(not(target_os = "macos"))]

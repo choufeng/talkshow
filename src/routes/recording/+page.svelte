@@ -1,5 +1,6 @@
 <script lang="ts">
   import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
 
   const appWindow = getCurrentWindow();
@@ -13,6 +14,17 @@
   let replaceMode = $state(false);
   let selectedPreview = $state("");
   let closeTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  async function fetchReplaceModeState() {
+    try {
+      const state = await invoke<{ replaceMode: boolean; selectedPreview: string }>("get_replace_mode_state");
+      replaceMode = state.replaceMode;
+      selectedPreview = state.selectedPreview;
+    } catch {
+    }
+  }
+
+  fetchReplaceModeState();
 
   function formatTime(totalSeconds: number): string {
     const mins = Math.floor(totalSeconds / 60);
@@ -70,12 +82,6 @@
       unsubs.push(
         await listen("indicator:done", scheduleClose),
       );
-      unsubs.push(
-        await listen<{ text: string }>("indicator:replace-mode", (event) => {
-          replaceMode = true;
-          selectedPreview = event.payload.text;
-        }),
-      );
       unsubs.push(await listen("indicator:error", () => appWindow.close()));
     })();
 
@@ -102,9 +108,6 @@
       </svg>
       <span class="timer">{formatTime(seconds)}</span>
       <span class="rec-label">REC</span>
-        {#if replaceMode && selectedPreview}
-          <span class="selected-preview">{selectedPreview}</span>
-        {/if}
     </div>
   {:else}
     <div class="status">
@@ -236,17 +239,6 @@
     font-size: 8px;
     color: var(--accent-text-shadow);
     letter-spacing: 2px;
-  }
-
-  .selected-preview {
-    font-family: -apple-system, BlinkMacSystemFont, "SF Mono", "Menlo", "Consolas", monospace;
-    font-size: 9px;
-    color: var(--accent-text-shadow);
-    max-width: 40px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    flex-shrink: 1;
   }
 
   .indicator.processing {

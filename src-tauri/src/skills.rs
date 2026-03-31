@@ -50,7 +50,7 @@ fn assemble_skills_prompt(
     selected_text: Option<&str>,
 ) -> (String, String) {
     let mut system_prompt = String::from(
-        "你是一个语音转文字的文本处理助手。请根据以下规则处理用户的输入文本。\n\n",
+        "你是一个语音转文字的文本处理助手。请根据以下规则处理用户的输入文本。\n\n基础规则：\n1. 如果输入是短内容（如单词、短语、简短回答）或非完整句子，不要添加句尾标点符号。只有当输入明显构成完整句子时才添加标点。\n2. 当输入包含多种语言（如中英文混用）时，保留各语言的原文表达，不要尝试翻译或统一为某一种语言。\n",
     );
 
     system_prompt.push_str(&format!(

@@ -410,10 +410,14 @@ fn restore_default_tray(app_handle: &tauri::AppHandle, default_icon: Image) {
 
 const INDICATOR_LABEL: &str = "recording-indicator";
 
-fn show_indicator(app_handle: &tauri::AppHandle) {
+fn show_indicator(app_handle: &tauri::AppHandle, selected_text: Option<&str>) {
+    let payload = serde_json::json!({
+        "replaceMode": selected_text.is_some(),
+        "selectedPreview": selected_text.map(|t| t.chars().take(50).collect::<String>()).unwrap_or_default()
+    });
     let existing = app_handle.get_webview_window(INDICATOR_LABEL);
     if existing.is_some() {
-        let _ = app_handle.emit_to(INDICATOR_LABEL, "indicator:recording", ());
+        let _ = app_handle.emit_to(INDICATOR_LABEL, "indicator:recording", &payload);
         return;
     }
 
@@ -434,10 +438,12 @@ fn show_indicator(app_handle: &tauri::AppHandle) {
         None => (620.0, 700.0),
     };
 
+    let url = "/recording";
+
     let window = WebviewWindowBuilder::new(
         app_handle,
         INDICATOR_LABEL,
-        tauri::WebviewUrl::App("/recording".into()),
+        tauri::WebviewUrl::App(url.into()),
     )
     .inner_size(180.0, 48.0)
     .position(x, y)
@@ -455,7 +461,7 @@ fn show_indicator(app_handle: &tauri::AppHandle) {
     match window {
         Ok(w) => {
             let _ = w.show();
-            let _ = app_handle.emit_to(INDICATOR_LABEL, "indicator:recording", ());
+            let _ = app_handle.emit_to(INDICATOR_LABEL, "indicator:recording", &payload);
         }
         Err(e) => {
             eprintln!("Failed to create indicator window: {}", e);
@@ -802,7 +808,8 @@ pub fn run() {
             sensevoice::download_sensevoice_model,
             sensevoice::delete_sensevoice_model,
             logger::get_log_sessions,
-            logger::get_log_content
+            logger::get_log_content,
+            clipboard::get_replace_mode_state
         ])
         .setup(|app| {
             let app_data_dir = app.path().app_data_dir().unwrap_or_default();
@@ -1026,16 +1033,9 @@ pub fn run() {
                                         if let Some(ref app) = frontmost {
                                             clipboard::save_target_app(app);
                                         }
-                                        let selected_text = if let Some(ref app) = frontmost {
-                                            clipboard::detect_selected_text(app)
-                                        } else {
-                                            None
-                                        };
+                                        let selected_text = clipboard::detect_selected_text(frontmost.as_deref().unwrap_or(""));
                                         if let Some(ref text) = selected_text {
                                             clipboard::save_selected_text(text);
-                                            let _ = app_handle.emit("indicator:replace-mode", serde_json::json!({
-                                                "text": text.chars().take(50).collect::<String>()
-                                            }));
                                             if let Some(logger) = app_handle.try_state::<Logger>() {
                                                 logger.info("recording", "检测到选中文本，进入替换模式", Some(serde_json::json!({
                                                     "selected_length": text.len(),
@@ -1044,7 +1044,7 @@ pub fn run() {
                                             }
                                         }
                                         play_sound("Ping.aiff");
-                                        show_indicator(&app_handle);
+                                        show_indicator(&app_handle, selected_text.as_deref());
                                         if let Some(mw) = app_handle.get_webview_window("main") {
                                             if mw.is_visible().unwrap_or(false) {
                                                 let _ = mw.hide();
@@ -1139,7 +1139,7 @@ pub fn run() {
                                             clipboard::save_target_app(app);
                                         }
                                         play_sound("Ping.aiff");
-                                        show_indicator(&app_handle);
+                                        show_indicator(&app_handle, None);
                                         if let Some(mw) = app_handle.get_webview_window("main") {
                                             if mw.is_visible().unwrap_or(false) {
                                                 let _ = mw.hide();
