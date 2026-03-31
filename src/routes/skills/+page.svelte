@@ -128,12 +128,12 @@
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2.5">
               <button
-                class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-2 {skill.enabled ? 'bg-accent-foreground' : 'bg-border'}"
+                class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-2 {skill.enabled ? 'bg-gradient-to-b from-btn-primary-from to-btn-primary-to shadow-btn-primary' : 'bg-gradient-to-b from-toggle-off-from to-toggle-off-to shadow-btn-secondary'}"
                 role="switch"
                 aria-checked={skill.enabled}
                 onclick={() => handleSkillToggle(skill.id, !skill.enabled)}
               >
-                <span class="pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out {skill.enabled ? 'translate-x-4' : 'translate-x-0'}"></span>
+                <span class="pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full bg-gradient-to-b from-toggle-thumb-from to-toggle-thumb-to shadow ring-0 transition duration-200 ease-in-out {skill.enabled ? 'translate-x-4' : 'translate-x-0'}"></span>
               </button>
               <div>
                 <div class="flex items-center gap-1.5">
@@ -147,7 +147,7 @@
             </div>
             <div class="flex items-center gap-1">
               <button
-                class="rounded p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                class="rounded p-1.5 text-muted-foreground hover:text-foreground bg-gradient-to-b from-btn-secondary-from to-btn-secondary-to shadow-btn-secondary transition-colors"
                 onclick={() => openEditDialog(skill)}
                 title="编辑"
               >
@@ -155,7 +155,7 @@
               </button>
               {#if !skill.builtin}
                 <button
-                  class="rounded p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                  class="rounded p-1.5 text-muted-foreground hover:text-destructive bg-gradient-to-b from-btn-destructive-from/10 to-btn-destructive-to/10 shadow-btn-secondary transition-colors"
                   onclick={() => openDeleteConfirm(skill.id)}
                   title="删除"
                 >
@@ -215,14 +215,14 @@
     {#snippet footer()}
       <button
         type="button"
-        class="rounded-md border border-border px-4 py-2 text-sm text-foreground hover:bg-muted transition-colors"
+        class="rounded-md border border-btn-secondary-border bg-gradient-to-b from-btn-secondary-from to-btn-secondary-to px-4 py-2 text-sm text-accent-foreground hover:bg-muted transition-colors shadow-btn-secondary"
         onclick={() => handleEditDialogClose(false)}
       >
         取消
       </button>
       <button
         type="button"
-        class="rounded-md bg-foreground px-4 py-2 text-sm text-background hover:bg-foreground/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        class="rounded-md bg-gradient-to-b from-btn-primary-from to-btn-primary-to px-4 py-2 text-sm text-white hover:opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-btn-primary"
         onclick={handleSave}
         disabled={!canSave}
       >
@@ -240,14 +240,14 @@
     {#snippet footer()}
       <button
         type="button"
-        class="rounded-md border border-border px-4 py-2 text-sm text-foreground hover:bg-muted transition-colors"
+        class="rounded-md border border-btn-secondary-border bg-gradient-to-b from-btn-secondary-from to-btn-secondary-to px-4 py-2 text-sm text-accent-foreground hover:bg-muted transition-colors shadow-btn-secondary"
         onclick={() => handleDeleteDialogClose(false)}
       >
         取消
       </button>
       <button
         type="button"
-        class="rounded-md bg-destructive px-4 py-2 text-sm text-white hover:bg-destructive/90 transition-colors"
+        class="rounded-md bg-gradient-to-b from-btn-destructive-from to-btn-destructive-to px-4 py-2 text-sm text-white hover:opacity-90 transition-colors shadow-btn-destructive"
         onclick={confirmDelete}
       >
         删除
