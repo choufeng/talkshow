@@ -223,7 +223,7 @@
   }
 
   .indicator.processing {
-    width: 180px;
+    width: 160px;
   }
 
   .jellyfish {
