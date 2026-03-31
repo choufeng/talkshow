@@ -463,6 +463,7 @@ fn show_indicator(app_handle: &tauri::AppHandle, selected_text: Option<&str>) {
     .skip_taskbar(true)
     .visible(false)
     .focusable(false)
+    .accept_first_mouse(true)
     .build();
 
     match window {
