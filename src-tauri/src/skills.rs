@@ -97,11 +97,6 @@ pub async fn process_with_skills(
         return Ok(transcription.to_string());
     }
 
-    if !transcription_config.polish_enabled {
-        logger.info("skills", "润色功能未启用，跳过处理", None);
-        return Ok(transcription.to_string());
-    }
-
     if transcription_config.polish_provider_id.is_empty() || transcription_config.polish_model.is_empty() {
         logger.warn("skills", "Skills Provider 未配置，跳过处理", None);
         return Ok(transcription.to_string());
