@@ -799,6 +799,10 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            let window = app.get_webview_window("main").unwrap();
+            window.set_focus().unwrap();
+        }))
         .invoke_handler(tauri::generate_handler![
             get_config,
             update_shortcut,
