@@ -20,6 +20,7 @@ use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut,
 const TRAY_ID: &str = "main";
 
 static RECORDING: AtomicBool = AtomicBool::new(false);
+static CANCELLED: AtomicBool = AtomicBool::new(false);
 static LAST_REC_PRESS: Mutex<Option<Instant>> = Mutex::new(None);
 
 struct SenseVoiceState {
@@ -146,6 +147,7 @@ fn stop_recording(
                     let skills_config = app_config.features.skills.clone();
                     let skills_providers = app_config.ai.providers.clone();
                     let h = app_handle.clone();
+                    CANCELLED.store(false, Ordering::Relaxed);
                     tauri::async_runtime::spawn(async move {
                         let pipeline_start = Instant::now();
                         let _ = config_elapsed;
@@ -164,9 +166,23 @@ fn stop_recording(
                                     lg.error("ai", "未找到配置的 AI 提供商", None);
                                 }
                                 destroy_indicator(&h);
+                                if !RECORDING.load(Ordering::Relaxed) {
+                                    let _ = h.global_shortcut().unregister(Shortcut::new(None, Code::Escape));
+                                }
                                 return;
                             }
                         };
+
+                        if CANCELLED.load(Ordering::Relaxed) {
+                            if let Some(lg) = h.try_state::<Logger>() {
+                                lg.info("pipeline", "流水线已取消 (AI请求前)", None);
+                            }
+                            destroy_indicator(&h);
+                            if !RECORDING.load(Ordering::Relaxed) {
+                                let _ = h.global_shortcut().unregister(Shortcut::new(None, Code::Escape));
+                            }
+                            return;
+                        }
 
                         if let Some(lg) = h.try_state::<Logger>() {
                             lg.info("ai", "开始发送 AI 转写请求", Some(serde_json::json!({
@@ -233,6 +249,15 @@ fn stop_recording(
                                 });
                                 let skills_elapsed = skills_start.elapsed().as_millis();
 
+                                if CANCELLED.load(Ordering::Relaxed) {
+                                    logger.info("pipeline", "流水线已取消", None);
+                                    destroy_indicator(&h);
+                                    if !RECORDING.load(Ordering::Relaxed) {
+                                        let _ = h.global_shortcut().unregister(Shortcut::new(None, Code::Escape));
+                                    }
+                                    return;
+                                }
+
                                 if RECORDING.load(Ordering::Relaxed) {
                                     logger.info("ai", "录音已重新开始，丢弃当前 AI 结果", None);
                                     return;
@@ -253,11 +278,17 @@ fn stop_recording(
                                             "clipboard_ms": clipboard_elapsed,
                                         })));
                                         emit_indicator(&h, "indicator:done");
+                                        if !RECORDING.load(Ordering::Relaxed) {
+                                            let _ = h.global_shortcut().unregister(Shortcut::new(None, Code::Escape));
+                                        }
                                     }
                                     Err(e) => {
                                         logger.error("clipboard", "剪贴板写入/粘贴失败", Some(serde_json::json!({ "error": e })));
                                         show_notification(&h, "剪贴板写入失败", &e);
                                         destroy_indicator(&h);
+                                        if !RECORDING.load(Ordering::Relaxed) {
+                                            let _ = h.global_shortcut().unregister(Shortcut::new(None, Code::Escape));
+                                        }
                                     }
                                 }
                             }
@@ -268,6 +299,9 @@ fn stop_recording(
                                 })));
                                 show_notification(&h, "AI 处理失败", &e);
                                 destroy_indicator(&h);
+                                if !RECORDING.load(Ordering::Relaxed) {
+                                    let _ = h.global_shortcut().unregister(Shortcut::new(None, Code::Escape));
+                                }
                             }
                         }
                     });
@@ -783,16 +817,17 @@ pub fn run() {
                             &recording_start_cancel,
                             "recording:cancel",
                         );
-                        play_sound("Pop.aiff");
-                        let h = app_handle_cancel.clone();
-                        let esc = esc_cancel.clone();
-                        std::thread::spawn(move || {
-                            let _ = h.global_shortcut().unregister(esc);
-                        });
-                        restore_default_tray(&app_handle_cancel, default_icon_cancel.clone());
                     } else {
-                        destroy_indicator(&app_handle_cancel);
+                        CANCELLED.store(true, Ordering::Relaxed);
                     }
+                    destroy_indicator(&app_handle_cancel);
+                    play_sound("Pop.aiff");
+                    let h = app_handle_cancel.clone();
+                    let esc = esc_cancel.clone();
+                    std::thread::spawn(move || {
+                        let _ = h.global_shortcut().unregister(esc);
+                    });
+                    restore_default_tray(&app_handle_cancel, default_icon_cancel.clone());
                 });
             }
 
@@ -822,13 +857,19 @@ pub fn run() {
                                     "recording:cancel",
                                 );
                                 play_sound("Pop.aiff");
-                                let h = app_handle.clone();
-                                let esc = esc_shortcut_handler.clone();
-                                std::thread::spawn(move || {
-                                    let _ = h.global_shortcut().unregister(esc);
-                                });
-                                restore_default_tray(&app_handle, default_icon_owned.clone());
+                            } else if app_handle.get_webview_window(INDICATOR_LABEL).is_some() {
+                                CANCELLED.store(true, Ordering::Relaxed);
+                                destroy_indicator(&app_handle);
+                                play_sound("Pop.aiff");
+                            } else {
+                                return;
                             }
+                            let h = app_handle.clone();
+                            let esc = esc_shortcut_handler.clone();
+                            std::thread::spawn(move || {
+                                let _ = h.global_shortcut().unregister(esc);
+                            });
+                            restore_default_tray(&app_handle, default_icon_owned.clone());
                             return;
                         }
 
@@ -859,11 +900,6 @@ pub fn run() {
                                     "recording:complete",
                                 );
                                 play_sound("Submarine.aiff");
-                                let h = app_handle.clone();
-                                let esc = esc_shortcut_handler.clone();
-                                std::thread::spawn(move || {
-                                    let _ = h.global_shortcut().unregister(esc);
-                                });
                                 restore_default_tray(&app_handle, default_icon_owned.clone());
                             } else {
                                 let start_result =
