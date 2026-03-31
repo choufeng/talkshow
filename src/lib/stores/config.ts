@@ -133,8 +133,8 @@ function createConfigStore() {
         provider_id: 'vertex',
         model: 'gemini-2.0-flash',
         polish_enabled: true,
-        polish_provider_id: '',
-        polish_model: ''
+        polish_provider_id: 'vertex',
+        polish_model: 'gemini-2.0-flash'
       },
       skills: {
         enabled: true,
