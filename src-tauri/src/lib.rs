@@ -5,6 +5,7 @@ mod logger;
 mod recording;
 mod sensevoice;
 mod skills;
+mod audio_control;
 mod translation;
 
 use logger::Logger;
