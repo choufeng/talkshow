@@ -72,6 +72,7 @@ fn assemble_skills_prompt(
 pub async fn process_with_skills(
     logger: &Logger,
     skills_config: &SkillsConfig,
+    transcription_config: &crate::config::TranscriptionConfig,
     providers: &[ProviderConfig],
     transcription: &str,
     vertex_cache: &VertexClientCache,
@@ -96,7 +97,12 @@ pub async fn process_with_skills(
         return Ok(transcription.to_string());
     }
 
-    if skills_config.provider_id.is_empty() || skills_config.model.is_empty() {
+    if !transcription_config.polish_enabled {
+        logger.info("skills", "润色功能未启用，跳过处理", None);
+        return Ok(transcription.to_string());
+    }
+
+    if transcription_config.polish_provider_id.is_empty() || transcription_config.polish_model.is_empty() {
         logger.warn("skills", "Skills Provider 未配置，跳过处理", None);
         return Ok(transcription.to_string());
     }
@@ -131,7 +137,7 @@ pub async fn process_with_skills(
 
     let provider = match providers
         .iter()
-        .find(|p| p.id == skills_config.provider_id)
+        .find(|p| p.id == transcription_config.polish_provider_id)
     {
         Some(p) => p,
         None => {
@@ -139,7 +145,7 @@ pub async fn process_with_skills(
                 "skills",
                 "未找到 Skills Provider，回退原始文字",
                 Some(serde_json::json!({
-                    "provider_id": skills_config.provider_id,
+                    "provider_id": transcription_config.polish_provider_id,
                 })),
             );
             return Ok(transcription.to_string());
@@ -153,7 +159,7 @@ pub async fn process_with_skills(
 
     let result = tokio::time::timeout(
         std::time::Duration::from_secs(timeout_secs),
-        crate::ai::send_text_prompt(logger, &full_prompt, &skills_config.model, provider, vertex_cache),
+        crate::ai::send_text_prompt(logger, &full_prompt, &transcription_config.polish_model, provider, vertex_cache),
     )
     .await;
 

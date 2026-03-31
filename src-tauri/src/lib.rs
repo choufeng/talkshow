@@ -238,6 +238,7 @@ fn stop_recording(
                                 let final_text = skills::process_with_skills(
                                     &logger,
                                     &skills_config,
+                                    &app_config.features.transcription,
                                     &skills_providers,
                                     &text,
                                     &h.state::<VertexClientState>().client,

@@ -117,6 +117,9 @@ pub struct AiConfig {
 pub struct TranscriptionConfig {
     pub provider_id: String,
     pub model: String,
+    pub polish_enabled: bool,
+    pub polish_provider_id: String,
+    pub polish_model: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Default)]
@@ -135,8 +138,6 @@ pub struct Skill {
 pub struct SkillsConfig {
     pub enabled: bool,
     pub skills: Vec<Skill>,
-    pub provider_id: String,
-    pub model: String,
 }
 
 impl Default for SkillsConfig {
@@ -177,8 +178,6 @@ impl Default for SkillsConfig {
                     enabled: false,
                 },
             ],
-            provider_id: String::new(),
-            model: String::new(),
         }
     }
 }
@@ -211,6 +210,9 @@ impl Default for AppConfig {
                 transcription: TranscriptionConfig {
                     provider_id: "vertex".to_string(),
                     model: "gemini-2.0-flash".to_string(),
+                    polish_enabled: true,
+                    polish_provider_id: String::new(),
+                    polish_model: String::new(),
                 },
                 skills: SkillsConfig::default(),
             },
