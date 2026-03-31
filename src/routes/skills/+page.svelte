@@ -131,6 +131,7 @@
                 class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-2 {skill.enabled ? 'bg-gradient-to-b from-btn-primary-from to-btn-primary-to shadow-btn-primary' : 'bg-gradient-to-b from-toggle-off-from to-toggle-off-to shadow-btn-secondary'}"
                 role="switch"
                 aria-checked={skill.enabled}
+                aria-label="启用 {skill.name}"
                 onclick={() => handleSkillToggle(skill.id, !skill.enabled)}
               >
                 <span class="pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full bg-gradient-to-b from-toggle-thumb-from to-toggle-thumb-to shadow ring-0 transition duration-200 ease-in-out {skill.enabled ? 'translate-x-4' : 'translate-x-0'}"></span>

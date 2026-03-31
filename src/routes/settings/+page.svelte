@@ -69,6 +69,7 @@
         </div>
         <button
           class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors {$config.features?.recording?.auto_mute ? 'bg-btn-primary-to' : 'bg-border'}"
+          aria-label="录音时自动静音"
           onclick={() => {
             const recording = $config.features?.recording ?? { auto_mute: false };
             const newConfig = {
