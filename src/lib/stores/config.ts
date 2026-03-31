@@ -62,7 +62,8 @@ export interface AppConfig {
 }
 
 export const MODEL_CAPABILITIES = [
-  { value: 'transcription', label: '语音转文字' }
+  { value: 'transcription', label: '语音转文字' },
+  { value: 'chat', label: '文本对话' }
 ];
 
 export const BUILTIN_PROVIDERS: ProviderConfig[] = [
@@ -71,7 +72,7 @@ export const BUILTIN_PROVIDERS: ProviderConfig[] = [
     type: 'vertex',
     name: 'Vertex AI',
     endpoint: '',
-    models: [{ name: 'gemini-2.0-flash', capabilities: ['transcription'] }]
+    models: [{ name: 'gemini-2.0-flash', capabilities: ['transcription', 'chat'] }]
   },
   {
     id: 'dashscope',
