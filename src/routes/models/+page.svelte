@@ -107,7 +107,7 @@
       ...$config,
       features: {
         ...$config.features,
-        transcription: { provider_id: providerId, model }
+        transcription: { provider_id: providerId, model, polish_enabled: $config.features.transcription.polish_enabled, polish_provider_id: $config.features.transcription.polish_provider_id, polish_model: $config.features.transcription.polish_model }
       }
     };
     config.save(newConfig);
