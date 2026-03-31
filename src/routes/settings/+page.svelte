@@ -58,7 +58,7 @@
         {#each THEME_OPTIONS as opt}
           {@const Icon = opt.icon}
           <button
-            class="flex-1 flex items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-sm transition-colors {$theme === opt.value ? 'border-accent-foreground bg-accent/50 text-accent-foreground font-medium' : 'border-border bg-background text-foreground hover:bg-muted/50'}"
+            class="flex-1 flex items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-sm transition-colors {$theme === opt.value ? 'border-btn-primary-to bg-gradient-to-b from-btn-primary-from to-btn-primary-to text-white font-medium shadow-btn-primary' : 'border-border bg-gradient-to-b from-btn-secondary-from to-btn-secondary-to text-foreground hover:bg-muted/50 shadow-btn-secondary'}"
             onclick={() => theme.set(opt.value)}
           >
             <Icon size={16} class="shrink-0" />
