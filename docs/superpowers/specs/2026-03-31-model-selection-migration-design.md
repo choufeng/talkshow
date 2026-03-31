@@ -105,10 +105,52 @@ pub struct SkillsConfig {
 }
 ```
 
-#### 2. Skills 调用逻辑 (`src-tauri/src/skills.rs`)
+#### 2. 主流程调用 (`src-tauri/src/lib.rs`)
 
-- Skills 处理管线使用润色模型配置（`polish_provider_id` 和 `polish_model`）
-- 当 `polish_enabled` 为 false 时，跳过 Skills 处理
+**当前逻辑** (`lib.rs:137-148`)：
+```rust
+let transcription = &app_config.features.transcription;
+let provider = app_config.ai.providers.iter()
+    .find(|p| p.id == transcription.provider_id).cloned();
+let model_name = transcription.model.clone();
+let skills_config = app_config.features.skills.clone();
+let skills_providers = app_config.ai.providers.clone();
+```
+
+**变更后**：
+- 转写仍用 `transcription.provider_id` 和 `transcription.model`（不变）
+- 润色改用 `transcription.polish_provider_id` 和 `transcription.polish_model`
+- 将 `transcription` 传给 `process_with_skills()`，而非仅 `skills_config`
+- 当 `transcription.polish_enabled` 为 false 时，跳过 Skills 处理
+
+#### 3. Skills 处理逻辑 (`src-tauri/src/skills.rs`)
+
+**函数签名变更**：
+```rust
+// 之前
+pub async fn process_with_skills(
+    logger: &Logger,
+    skills_config: &SkillsConfig,
+    providers: &[ProviderConfig],
+    transcription: &str,
+    vertex_cache: &VertexClientCache,
+)
+
+// 之后
+pub async fn process_with_skills(
+    logger: &Logger,
+    transcription_config: &TranscriptionConfig,  // 改为传入完整 TranscriptionConfig
+    skills_config: &SkillsConfig,
+    providers: &[ProviderConfig],
+    transcription: &str,
+    vertex_cache: &VertexClientCache,
+)
+```
+
+**内部逻辑变更**：
+- 使用 `transcription_config.polish_provider_id` 和 `transcription_config.polish_model` 查找 LLM
+- 使用 `transcription_config.polish_enabled` 判断是否启用润色
+- 移除对 `skills_config.provider_id` 和 `skills_config.model` 的引用
 
 ## 数据迁移
 
@@ -134,5 +176,18 @@ pub struct SkillsConfig {
 ## 影响范围
 
 - 前端：`config.ts`, `models/+page.svelte`, `skills/+page.svelte`
-- 后端：`config.rs`, `skills.rs`
+- 后端：`config.rs`, `skills.rs`, `lib.rs`
 - 数据：配置文件格式变更，需要迁移逻辑
+
+## 调用链影响分析
+
+**当前流程**：
+1. `lib.rs` 从 `transcription` 获取转写模型 → 调用 AI 转写
+2. `lib.rs` 从 `skills_config` 获取润色模型 → 调用 `process_with_skills()`
+3. `skills.rs` 使用 `skills_config.provider_id/model` 查找 LLM
+
+**变更后流程**：
+1. `lib.rs` 从 `transcription` 获取转写模型 → 调用 AI 转写（不变）
+2. `lib.rs` 从 `transcription` 获取润色模型 → 调用 `process_with_skills()`
+3. `skills.rs` 使用 `transcription_config.polish_provider_id/model` 查找 LLM
+4. `skills.rs` 使用 `transcription_config.polish_enabled` 判断是否跳过润色
