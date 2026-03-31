@@ -435,6 +435,7 @@
           </button>
         </div>
 
+        {#if $config.features.transcription.polish_enabled}
         <div>
           <label class="block text-sm text-foreground-alt mb-1.5">润色模型</label>
           <GroupedSelect
@@ -444,6 +445,7 @@
             onChange={handlePolishChange}
           />
         </div>
+        {/if}
       </div>
     </div>
   </section>
