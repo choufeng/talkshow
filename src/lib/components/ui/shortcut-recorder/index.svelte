@@ -11,7 +11,7 @@
   let { label, description, value, onUpdate }: Props = $props();
 
   let isRecording = $state(false);
-  let currentValue = $state(value);
+  let currentValue = $state<string>(value);
   let error = $state<string | null>(null);
 
   $effect(() => {

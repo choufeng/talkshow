@@ -6,9 +6,11 @@
     placeholder?: string;
     mode?: 'password' | 'text';
     onChange: (value: string) => void;
+    'aria-labelledby'?: string;
+    'aria-label'?: string;
   }
 
-  let { value, placeholder = '', mode = 'password', onChange }: Props = $props();
+  let { value, placeholder = '', mode = 'password', onChange, 'aria-labelledby': ariaLabelledby, 'aria-label': ariaLabel }: Props = $props();
 
   let visible = $state(false);
   let editing = $state(false);
@@ -67,6 +69,8 @@
     <div
       role="button"
       tabindex="0"
+      aria-labelledby={ariaLabelledby}
+      aria-label={ariaLabel}
       class="flex h-10 min-w-0 flex-1 items-center truncate rounded-md border border-border-input bg-background px-4 text-body text-muted-foreground cursor-pointer select-none hover:bg-muted/50 transition-colors"
       onclick={startEdit}
       onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') startEdit(); }}

@@ -453,9 +453,10 @@
         </div>
         
         <div class="mb-5">
-          <label class="block text-body text-foreground-alt mb-1.5">转写模型</label>
+          <span class="block text-body text-foreground-alt mb-1.5">转写模型</span>
           <GroupedSelect
             value={getTranscriptionValue()}
+            aria-label="转写模型"
             groups={buildTranscriptionGroups()}
             placeholder="选择模型"
             onChange={handleTranscriptionChange}
@@ -471,6 +472,7 @@
             class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-2 {$config.features.transcription.polish_enabled ? 'bg-gradient-to-b from-btn-primary-from to-btn-primary-to shadow-btn-primary' : 'bg-gradient-to-b from-toggle-off-from to-toggle-off-to shadow-btn-secondary'}"
             role="switch"
             aria-checked={$config.features.transcription.polish_enabled}
+            aria-label="启用润色"
             onclick={() => handlePolishEnabled(!$config.features.transcription.polish_enabled)}
           >
             <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-gradient-to-b from-toggle-thumb-from to-toggle-thumb-to shadow ring-0 transition duration-200 ease-in-out {$config.features.transcription.polish_enabled ? 'translate-x-5' : 'translate-x-0'}"></span>
@@ -479,9 +481,10 @@
 
         {#if $config.features.transcription.polish_enabled}
         <div>
-          <label class="block text-body text-foreground-alt mb-1.5">润色模型</label>
+          <span class="block text-body text-foreground-alt mb-1.5">润色模型</span>
           <GroupedSelect
             value={getPolishValue()}
+            aria-label="润色模型"
             groups={buildPolishGroups()}
             placeholder="选择模型"
             onChange={handlePolishChange}
@@ -503,8 +506,9 @@
         </div>
         
         <div class="mb-5">
-          <label class="block text-body text-foreground-alt mb-1.5">目标语言</label>
+          <label for="target-lang-select" class="block text-body text-foreground-alt mb-1.5">目标语言</label>
           <select
+            id="target-lang-select"
             class="flex h-9 w-full rounded-md border border-border-input bg-background px-3 py-2 text-body ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20"
             value={$config.features.translation?.target_lang || 'English'}
             onchange={(e) => handleTargetLangChange((e.target as HTMLSelectElement).value)}
@@ -554,7 +558,7 @@
 
           {#if provider.type === 'sensevoice'}
             <div class="mb-3">
-              <label class="block text-body text-foreground-alt mb-1">模型状态</label>
+              <div aria-label="模型状态" class="block text-body text-foreground-alt mb-1">模型状态</div>
               <div class="text-[11px] bg-background rounded-md border border-border p-2 space-y-1">
                 {#if sensevoiceStatus?.status === 'ready'}
                   <div class="flex items-center justify-between">
@@ -586,9 +590,10 @@ class="text-caption text-accent-foreground hover:underline"
               </div>
             </div>
             <div class="mb-3">
-              <label class="block text-body text-foreground-alt mb-1">转写语言</label>
+              <label for="sensevoice-lang-select" class="block text-body text-foreground-alt mb-1">转写语言</label>
               <select
-class="flex h-9 w-full rounded-md border border-border-input bg-background px-3 py-2 text-body ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20"
+                id="sensevoice-lang-select"
+                class="flex h-9 w-full rounded-md border border-border-input bg-background px-3 py-2 text-body ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20"
                 bind:value={sensevoiceLanguage}
               >
                 {#each SENSEVOICE_LANGUAGES as lang}
@@ -600,9 +605,10 @@ class="flex h-9 w-full rounded-md border border-border-input bg-background px-3 
 
           {#if needsApiKey(provider)}
             <div class="mb-3">
-              <label class="block text-body text-foreground-alt mb-1">API Key</label>
+              <span class="block text-body text-foreground-alt mb-1">API Key</span>
               <EditableField
                 value={provider.api_key || ''}
+                aria-label="API Key"
                 placeholder="sk-..."
                 mode="password"
                 onChange={(val: string) => handleApiKeyChange(provider.id, val)}
@@ -612,7 +618,7 @@ class="flex h-9 w-full rounded-md border border-border-input bg-background px-3 
 
           {#if provider.type === 'vertex'}
             <div class="mb-3">
-              <label class="block text-body text-foreground-alt mb-1">Vertex AI 配置</label>
+              <div aria-label="Vertex AI 配置" class="block text-body text-foreground-alt mb-1">Vertex AI 配置</div>
               <div class="text-[11px] text-muted-foreground space-y-0.5 bg-background rounded-md border border-border p-2">
                 <div>GOOGLE_CLOUD_PROJECT: <span class="text-foreground">{vertexEnvInfo?.project || '未设置'}</span></div>
                 <div>GOOGLE_CLOUD_LOCATION: <span class="text-foreground">{vertexEnvInfo?.location || 'global'}</span></div>
@@ -621,9 +627,10 @@ class="flex h-9 w-full rounded-md border border-border-input bg-background px-3 
             </div>
           {:else if provider.type !== 'sensevoice'}
             <div class="mb-3">
-              <label class="block text-body text-foreground-alt mb-1">Endpoint</label>
+              <span class="block text-body text-foreground-alt mb-1">Endpoint</span>
               <EditableField
                 value={provider.endpoint}
+                aria-label="Endpoint"
                 placeholder="https://api.example.com/v1"
                 mode="text"
                 onChange={(val: string) => handleProviderFieldChange(provider.id, 'endpoint', val)}
@@ -632,13 +639,15 @@ class="flex h-9 w-full rounded-md border border-border-input bg-background px-3 
           {/if}
 
           <div>
-            <label class="block text-body text-foreground-alt mb-1">Models</label>
+            <div class="block text-body text-foreground-alt mb-1">Models</div>
             <div class="mt-1">
               <div class="flex flex-wrap gap-1 mb-1">
                 {#each provider.models || [] as model (model.name)}
                   {@const verified = model.verified}
                   {@const testing = isTesting(provider.id, model.name)}
-                  <span
+                  <div
+                    role="button"
+                    tabindex="0"
                     class="inline-flex items-center gap-1 rounded px-2.5 py-1 text-[11px] text-accent-foreground {provider.type !== 'sensevoice' ? 'cursor-pointer' : 'cursor-default'} select-none
                       {verified?.status === 'ok' ? 'bg-green-500/15 border border-green-500/30' : ''}
                       {verified?.status === 'error' ? 'bg-red-500/15 border border-red-500/30' : ''}
@@ -646,6 +655,7 @@ class="flex h-9 w-full rounded-md border border-border-input bg-background px-3 
                       {testing ? 'bg-accent animate-pulse' : ''}"
                     title={provider.type === 'sensevoice' ? '' : verified ? `${verified.status === 'ok' ? '验证通过' : '验证失败'}${verified.latency_ms ? ' · ' + verified.latency_ms + 'ms' : ''}${verified.message ? ' · ' + verified.message : ''}` : '点击测试'}
                     onclick={() => { if (provider.type !== 'sensevoice') testModel(provider.id, model.name); }}
+                    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (provider.type !== 'sensevoice') testModel(provider.id, model.name); } }}
                   >
                     {model.name}
                     {#if model.capabilities?.includes('transcription')}
@@ -662,13 +672,14 @@ class="flex h-9 w-full rounded-md border border-border-input bg-background px-3 
                     {/if}
                     {#if provider.type !== 'sensevoice'}
                     <button
+                      type="button"
                       class="opacity-60 hover:opacity-100 transition-opacity"
                       onclick={(e) => { e.stopPropagation(); handleRemoveModel(provider.id, model.name); }}
                     >
                       ✕
                     </button>
                     {/if}
-                  </span>
+                  </div>
                 {/each}
               </div>
               {#if provider.type !== 'sensevoice'}

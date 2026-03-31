@@ -7,6 +7,8 @@ mod sensevoice;
 mod skills;
 mod audio_control;
 mod translation;
+#[cfg(target_os = "macos")]
+mod macos;
 
 use logger::Logger;
 use recording::AudioRecorder;
@@ -463,10 +465,18 @@ fn show_indicator(app_handle: &tauri::AppHandle, selected_text: Option<&str>) {
     .skip_taskbar(true)
     .visible(false)
     .focusable(false)
+    .accept_first_mouse(true)
     .build();
 
     match window {
         Ok(w) => {
+            #[cfg(target_os = "macos")]
+            {
+                if let Err(e) = macos::floating_panel::make_window_nonactivating(&w) {
+                    eprintln!("Failed to make window nonactivating: {}", e);
+                }
+            }
+
             let _ = w.show();
             let _ = app_handle.emit_to(INDICATOR_LABEL, "indicator:recording", &payload);
         }
