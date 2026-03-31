@@ -439,7 +439,7 @@
     </div>
     
     <!-- 横向卡片容器 -->
-    <div class="flex border border-border rounded-b-xl bg-background-alt overflow-hidden">
+    <div class="flex flex-col sm:flex-row border border-border rounded-b-xl bg-background-alt overflow-hidden ai-service-container">
       <!-- 左侧卡片：AI 转写 -->
       <div class="flex-1 p-5 border-r border-border">
         <div class="flex items-center gap-2 mb-4">
@@ -912,3 +912,20 @@
     {/snippet}
   </Dialog>
 </div>
+
+<style>
+  @media (max-width: 640px) {
+    .ai-service-container {
+      flex-direction: column;
+    }
+    
+    .ai-service-container > div {
+      border-right: none;
+      border-bottom: 1px solid var(--border);
+    }
+    
+    .ai-service-container > div:last-child {
+      border-bottom: none;
+    }
+  }
+</style>
