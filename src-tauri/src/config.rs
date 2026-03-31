@@ -280,6 +280,42 @@ pub fn load_config(app_data_dir: &PathBuf) -> AppConfig {
             Ok(content) => {
                 let mut raw: serde_json::Value = serde_json::from_str(&content).unwrap_or_default();
                 migrate_models(&mut raw);
+
+                // 数据迁移：将 skills.provider_id/model 迁移到 transcription.polish_*
+                let migration_target = if let Some(features) = raw.get_mut("features") {
+                    if let Some(skills) = features.get_mut("skills") {
+                        let provider_id = skills
+                            .get("provider_id")
+                            .and_then(|v| v.as_str())
+                            .filter(|s| !s.is_empty())
+                            .map(String::from);
+                        let model = skills
+                            .get("model")
+                            .and_then(|v| v.as_str())
+                            .map(String::from);
+                        Some((provider_id, model))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
+                if let Some((Some(provider_id), model)) = migration_target {
+                    if let Some(features) = raw.get_mut("features") {
+                        if let Some(transcription) = features.get_mut("transcription") {
+                            if let Some(polish) = transcription.get_mut("polish_provider_id") {
+                                *polish = serde_json::json!(provider_id);
+                            }
+                            if let Some(polish) = transcription.get_mut("polish_model") {
+                                if let Some(model) = model {
+                                    *polish = serde_json::json!(model);
+                                }
+                            }
+                        }
+                    }
+                }
+
                 let mut config: AppConfig = serde_json::from_value(raw).unwrap_or_default();
                 config.ai.providers = merge_builtin_providers(config.ai.providers);
                 for provider in &mut config.ai.providers {
