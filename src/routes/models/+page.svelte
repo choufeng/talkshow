@@ -432,12 +432,27 @@
   <h2 class="text-2xl font-semibold text-foreground m-0 mb-8">模型</h2>
 
   <section class="mb-10">
-    <div class="rounded-xl border border-border bg-background-alt p-5">
-      <div class="text-sm font-semibold text-foreground mb-4">AI 服务</div>
-      <div class="mb-5">
-        <div class="text-xs text-muted-foreground uppercase tracking-wider mb-3">转写服务</div>
-        <div class="flex flex-col gap-5">
-        <div>
+    <!-- 共享标题栏 -->
+    <div class="rounded-t-xl border border-border border-b-0 bg-gray-100 p-4 flex justify-between items-center">
+      <span class="text-sm font-semibold text-foreground">AI 服务</span>
+      <span class="text-xs text-muted-foreground">配置转写和翻译功能</span>
+    </div>
+    
+    <!-- 横向卡片容器 -->
+    <div class="flex border border-border rounded-b-xl bg-background-alt overflow-hidden">
+      <!-- 左侧卡片：AI 转写 -->
+      <div class="flex-1 p-5 border-r border-border">
+        <div class="flex items-center gap-2 mb-4">
+          <div class="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center">
+            <span class="text-base">🎙️</span>
+          </div>
+          <div>
+            <div class="text-sm font-semibold text-foreground">AI 转写</div>
+            <div class="text-xs text-muted-foreground">语音转文字 + 润色</div>
+          </div>
+        </div>
+        
+        <div class="mb-4">
           <label class="block text-sm text-foreground-alt mb-1.5">转写模型</label>
           <GroupedSelect
             value={getTranscriptionValue()}
@@ -447,7 +462,7 @@
           />
         </div>
 
-        <div class="flex items-center justify-between">
+        <div class="flex items-center justify-between mb-4">
           <div>
             <div class="text-[15px] font-semibold text-foreground">启用润色</div>
             <div class="text-sm text-foreground-alt">转写后自动使用 LLM 润色文字</div>
@@ -473,24 +488,37 @@
           />
         </div>
         {/if}
-        <div>
-          <div class="text-xs text-muted-foreground uppercase tracking-wider mb-3 mt-5">AI 翻译</div>
-          <div>
-            <label class="block text-sm text-foreground-alt mb-1.5">目标语言</label>
-            <select
-              class="flex h-9 w-full rounded-md border border-border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20"
-              value={$config.features.translation?.target_lang || 'English'}
-              onchange={(e) => handleTargetLangChange((e.target as HTMLSelectElement).value)}
-            >
-              {#each TRANSLATE_LANGUAGES as lang}
-                <option value={lang}>{lang}</option>
-              {/each}
-            </select>
+      </div>
+      
+      <!-- 右侧卡片：AI 翻译 -->
+      <div class="flex-1 p-5">
+        <div class="flex items-center gap-2 mb-4">
+          <div class="w-8 h-8 bg-orange-50 rounded-lg flex items-center justify-center">
+            <span class="text-base">🌐</span>
           </div>
-          <div class="text-xs text-muted-foreground mt-1.5">
-            翻译模型复用润色模型：{$config.features.transcription.polish_model || '未配置'}
+          <div>
+            <div class="text-sm font-semibold text-foreground">AI 翻译</div>
+            <div class="text-xs text-muted-foreground">实时翻译转写内容</div>
           </div>
         </div>
+        
+        <div class="mb-4">
+          <label class="block text-sm text-foreground-alt mb-1.5">目标语言</label>
+          <select
+            class="flex h-9 w-full rounded-md border border-border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20"
+            value={$config.features.translation?.target_lang || 'English'}
+            onchange={(e) => handleTargetLangChange((e.target as HTMLSelectElement).value)}
+          >
+            {#each TRANSLATE_LANGUAGES as lang}
+              <option value={lang}>{lang}</option>
+            {/each}
+          </select>
+        </div>
+        
+        <div class="p-3 bg-gray-50 rounded-lg border border-dashed border-gray-200">
+          <div class="text-xs text-muted-foreground mb-1">翻译模型</div>
+          <div class="text-sm text-muted-foreground">复用润色模型：{$config.features.transcription.polish_model || '未配置'}</div>
+          <div class="text-xs text-muted-foreground/70 mt-1">启用润色后，翻译将使用相同的模型</div>
         </div>
       </div>
     </div>
