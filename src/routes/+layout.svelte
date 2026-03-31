@@ -25,49 +25,50 @@
   {@render children()}
 {:else}
 <div class="flex h-screen w-screen overflow-hidden">
-  <aside class="w-40 bg-background-alt border-r border-border flex flex-col">
-    <div class="px-5 py-4 font-semibold text-sm text-foreground border-b border-border">
-      TalkShow
+  <aside class="w-52 bg-background-alt border-r border-border flex flex-col">
+    <div class="flex items-center gap-2.5 px-6 py-5 font-semibold text-base text-foreground border-b border-border">
+      <img src="/logo.svg" alt="TalkShow" class="w-6 h-6 shrink-0" />
+      <span>TalkShow</span>
     </div>
-    <nav class="py-2">
+    <nav class="py-3">
       <button
-        class="flex items-center gap-2 px-5 py-2.5 w-full text-sm text-foreground text-left transition-colors {activeMenu === 'home' ? 'bg-muted border-l-[3px] border-l-accent-foreground' : 'hover:bg-muted/50 border-l-[3px] border-l-transparent'}"
+        class="flex items-center gap-3 px-6 py-3 w-full text-[15px] text-foreground text-left transition-colors {activeMenu === 'home' ? 'bg-gradient-to-r from-btn-primary-from/15 to-btn-primary-from/5 border-l-[3px] border-l-accent-foreground font-medium shadow-[0_1px_3px_oklch(38%_0.1_160/0.1)]' : 'hover:bg-muted/50 border-l-[3px] border-l-transparent'}"
         onclick={() => navigateTo('/')}
       >
-        <House size={18} class="shrink-0" />
+        <House size={20} class="shrink-0" />
         <span>首页</span>
       </button>
       <button
-        class="flex items-center gap-2 px-5 py-2.5 w-full text-sm text-foreground text-left transition-colors {activeMenu === 'models' ? 'bg-muted border-l-[3px] border-l-accent-foreground' : 'hover:bg-muted/50 border-l-[3px] border-l-transparent'}"
+        class="flex items-center gap-3 px-6 py-3 w-full text-[15px] text-foreground text-left transition-colors {activeMenu === 'models' ? 'bg-gradient-to-r from-btn-primary-from/15 to-btn-primary-from/5 border-l-[3px] border-l-accent-foreground font-medium shadow-[0_1px_3px_oklch(38%_0.1_160/0.1)]' : 'hover:bg-muted/50 border-l-[3px] border-l-transparent'}"
         onclick={() => navigateTo('/models')}
       >
-        <Bot size={18} class="shrink-0" />
+        <Bot size={20} class="shrink-0" />
         <span>模型</span>
       </button>
       <button
-        class="flex items-center gap-2 px-5 py-2.5 w-full text-sm text-foreground text-left transition-colors {activeMenu === 'skills' ? 'bg-muted border-l-[3px] border-l-accent-foreground' : 'hover:bg-muted/50 border-l-[3px] border-l-transparent'}"
+        class="flex items-center gap-3 px-6 py-3 w-full text-[15px] text-foreground text-left transition-colors {activeMenu === 'skills' ? 'bg-gradient-to-r from-btn-primary-from/15 to-btn-primary-from/5 border-l-[3px] border-l-accent-foreground font-medium shadow-[0_1px_3px_oklch(38%_0.1_160/0.1)]' : 'hover:bg-muted/50 border-l-[3px] border-l-transparent'}"
         onclick={() => navigateTo('/skills')}
       >
-        <Sparkles size={18} class="shrink-0" />
+        <Sparkles size={20} class="shrink-0" />
         <span>技能</span>
       </button>
       <button
-        class="flex items-center gap-2 px-5 py-2.5 w-full text-sm text-foreground text-left transition-colors {activeMenu === 'settings' ? 'bg-muted border-l-[3px] border-l-accent-foreground' : 'hover:bg-muted/50 border-l-[3px] border-l-transparent'}"
+        class="flex items-center gap-3 px-6 py-3 w-full text-[15px] text-foreground text-left transition-colors {activeMenu === 'settings' ? 'bg-gradient-to-r from-btn-primary-from/15 to-btn-primary-from/5 border-l-[3px] border-l-accent-foreground font-medium shadow-[0_1px_3px_oklch(38%_0.1_160/0.1)]' : 'hover:bg-muted/50 border-l-[3px] border-l-transparent'}"
         onclick={() => navigateTo('/settings')}
       >
-        <Settings size={18} class="shrink-0" />
+        <Settings size={20} class="shrink-0" />
         <span>设置</span>
       </button>
       <button
-        class="flex items-center gap-2 px-5 py-2.5 w-full text-sm text-foreground text-left transition-colors {activeMenu === 'logs' ? 'bg-muted border-l-[3px] border-l-accent-foreground' : 'hover:bg-muted/50 border-l-[3px] border-l-transparent'}"
+        class="flex items-center gap-3 px-6 py-3 w-full text-[15px] text-foreground text-left transition-colors {activeMenu === 'logs' ? 'bg-gradient-to-r from-btn-primary-from/15 to-btn-primary-from/5 border-l-[3px] border-l-accent-foreground font-medium shadow-[0_1px_3px_oklch(38%_0.1_160/0.1)]' : 'hover:bg-muted/50 border-l-[3px] border-l-transparent'}"
         onclick={() => navigateTo('/logs')}
       >
-        <ScrollText size={18} class="shrink-0" />
+        <ScrollText size={20} class="shrink-0" />
         <span>日志</span>
       </button>
     </nav>
   </aside>
-  <main class="flex-1 p-6 overflow-y-auto bg-background">
+  <main class="flex-1 p-8 overflow-y-auto bg-background">
     {@render children()}
   </main>
 </div>

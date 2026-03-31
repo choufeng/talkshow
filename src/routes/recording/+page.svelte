@@ -223,7 +223,7 @@
   }
 
   .indicator.processing {
-    width: 180px;
+    width: 160px;
   }
 
   .jellyfish {
@@ -256,14 +256,16 @@
     border: none;
     border-radius: 50%;
     cursor: pointer;
-    background: transparent;
+    background: linear-gradient(to bottom, rgba(255,255,255,0.08), rgba(255,255,255,0.03));
     color: #64748b;
     transition: background 0.15s, color 0.15s;
     flex-shrink: 0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
   }
 
   .btn:hover {
-    background: rgba(255, 95, 87, 0.2);
+    background: linear-gradient(to bottom, rgba(255, 95, 87, 0.25), rgba(255, 95, 87, 0.15));
     color: #ff5f57;
+    box-shadow: 0 1px 4px rgba(255, 95, 87, 0.2);
   }
 </style>

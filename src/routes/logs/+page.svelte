@@ -149,18 +149,18 @@
 </script>
 
 <div class="max-w-[960px]">
-  <h2 class="text-xl font-semibold text-foreground m-0 mb-6">日志</h2>
+  <h2 class="text-2xl font-semibold text-foreground m-0 mb-8">日志</h2>
 
-  <div class="flex items-center gap-3 mb-4">
+  <div class="flex items-center gap-3 mb-5">
     <div class="flex gap-0.5 bg-muted rounded-md p-0.5">
       <button
-        class="px-3 py-1 rounded text-xs transition-colors {activeTab === 'current' ? 'bg-background text-foreground font-medium' : 'text-muted-foreground hover:text-foreground'}"
+        class="px-4 py-1.5 rounded text-sm transition-colors {activeTab === 'current' ? 'bg-background text-foreground font-medium' : 'text-muted-foreground hover:text-foreground'}"
         onclick={() => switchTab('current')}
       >
         当前会话
       </button>
       <button
-        class="px-3 py-1 rounded text-xs transition-colors {activeTab === 'history' ? 'bg-background text-foreground font-medium' : 'text-muted-foreground hover:text-foreground'}"
+        class="px-4 py-1.5 rounded text-sm transition-colors {activeTab === 'history' ? 'bg-background text-foreground font-medium' : 'text-muted-foreground hover:text-foreground'}"
         onclick={() => switchTab('history')}
       >
         历史记录
@@ -170,7 +170,7 @@
     <div class="flex gap-1">
       {#each MODULES as mod}
         <button
-          class="px-2.5 py-1 rounded text-[11px] transition-colors {selectedModule === mod ? 'bg-primary text-primary-foreground' : 'border border-border text-muted-foreground hover:text-foreground'}"
+          class="px-3 py-1.5 rounded text-xs transition-colors {selectedModule === mod ? 'bg-gradient-to-b from-btn-primary-from to-btn-primary-to text-white font-medium shadow-btn-primary' : 'border border-border text-muted-foreground hover:text-foreground'}"
           onclick={() => (selectedModule = mod)}
         >
           {mod === 'all' ? '全部' : mod}
@@ -179,11 +179,11 @@
     </div>
 
     {#if currentSession && activeTab === 'current'}
-      <span class="ml-auto text-[11px] text-muted-foreground">
+      <span class="ml-auto text-xs text-muted-foreground">
         {filteredEntries.length} 条日志
       </span>
       <button
-        class="px-2 py-0.5 rounded text-[11px] border border-border text-muted-foreground hover:text-foreground transition-colors"
+        class="px-3 py-1 rounded text-xs border border-btn-secondary-border bg-gradient-to-b from-btn-secondary-from to-btn-secondary-to text-accent-foreground hover:opacity-90 transition-colors shadow-btn-secondary"
         onclick={copyAll}
         disabled={copied}
       >
@@ -193,24 +193,24 @@
   </div>
 
   {#if activeTab === 'history' && !selectedSession}
-    <div class="space-y-1.5">
+    <div class="space-y-2">
       {#if sessions.length === 0}
-        <div class="text-sm text-muted-foreground py-8 text-center">暂无历史日志</div>
+        <div class="text-base text-muted-foreground py-12 text-center">暂无历史日志</div>
       {:else}
         {#each sessions as session}
           <button
-            class="w-full flex items-center gap-4 px-4 py-3 rounded-lg border border-border bg-background-alt text-left transition-colors hover:bg-muted/50"
+            class="w-full flex items-center gap-5 px-5 py-4 rounded-xl border border-border bg-background-alt text-left transition-colors hover:bg-muted/50"
             onclick={() => loadSessionLog(session.filename)}
           >
             <ScrollText size={16} class="shrink-0 text-muted-foreground" />
             <div class="flex-1 min-w-0">
-              <div class="text-sm text-foreground font-medium">
+              <div class="text-base text-foreground font-medium">
                 {formatSessionName(session.filename)}
                 {#if session.is_current}
-                  <span class="text-[10px] text-green-400 ml-2 font-normal">当前</span>
+                  <span class="text-[11px] text-green-400 ml-2 font-normal">当前</span>
                 {/if}
               </div>
-              <div class="text-[11px] text-muted-foreground mt-0.5">
+              <div class="text-sm text-muted-foreground mt-0.5">
                 {session.entry_count} 条 · {formatSize(session.size_bytes)}
               </div>
             </div>
@@ -220,21 +220,21 @@
     </div>
   {:else}
     {#if loading}
-      <div class="text-sm text-muted-foreground py-8 text-center">加载中...</div>
+      <div class="text-base text-muted-foreground py-12 text-center">加载中...</div>
     {:else if filteredEntries.length === 0}
-      <div class="text-sm text-muted-foreground py-8 text-center">暂无日志</div>
+      <div class="text-base text-muted-foreground py-12 text-center">暂无日志</div>
     {:else}
-      <div class="border border-border rounded-lg overflow-hidden">
-        <div class="max-h-[calc(100vh-200px)] overflow-y-auto font-mono text-xs">
+      <div class="border border-border rounded-xl overflow-hidden">
+        <div class="max-h-[calc(100vh-200px)] overflow-y-auto font-mono text-sm">
           {#each filteredEntries as entry, i}
-            <div class="flex gap-3 px-4 py-1.5 border-b border-border last:border-b-0 hover:bg-muted/30">
+            <div class="flex gap-3 px-5 py-2 border-b border-border last:border-b-0 hover:bg-muted/30">
               <span class="text-muted-foreground whitespace-nowrap shrink-0">{formatTimestamp(entry.ts)}</span>
               <span class="{levelColor(entry.level)} shrink-0 w-4 text-center">
                 {entry.level === 'error' ? '✕' : entry.level === 'warn' ? '!' : '·'}
               </span>
-              <span class="{MODULE_COLORS[entry.module] || 'text-muted-foreground'} shrink-0 w-24">{entry.module}</span>
+              <span class="{MODULE_COLORS[entry.module] || 'text-muted-foreground'} shrink-0 w-28">{entry.module}</span>
               <span class="{entry.level === 'error' ? 'text-red-400' : 'text-foreground'} truncate">{entry.msg}</span>
-              <span class="text-muted-foreground text-[10px] ml-auto whitespace-nowrap shrink-0">
+              <span class="text-muted-foreground text-[11px] ml-auto whitespace-nowrap shrink-0">
                 {metaSummary(entry.meta as Record<string, unknown> | undefined)}
               </span>
             </div>
@@ -244,7 +244,7 @@
 
       {#if activeTab === 'history' && selectedSession}
         <button
-          class="mt-3 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          class="mt-3 text-sm text-accent-foreground hover:opacity-80 transition-colors"
           onclick={() => { selectedSession = null; entries = []; }}
         >
           ← 返回历史列表

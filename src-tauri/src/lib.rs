@@ -20,6 +20,7 @@ use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut,
 const TRAY_ID: &str = "main";
 
 static RECORDING: AtomicBool = AtomicBool::new(false);
+static CANCELLED: AtomicBool = AtomicBool::new(false);
 static LAST_REC_PRESS: Mutex<Option<Instant>> = Mutex::new(None);
 
 struct SenseVoiceState {
@@ -146,6 +147,7 @@ fn stop_recording(
                     let skills_config = app_config.features.skills.clone();
                     let skills_providers = app_config.ai.providers.clone();
                     let h = app_handle.clone();
+                    CANCELLED.store(false, Ordering::Relaxed);
                     tauri::async_runtime::spawn(async move {
                         let pipeline_start = Instant::now();
                         let _ = config_elapsed;
@@ -164,9 +166,23 @@ fn stop_recording(
                                     lg.error("ai", "未找到配置的 AI 提供商", None);
                                 }
                                 destroy_indicator(&h);
+                                if !RECORDING.load(Ordering::Relaxed) {
+                                    let _ = h.global_shortcut().unregister(Shortcut::new(None, Code::Escape));
+                                }
                                 return;
                             }
                         };
+
+                        if CANCELLED.load(Ordering::Relaxed) {
+                            if let Some(lg) = h.try_state::<Logger>() {
+                                lg.info("pipeline", "流水线已取消 (AI请求前)", None);
+                            }
+                            destroy_indicator(&h);
+                            if !RECORDING.load(Ordering::Relaxed) {
+                                let _ = h.global_shortcut().unregister(Shortcut::new(None, Code::Escape));
+                            }
+                            return;
+                        }
 
                         if let Some(lg) = h.try_state::<Logger>() {
                             lg.info("ai", "开始发送 AI 转写请求", Some(serde_json::json!({
@@ -222,6 +238,7 @@ fn stop_recording(
                                 let final_text = skills::process_with_skills(
                                     &logger,
                                     &skills_config,
+                                    &app_config.features.transcription,
                                     &skills_providers,
                                     &text,
                                     &h.state::<VertexClientState>().client,
@@ -232,6 +249,15 @@ fn stop_recording(
                                     text
                                 });
                                 let skills_elapsed = skills_start.elapsed().as_millis();
+
+                                if CANCELLED.load(Ordering::Relaxed) {
+                                    logger.info("pipeline", "流水线已取消", None);
+                                    destroy_indicator(&h);
+                                    if !RECORDING.load(Ordering::Relaxed) {
+                                        let _ = h.global_shortcut().unregister(Shortcut::new(None, Code::Escape));
+                                    }
+                                    return;
+                                }
 
                                 if RECORDING.load(Ordering::Relaxed) {
                                     logger.info("ai", "录音已重新开始，丢弃当前 AI 结果", None);
@@ -253,11 +279,17 @@ fn stop_recording(
                                             "clipboard_ms": clipboard_elapsed,
                                         })));
                                         emit_indicator(&h, "indicator:done");
+                                        if !RECORDING.load(Ordering::Relaxed) {
+                                            let _ = h.global_shortcut().unregister(Shortcut::new(None, Code::Escape));
+                                        }
                                     }
                                     Err(e) => {
                                         logger.error("clipboard", "剪贴板写入/粘贴失败", Some(serde_json::json!({ "error": e })));
                                         show_notification(&h, "剪贴板写入失败", &e);
                                         destroy_indicator(&h);
+                                        if !RECORDING.load(Ordering::Relaxed) {
+                                            let _ = h.global_shortcut().unregister(Shortcut::new(None, Code::Escape));
+                                        }
                                     }
                                 }
                             }
@@ -268,6 +300,9 @@ fn stop_recording(
                                 })));
                                 show_notification(&h, "AI 处理失败", &e);
                                 destroy_indicator(&h);
+                                if !RECORDING.load(Ordering::Relaxed) {
+                                    let _ = h.global_shortcut().unregister(Shortcut::new(None, Code::Escape));
+                                }
                             }
                         }
                     });
@@ -281,6 +316,7 @@ fn stop_recording(
                     };
                     let _ = app_handle.emit("recording:cancel", cancelled);
                     destroy_indicator(app_handle);
+                    let _ = app_handle.global_shortcut().unregister(Shortcut::new(None, Code::Escape));
                 }
                 Err(e) => {
                     if let Some(ref lg) = logger {
@@ -288,12 +324,14 @@ fn stop_recording(
                     }
                     let _ = app_handle.emit("recording:error", e.to_string());
                     destroy_indicator(app_handle);
+                    let _ = app_handle.global_shortcut().unregister(Shortcut::new(None, Code::Escape));
                 }
                 }
             },
             Err(_) => {
                 let _ = app_handle.emit("recording:error", "Recording lock poisoned");
                 destroy_indicator(app_handle);
+                let _ = app_handle.global_shortcut().unregister(Shortcut::new(None, Code::Escape));
             }
         },
         "recording:cancel" => {
@@ -505,7 +543,7 @@ async fn test_model_connectivity(
     let start = Instant::now();
     let vertex_cache = app_handle.state::<VertexClientState>().client.clone();
     let result = if provider.provider_type == "vertex" {
-        ai::send_text_prompt(&logger, "Hi", &model_name, &provider, &vertex_cache).await
+        ai::send_text_prompt(&logger, "Hi", &model_name, &provider, &vertex_cache, ai::ThinkingMode::Disabled).await
     } else if is_transcription {
         let test_audio: &[u8] = include_bytes!("../assets/test.wav");
         ai::send_audio_prompt_from_bytes(
@@ -519,7 +557,7 @@ async fn test_model_connectivity(
         )
         .await
     } else {
-        ai::send_text_prompt(&logger, "Hi", &model_name, &provider, &vertex_cache).await
+        ai::send_text_prompt(&logger, "Hi", &model_name, &provider, &vertex_cache, ai::ThinkingMode::Disabled).await
     };
     let latency = start.elapsed().as_millis() as u64;
 
@@ -601,10 +639,22 @@ fn get_skills_config(app_handle: tauri::AppHandle) -> config::SkillsConfig {
 }
 
 #[tauri::command]
-fn save_skills_config(app_handle: tauri::AppHandle, skills_config: config::SkillsConfig) -> Result<(), String> {
+fn save_skills_config(app_handle: tauri::AppHandle, mut skills_config: config::SkillsConfig) -> Result<(), String> {
+    skills_config.enabled = true;
     let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
     let mut app_config = config::load_config(&app_data_dir);
     app_config.features.skills = skills_config;
+    config::save_config(&app_data_dir, &app_config)
+}
+
+#[tauri::command]
+fn save_transcription_config(
+    app_handle: tauri::AppHandle,
+    transcription: config::TranscriptionConfig,
+) -> Result<(), String> {
+    let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
+    let mut app_config = config::load_config(&app_data_dir);
+    app_config.features.transcription = transcription;
     config::save_config(&app_data_dir, &app_config)
 }
 
@@ -613,6 +663,7 @@ fn add_skill(app_handle: tauri::AppHandle, skill: config::Skill) -> Result<(), S
     let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
     let mut app_config = config::load_config(&app_data_dir);
     app_config.features.skills.skills.push(skill);
+    app_config.features.skills.enabled = true;
     config::save_config(&app_data_dir, &app_config)
 }
 
@@ -622,6 +673,7 @@ fn update_skill(app_handle: tauri::AppHandle, skill: config::Skill) -> Result<()
     let mut app_config = config::load_config(&app_data_dir);
     if let Some(existing) = app_config.features.skills.skills.iter_mut().find(|s| s.id == skill.id) {
         *existing = skill;
+        app_config.features.skills.enabled = true;
         config::save_config(&app_data_dir, &app_config)
     } else {
         Err(format!("Skill not found: {}", skill.id))
@@ -640,6 +692,7 @@ fn delete_skill(app_handle: tauri::AppHandle, skill_id: String) -> Result<(), St
         return Err("Cannot delete builtin skill".to_string());
     }
     app_config.features.skills.skills.retain(|s| s.id != skill_id);
+    app_config.features.skills.enabled = true;
     config::save_config(&app_data_dir, &app_config)
 }
 
@@ -679,6 +732,7 @@ pub fn run() {
             get_vertex_env_info,
             get_skills_config,
             save_skills_config,
+            save_transcription_config,
             add_skill,
             update_skill,
             delete_skill,
@@ -783,16 +837,17 @@ pub fn run() {
                             &recording_start_cancel,
                             "recording:cancel",
                         );
-                        play_sound("Pop.aiff");
-                        let h = app_handle_cancel.clone();
-                        let esc = esc_cancel.clone();
-                        std::thread::spawn(move || {
-                            let _ = h.global_shortcut().unregister(esc);
-                        });
-                        restore_default_tray(&app_handle_cancel, default_icon_cancel.clone());
                     } else {
-                        destroy_indicator(&app_handle_cancel);
+                        CANCELLED.store(true, Ordering::Relaxed);
                     }
+                    destroy_indicator(&app_handle_cancel);
+                    play_sound("Pop.aiff");
+                    let h = app_handle_cancel.clone();
+                    let esc = esc_cancel.clone();
+                    std::thread::spawn(move || {
+                        let _ = h.global_shortcut().unregister(esc);
+                    });
+                    restore_default_tray(&app_handle_cancel, default_icon_cancel.clone());
                 });
             }
 
@@ -822,13 +877,19 @@ pub fn run() {
                                     "recording:cancel",
                                 );
                                 play_sound("Pop.aiff");
-                                let h = app_handle.clone();
-                                let esc = esc_shortcut_handler.clone();
-                                std::thread::spawn(move || {
-                                    let _ = h.global_shortcut().unregister(esc);
-                                });
-                                restore_default_tray(&app_handle, default_icon_owned.clone());
+                            } else if app_handle.get_webview_window(INDICATOR_LABEL).is_some() {
+                                CANCELLED.store(true, Ordering::Relaxed);
+                                destroy_indicator(&app_handle);
+                                play_sound("Pop.aiff");
+                            } else {
+                                return;
                             }
+                            let h = app_handle.clone();
+                            let esc = esc_shortcut_handler.clone();
+                            std::thread::spawn(move || {
+                                let _ = h.global_shortcut().unregister(esc);
+                            });
+                            restore_default_tray(&app_handle, default_icon_owned.clone());
                             return;
                         }
 
@@ -859,11 +920,6 @@ pub fn run() {
                                     "recording:complete",
                                 );
                                 play_sound("Submarine.aiff");
-                                let h = app_handle.clone();
-                                let esc = esc_shortcut_handler.clone();
-                                std::thread::spawn(move || {
-                                    let _ = h.global_shortcut().unregister(esc);
-                                });
                                 restore_default_tray(&app_handle, default_icon_owned.clone());
                             } else {
                                 let start_result =
@@ -897,6 +953,11 @@ pub fn run() {
                                         }
                                         play_sound("Ping.aiff");
                                         show_indicator(&app_handle);
+                                        if let Some(mw) = app_handle.get_webview_window("main") {
+                                            if mw.is_visible().unwrap_or(false) {
+                                                let _ = mw.hide();
+                                            }
+                                        }
                                         if let Some(logger) = app_handle.try_state::<Logger>() {
                                             logger.info("recording", "录音开始", None);
                                         }

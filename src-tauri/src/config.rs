@@ -117,6 +117,9 @@ pub struct AiConfig {
 pub struct TranscriptionConfig {
     pub provider_id: String,
     pub model: String,
+    pub polish_enabled: bool,
+    pub polish_provider_id: String,
+    pub polish_model: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Default)]
@@ -135,8 +138,6 @@ pub struct Skill {
 pub struct SkillsConfig {
     pub enabled: bool,
     pub skills: Vec<Skill>,
-    pub provider_id: String,
-    pub model: String,
 }
 
 impl Default for SkillsConfig {
@@ -172,13 +173,11 @@ impl Default for SkillsConfig {
                     id: "builtin-formal".to_string(),
                     name: "书面格式化".to_string(),
                     description: "口语转书面表达，适合邮件和文档场景".to_string(),
-                    prompt: "将口语化的表达转换为规范的书面表达，适合邮件、文档、报告等正式场景。\n具体做法：\n- 将口语化的词汇替换为正式表达\n- 调整句子结构使其符合书面语法\n- 适当分段和添加标点\n- 保持原文的完整语义，不添加或删除信息".to_string(),
+                    prompt: "将口语化的表达转换为规范的书面表达，适合邮件、文档、报告等正式场景。\n\n具体做法：\n- 词汇替换：将口语化词汇替换为正式表达（如“搞定了”→“已完成”）\n- 列表结构化：将“第一/第二/第三”、“首先/其次/最后”、“一二三”等序列词转换为规范的有序列表格式\n- 段落重组：识别话题转换，合理分段；将碎片化短句合并为完整句子\n- 标点规范：统一使用全角标点，消除重复标点，合理使用冒号、分号等结构化标点\n- 句子结构：调整语序使其符合书面语法，消除冗余和重复表达\n- 层级关系：识别“总-分”、因果、递进等逻辑关系，用合适的连接词明确表达\n\n约束：\n- 保持原文的完整语义，不添加或删除信息\n- 输出纯文本，可使用 Markdown 列表格式\n- 不要添加解释性文字".to_string(),
                     builtin: true,
                     enabled: false,
                 },
             ],
-            provider_id: String::new(),
-            model: String::new(),
         }
     }
 }
@@ -211,6 +210,9 @@ impl Default for AppConfig {
                 transcription: TranscriptionConfig {
                     provider_id: "vertex".to_string(),
                     model: "gemini-2.0-flash".to_string(),
+                    polish_enabled: true,
+                    polish_provider_id: String::new(),
+                    polish_model: String::new(),
                 },
                 skills: SkillsConfig::default(),
             },
@@ -238,6 +240,35 @@ fn dedup_models(models: &mut Vec<ModelConfig>) {
         } else {
             seen.insert(models[i].name.clone(), i);
             i += 1;
+        }
+    }
+}
+
+fn migrate_builtin_skills(value: &mut serde_json::Value) {
+    if let Some(skills) = value
+        .get_mut("features")
+        .and_then(|f| f.get_mut("skills"))
+        .and_then(|s| s.get_mut("skills"))
+        .and_then(|s| s.as_array_mut())
+    {
+        let default_skills = SkillsConfig::default().skills;
+        for skill in skills.iter_mut() {
+            if let Some(id) = skill.get("id").and_then(|v| v.as_str()) {
+                if let Some(builtin) = skill.get("builtin").and_then(|v| v.as_bool()) {
+                    if builtin {
+                        if let Some(default) = default_skills.iter().find(|s| s.id == id) {
+                            if let Some(current_prompt) =
+                                skill.get("prompt").and_then(|v| v.as_str())
+                            {
+                                if current_prompt != default.prompt {
+                                    *skill.get_mut("prompt").unwrap() =
+                                        serde_json::json!(default.prompt);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -278,6 +309,43 @@ pub fn load_config(app_data_dir: &PathBuf) -> AppConfig {
             Ok(content) => {
                 let mut raw: serde_json::Value = serde_json::from_str(&content).unwrap_or_default();
                 migrate_models(&mut raw);
+                migrate_builtin_skills(&mut raw);
+
+                // 数据迁移：将 skills.provider_id/model 迁移到 transcription.polish_*
+                let migration_target = if let Some(features) = raw.get_mut("features") {
+                    if let Some(skills) = features.get_mut("skills") {
+                        let provider_id = skills
+                            .get("provider_id")
+                            .and_then(|v| v.as_str())
+                            .filter(|s| !s.is_empty())
+                            .map(String::from);
+                        let model = skills
+                            .get("model")
+                            .and_then(|v| v.as_str())
+                            .map(String::from);
+                        Some((provider_id, model))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
+                if let Some((Some(provider_id), model)) = migration_target {
+                    if let Some(features) = raw.get_mut("features") {
+                        if let Some(transcription) = features.get_mut("transcription") {
+                            if let Some(polish) = transcription.get_mut("polish_provider_id") {
+                                *polish = serde_json::json!(provider_id);
+                            }
+                            if let Some(polish) = transcription.get_mut("polish_model") {
+                                if let Some(model) = model {
+                                    *polish = serde_json::json!(model);
+                                }
+                            }
+                        }
+                    }
+                }
+
                 let mut config: AppConfig = serde_json::from_value(raw).unwrap_or_default();
                 config.ai.providers = merge_builtin_providers(config.ai.providers);
                 for provider in &mut config.ai.providers {

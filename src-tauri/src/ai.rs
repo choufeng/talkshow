@@ -21,6 +21,13 @@ pub enum AiError {
     RequestError(String),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ThinkingMode {
+    Default,
+    Enabled,
+    Disabled,
+}
+
 type VertexClientCache = Arc<Mutex<Option<rig_vertexai::Client>>>;
 
 fn get_or_create_vertex_client(
@@ -247,11 +254,12 @@ pub async fn send_text_prompt(
     model_name: &str,
     provider: &ProviderConfig,
     vertex_cache: &VertexClientCache,
+    thinking: ThinkingMode,
 ) -> Result<String, AiError> {
     match provider.provider_type.as_str() {
         "vertex" => {
             let client = get_or_create_vertex_client(logger, vertex_cache)?;
-            send_text_via_vertex(logger, &client, text_prompt, model_name).await
+            send_text_via_vertex(logger, &client, text_prompt, model_name, thinking).await
         }
         "openai-compatible" => {
             let api_key = provider
@@ -264,6 +272,7 @@ pub async fn send_text_prompt(
                 model_name,
                 api_key,
                 &provider.endpoint,
+                thinking,
             )
             .await
         }
@@ -279,6 +288,7 @@ async fn send_text_via_vertex(
     client: &rig_vertexai::Client,
     text_prompt: &str,
     model_name: &str,
+    _thinking: ThinkingMode,
 ) -> Result<String, AiError> {
     logger.info("ai", "准备发送 Vertex AI 文本请求", Some(serde_json::json!({
         "model": model_name,
@@ -324,7 +334,12 @@ async fn send_text_via_openai_compatible(
     model_name: &str,
     api_key: &str,
     base_url: &str,
+    thinking: ThinkingMode,
 ) -> Result<String, AiError> {
+    use std::time::Instant;
+
+    let t_start = Instant::now();
+
     let final_url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
     logger.info(
         "ai",
@@ -336,6 +351,7 @@ async fn send_text_via_openai_compatible(
         })),
     );
 
+    let t_before_client = Instant::now();
     let client = openai::CompletionsClient::builder()
         .api_key(api_key)
         .base_url(base_url)
@@ -348,7 +364,9 @@ async fn send_text_via_openai_compatible(
             );
             AiError::RequestError(format!("Client init failed: {}", e))
         })?;
+    let client_build_ms = t_before_client.elapsed().as_millis();
 
+    let t_before_model = Instant::now();
     let model = client.completion_model(model_name);
 
     let prompt_content = OneOrMany::one(UserContent::text(text_prompt.to_string()));
@@ -356,7 +374,20 @@ async fn send_text_via_openai_compatible(
         content: prompt_content,
     };
 
-    let request = model.completion_request(message).build();
+    let request = match thinking {
+        ThinkingMode::Default => model.completion_request(message).build(),
+        ThinkingMode::Enabled => model
+            .completion_request(message)
+            .additional_params(serde_json::json!({"enable_thinking": true}))
+            .build(),
+        ThinkingMode::Disabled => model
+            .completion_request(message)
+            .additional_params(serde_json::json!({"enable_thinking": false}))
+            .build(),
+    };
+    let build_req_ms = t_before_model.elapsed().as_millis();
+
+    let t_before_completion = Instant::now();
     let response = model
         .completion(request)
         .await
@@ -373,7 +404,9 @@ async fn send_text_via_openai_compatible(
             );
             AiError::RequestError(err_str)
         })?;
+    let completion_ms = t_before_completion.elapsed().as_millis();
 
+    let t_before_parse = Instant::now();
     let text = response
         .choice
         .into_iter()
@@ -383,12 +416,22 @@ async fn send_text_via_openai_compatible(
         })
         .collect::<Vec<_>>()
         .join("");
+    let parse_ms = t_before_parse.elapsed().as_millis();
+
+    let total_ms = t_start.elapsed().as_millis();
 
     logger.info(
         "ai",
-        "AI 文本请求成功",
+        "AI 文本请求成功 [分段计时]",
         Some(serde_json::json!({
             "response_length": text.len(),
+            "total_ms": total_ms,
+            "client_build_ms": client_build_ms,
+            "build_request_ms": build_req_ms,
+            "completion_ms": completion_ms,
+            "parse_ms": parse_ms,
+            "url": final_url,
+            "model": model_name,
         })),
     );
 

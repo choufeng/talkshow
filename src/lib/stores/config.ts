@@ -30,6 +30,9 @@ export interface AiConfig {
 export interface TranscriptionConfig {
   provider_id: string;
   model: string;
+  polish_enabled: boolean;
+  polish_provider_id: string;
+  polish_model: string;
 }
 
 export interface Skill {
@@ -44,8 +47,6 @@ export interface Skill {
 export interface SkillsConfig {
   enabled: boolean;
   skills: Skill[];
-  provider_id: string;
-  model: string;
 }
 
 export interface FeaturesConfig {
@@ -61,7 +62,8 @@ export interface AppConfig {
 }
 
 export const MODEL_CAPABILITIES = [
-  { value: 'transcription', label: '语音转文字' }
+  { value: 'transcription', label: '语音转文字' },
+  { value: 'chat', label: '文本对话' }
 ];
 
 export const BUILTIN_PROVIDERS: ProviderConfig[] = [
@@ -70,7 +72,7 @@ export const BUILTIN_PROVIDERS: ProviderConfig[] = [
     type: 'vertex',
     name: 'Vertex AI',
     endpoint: '',
-    models: [{ name: 'gemini-2.0-flash', capabilities: ['transcription'] }]
+    models: [{ name: 'gemini-2.0-flash', capabilities: ['transcription', 'chat'] }]
   },
   {
     id: 'dashscope',
@@ -129,13 +131,14 @@ function createConfigStore() {
     features: {
       transcription: {
         provider_id: 'vertex',
-        model: 'gemini-2.0-flash'
+        model: 'gemini-2.0-flash',
+        polish_enabled: true,
+        polish_provider_id: '',
+        polish_model: ''
       },
       skills: {
         enabled: true,
-        skills: [],
-        provider_id: '',
-        model: ''
+        skills: []
       }
     }
   });
