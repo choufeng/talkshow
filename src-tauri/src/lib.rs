@@ -315,6 +315,7 @@ fn stop_recording(
                     };
                     let _ = app_handle.emit("recording:cancel", cancelled);
                     destroy_indicator(app_handle);
+                    let _ = app_handle.global_shortcut().unregister(Shortcut::new(None, Code::Escape));
                 }
                 Err(e) => {
                     if let Some(ref lg) = logger {
@@ -322,12 +323,14 @@ fn stop_recording(
                     }
                     let _ = app_handle.emit("recording:error", e.to_string());
                     destroy_indicator(app_handle);
+                    let _ = app_handle.global_shortcut().unregister(Shortcut::new(None, Code::Escape));
                 }
                 }
             },
             Err(_) => {
                 let _ = app_handle.emit("recording:error", "Recording lock poisoned");
                 destroy_indicator(app_handle);
+                let _ = app_handle.global_shortcut().unregister(Shortcut::new(None, Code::Escape));
             }
         },
         "recording:cancel" => {
