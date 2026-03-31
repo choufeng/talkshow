@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { config, isBuiltinProvider, BUILTIN_PROVIDERS, MODEL_CAPABILITIES } from '$lib/stores/config';
   import GroupedSelect from '$lib/components/ui/select/index.svelte';
-  import PasswordInput from '$lib/components/ui/password-input/index.svelte';
+  import EditableField from '$lib/components/ui/editable-field/index.svelte';
   import Dialog from '$lib/components/ui/dialog/index.svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { listen } from '@tauri-apps/api/event';
@@ -544,9 +544,10 @@
           {#if needsApiKey(provider)}
             <div class="mb-3">
               <label class="block text-sm text-foreground-alt mb-1">API Key</label>
-              <PasswordInput
+              <EditableField
                 value={provider.api_key || ''}
                 placeholder="sk-..."
+                mode="password"
                 onChange={(val: string) => handleApiKeyChange(provider.id, val)}
               />
             </div>
@@ -564,11 +565,11 @@
           {:else if provider.type !== 'sensevoice'}
             <div class="mb-3">
               <label class="block text-sm text-foreground-alt mb-1">Endpoint</label>
-              <input
-                class="flex h-10 w-full rounded-md border border-border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-1"
-                type="text"
+              <EditableField
                 value={provider.endpoint}
-                onchange={(e) => handleProviderFieldChange(provider.id, 'endpoint', (e.target as HTMLInputElement).value)}
+                placeholder="https://api.example.com/v1"
+                mode="text"
+                onChange={(val: string) => handleProviderFieldChange(provider.id, 'endpoint', val)}
               />
             </div>
           {/if}
