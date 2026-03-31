@@ -1023,6 +1023,23 @@ pub fn run() {
                                         if let Some(ref app) = frontmost {
                                             clipboard::save_target_app(app);
                                         }
+                                        let selected_text = if let Some(ref app) = frontmost {
+                                            clipboard::detect_selected_text(app)
+                                        } else {
+                                            None
+                                        };
+                                        if let Some(ref text) = selected_text {
+                                            clipboard::save_selected_text(text);
+                                            let _ = app_handle.emit("indicator:replace-mode", serde_json::json!({
+                                                "text": text.chars().take(50).collect::<String>()
+                                            }));
+                                            if let Some(logger) = app_handle.try_state::<Logger>() {
+                                                logger.info("recording", "检测到选中文本，进入替换模式", Some(serde_json::json!({
+                                                    "selected_length": text.len(),
+                                                    "selected_preview": text.chars().take(100).collect::<String>()
+                                                })));
+                                            }
+                                        }
                                         play_sound("Ping.aiff");
                                         show_indicator(&app_handle);
                                         if let Some(mw) = app_handle.get_webview_window("main") {
