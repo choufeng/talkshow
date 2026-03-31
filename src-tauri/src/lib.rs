@@ -5,11 +5,12 @@ mod logger;
 mod recording;
 mod sensevoice;
 mod skills;
+mod translation;
 
 use logger::Logger;
 use recording::AudioRecorder;
 use sensevoice::SenseVoiceEngine;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 use tauri::menu::{Menu, MenuItem};
@@ -19,7 +20,11 @@ use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut,
 
 const TRAY_ID: &str = "main";
 
-static RECORDING: AtomicBool = AtomicBool::new(false);
+const RECORDING_MODE_NONE: u8 = 0;
+const RECORDING_MODE_TRANSCRIPTION: u8 = 1;
+const RECORDING_MODE_TRANSLATION: u8 = 2;
+
+static RECORDING: AtomicU8 = AtomicU8::new(RECORDING_MODE_NONE);
 static CANCELLED: AtomicBool = AtomicBool::new(false);
 static LAST_REC_PRESS: Mutex<Option<Instant>> = Mutex::new(None);
 
@@ -35,11 +40,13 @@ struct VertexClientState {
 struct ShortcutIds {
     toggle: u32,
     recording: u32,
+    translate: u32,
 }
 
 static SHORTCUT_IDS: RwLock<ShortcutIds> = RwLock::new(ShortcutIds {
     toggle: 0,
     recording: 0,
+    translate: 0,
 });
 
 fn toggle_window(window: &WebviewWindow) {
@@ -87,8 +94,8 @@ fn stop_recording(
     recorder: &Arc<std::sync::Mutex<AudioRecorder>>,
     recording_start: &Arc<std::sync::Mutex<Option<Instant>>>,
     event_name: &str,
+    recording_mode: u8,
 ) {
-    RECORDING.store(false, Ordering::Relaxed);
     let duration = recording_start
         .lock()
         .ok()
@@ -134,7 +141,7 @@ fn stop_recording(
                     let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
                     let app_config = config::load_config(&app_data_dir);
                     let config_elapsed = config_start.elapsed().as_millis();
-                    let transcription = &app_config.features.transcription;
+                    let transcription = app_config.features.transcription.clone();
                     let provider = app_config
                         .ai
                         .providers
@@ -166,7 +173,7 @@ fn stop_recording(
                                     lg.error("ai", "未找到配置的 AI 提供商", None);
                                 }
                                 destroy_indicator(&h);
-                                if !RECORDING.load(Ordering::Relaxed) {
+                                if RECORDING.load(Ordering::Relaxed) == RECORDING_MODE_NONE {
                                     let _ = h.global_shortcut().unregister(Shortcut::new(None, Code::Escape));
                                 }
                                 return;
@@ -178,7 +185,7 @@ fn stop_recording(
                                 lg.info("pipeline", "流水线已取消 (AI请求前)", None);
                             }
                             destroy_indicator(&h);
-                            if !RECORDING.load(Ordering::Relaxed) {
+                            if RECORDING.load(Ordering::Relaxed) == RECORDING_MODE_NONE {
                                 let _ = h.global_shortcut().unregister(Shortcut::new(None, Code::Escape));
                             }
                             return;
@@ -235,7 +242,7 @@ fn stop_recording(
                                 })));
 
                                 let skills_start = Instant::now();
-                                let final_text = skills::process_with_skills(
+                                let mut final_text = skills::process_with_skills(
                                     &logger,
                                     &skills_config,
                                     &app_config.features.transcription,
@@ -250,16 +257,55 @@ fn stop_recording(
                                 });
                                 let skills_elapsed = skills_start.elapsed().as_millis();
 
+                                if recording_mode == RECORDING_MODE_TRANSLATION {
+                                    if transcription.polish_enabled
+                                        && !transcription.polish_provider_id.is_empty()
+                                        && !transcription.polish_model.is_empty()
+                                    {
+                                        let translate_config = app_config.features.translation.clone();
+                                        match translation::translate_text(
+                                            &logger,
+                                            &final_text,
+                                            &translate_config.target_lang,
+                                            &skills_config,
+                                            &transcription.polish_provider_id,
+                                            &transcription.polish_model,
+                                            &skills_providers,
+                                            &h.state::<VertexClientState>().client,
+                                        )
+                                        .await
+                                        {
+                                            Ok(translated) => final_text = translated,
+                                            Err(e) => {
+                                                logger.error("translation", &e, None);
+                                                show_notification(&h, "翻译失败", &e);
+                                                destroy_indicator(&h);
+                                                if RECORDING.load(Ordering::Relaxed) == RECORDING_MODE_NONE {
+                                                    let _ = h.global_shortcut().unregister(Shortcut::new(None, Code::Escape));
+                                                }
+                                                return;
+                                            }
+                                        }
+                                    } else {
+                                        show_notification(&h, "翻译失败", "请先启用润色并配置润色模型");
+                                        destroy_indicator(&h);
+                                        if RECORDING.load(Ordering::Relaxed) == RECORDING_MODE_NONE {
+                                            let _ = h.global_shortcut().unregister(Shortcut::new(None, Code::Escape));
+                                        }
+                                        return;
+                                    }
+                                }
+
                                 if CANCELLED.load(Ordering::Relaxed) {
                                     logger.info("pipeline", "流水线已取消", None);
                                     destroy_indicator(&h);
-                                    if !RECORDING.load(Ordering::Relaxed) {
+                                    if RECORDING.load(Ordering::Relaxed) == RECORDING_MODE_NONE {
                                         let _ = h.global_shortcut().unregister(Shortcut::new(None, Code::Escape));
                                     }
                                     return;
                                 }
 
-                                if RECORDING.load(Ordering::Relaxed) {
+                                if RECORDING.load(Ordering::Relaxed) != RECORDING_MODE_NONE {
                                     logger.info("ai", "录音已重新开始，丢弃当前 AI 结果", None);
                                     return;
                                 }
@@ -279,7 +325,7 @@ fn stop_recording(
                                             "clipboard_ms": clipboard_elapsed,
                                         })));
                                         emit_indicator(&h, "indicator:done");
-                                        if !RECORDING.load(Ordering::Relaxed) {
+                                        if RECORDING.load(Ordering::Relaxed) == RECORDING_MODE_NONE {
                                             let _ = h.global_shortcut().unregister(Shortcut::new(None, Code::Escape));
                                         }
                                     }
@@ -287,7 +333,7 @@ fn stop_recording(
                                         logger.error("clipboard", "剪贴板写入/粘贴失败", Some(serde_json::json!({ "error": e })));
                                         show_notification(&h, "剪贴板写入失败", &e);
                                         destroy_indicator(&h);
-                                        if !RECORDING.load(Ordering::Relaxed) {
+                                        if RECORDING.load(Ordering::Relaxed) == RECORDING_MODE_NONE {
                                             let _ = h.global_shortcut().unregister(Shortcut::new(None, Code::Escape));
                                         }
                                     }
@@ -300,7 +346,7 @@ fn stop_recording(
                                 })));
                                 show_notification(&h, "AI 处理失败", &e);
                                 destroy_indicator(&h);
-                                if !RECORDING.load(Ordering::Relaxed) {
+                                if RECORDING.load(Ordering::Relaxed) == RECORDING_MODE_NONE {
                                     let _ = h.global_shortcut().unregister(Shortcut::new(None, Code::Escape));
                                 }
                             }
@@ -441,10 +487,12 @@ fn update_shortcut(
 
     let old_toggle = app_config.shortcut.clone();
     let old_recording = app_config.recording_shortcut.clone();
+    let old_translate = app_config.translate_shortcut.clone();
 
     match shortcut_type.as_str() {
         "toggle" => app_config.shortcut = shortcut,
         "recording" => app_config.recording_shortcut = shortcut,
+        "translate" => app_config.translate_shortcut = shortcut,
         _ => return Err("Invalid shortcut type".to_string()),
     }
 
@@ -456,14 +504,19 @@ fn update_shortcut(
     if let Some(sc) = parse_shortcut(&old_recording) {
         let _ = app_handle.global_shortcut().unregister(sc);
     }
+    if let Some(sc) = parse_shortcut(&old_translate) {
+        let _ = app_handle.global_shortcut().unregister(sc);
+    }
 
     let new_toggle = parse_shortcut(&app_config.shortcut);
     let new_rec = parse_shortcut(&app_config.recording_shortcut);
+    let new_translate = parse_shortcut(&app_config.translate_shortcut);
 
     {
         let mut ids = SHORTCUT_IDS.write().unwrap();
         ids.toggle = new_toggle.map(|s| s.id()).unwrap_or(0);
         ids.recording = new_rec.map(|s| s.id()).unwrap_or(0);
+        ids.translate = new_translate.map(|s| s.id()).unwrap_or(0);
     }
 
     if let Some(sc) = new_toggle {
@@ -473,6 +526,12 @@ fn update_shortcut(
             .map_err(|e| e.to_string())?;
     }
     if let Some(sc) = new_rec {
+        app_handle
+            .global_shortcut()
+            .register(sc)
+            .map_err(|e| e.to_string())?;
+    }
+    if let Some(sc) = new_translate {
         app_handle
             .global_shortcut()
             .register(sc)
@@ -749,6 +808,7 @@ pub fn run() {
             let app_config = config::load_config(&app_data_dir);
             let shortcut_str = app_config.shortcut.clone();
             let recording_shortcut_str = app_config.recording_shortcut.clone();
+            let translate_shortcut_str = app_config.translate_shortcut.clone();
 
             let default_icon = app.default_window_icon().unwrap().clone();
             let recording_bytes = include_bytes!("../icons/recording.png");
@@ -811,14 +871,17 @@ pub fn run() {
             // --- Global Shortcuts (single plugin instance) ---
             let toggle_shortcut = parse_shortcut(&shortcut_str);
             let rec_shortcut = parse_shortcut(&recording_shortcut_str);
+            let translate_shortcut = parse_shortcut(&translate_shortcut_str);
             let esc_shortcut = Shortcut::new(None, Code::Escape);
 
             let toggle_id = toggle_shortcut.as_ref().map(|s| s.id()).unwrap_or(0);
             let rec_id = rec_shortcut.as_ref().map(|s| s.id()).unwrap_or(0);
+            let translate_id = translate_shortcut.as_ref().map(|s| s.id()).unwrap_or(0);
             {
                 let mut ids = SHORTCUT_IDS.write().unwrap();
                 ids.toggle = toggle_id;
                 ids.recording = rec_id;
+                ids.translate = translate_id;
             }
             let esc_id = esc_shortcut.id();
 
@@ -829,13 +892,16 @@ pub fn run() {
                 let esc_cancel = esc_shortcut.clone();
                 let default_icon_cancel = default_icon_owned.clone();
                 let _ = app.listen("indicator:cancel", move |_event| {
-                    let is_recording = RECORDING.load(Ordering::Relaxed);
+                    let is_recording = RECORDING.load(Ordering::Relaxed) != RECORDING_MODE_NONE;
                     if is_recording {
+                        let mode = RECORDING.load(Ordering::Relaxed);
+                        RECORDING.store(RECORDING_MODE_NONE, Ordering::Relaxed);
                         stop_recording(
                             &app_handle_cancel,
                             &recorder_cancel,
                             &recording_start_cancel,
                             "recording:cancel",
+                            mode,
                         );
                     } else {
                         CANCELLED.store(true, Ordering::Relaxed);
@@ -862,19 +928,22 @@ pub fn run() {
                             return;
                         }
                         let id = shortcut.id();
-                        let (_current_toggle_id, current_rec_id) = {
+                        let (_current_toggle_id, current_rec_id, current_translate_id) = {
                             let ids = SHORTCUT_IDS.read().unwrap();
-                            (ids.toggle, ids.recording)
+                            (ids.toggle, ids.recording, ids.translate)
                         };
 
                         if id == esc_id {
-                            let is_recording = RECORDING.load(Ordering::Relaxed);
+                            let is_recording = RECORDING.load(Ordering::Relaxed) != RECORDING_MODE_NONE;
                             if is_recording {
+                                let mode = RECORDING.load(Ordering::Relaxed);
+                                RECORDING.store(RECORDING_MODE_NONE, Ordering::Relaxed);
                                 stop_recording(
                                     &app_handle,
                                     &recorder_handler,
                                     &recording_start_handler,
                                     "recording:cancel",
+                                    mode,
                                 );
                                 play_sound("Pop.aiff");
                             } else if app_handle.get_webview_window(INDICATOR_LABEL).is_some() {
@@ -911,13 +980,16 @@ pub fn run() {
                             if should_ignore {
                                 return;
                             }
-                            let is_recording = RECORDING.load(Ordering::Relaxed);
+                            let is_recording = RECORDING.load(Ordering::Relaxed) != RECORDING_MODE_NONE;
                             if is_recording {
+                                let mode = RECORDING.load(Ordering::Relaxed);
+                                RECORDING.store(RECORDING_MODE_NONE, Ordering::Relaxed);
                                 stop_recording(
                                     &app_handle,
                                     &recorder_handler,
                                     &recording_start_handler,
                                     "recording:complete",
+                                    mode,
                                 );
                                 play_sound("Submarine.aiff");
                                 restore_default_tray(&app_handle, default_icon_owned.clone());
@@ -933,7 +1005,7 @@ pub fn run() {
                                     });
                                 match start_result {
                                     Some(()) => {
-                                        RECORDING.store(true, Ordering::Relaxed);
+                                        RECORDING.store(RECORDING_MODE_TRANSCRIPTION, Ordering::Relaxed);
                                         if let Ok(mut start) = recording_start_handler.lock() {
                                             *start = Some(Instant::now());
                                         }
@@ -985,6 +1057,101 @@ pub fn run() {
                             return;
                         }
 
+                        if current_translate_id != 0 && id == current_translate_id {
+                            let now = Instant::now();
+                            let should_ignore = LAST_REC_PRESS
+                                .lock()
+                                .ok()
+                                .and_then(|mut last| {
+                                    if let Some(t) = *last {
+                                        if now.duration_since(t) < Duration::from_millis(500) {
+                                            return Some(true);
+                                        }
+                                    }
+                                    *last = Some(now);
+                                    Some(false)
+                                })
+                                .unwrap_or(false);
+                            if should_ignore {
+                                return;
+                            }
+                            let is_recording = RECORDING.load(Ordering::Relaxed) != RECORDING_MODE_NONE;
+                            if is_recording {
+                                let mode = RECORDING.load(Ordering::Relaxed);
+                                RECORDING.store(RECORDING_MODE_NONE, Ordering::Relaxed);
+                                stop_recording(
+                                    &app_handle,
+                                    &recorder_handler,
+                                    &recording_start_handler,
+                                    "recording:complete",
+                                    mode,
+                                );
+                                play_sound("Submarine.aiff");
+                                restore_default_tray(&app_handle, default_icon_owned.clone());
+                            } else {
+                                let start_result =
+                                    recorder_handler.lock().ok().and_then(|mut r| {
+                                        let result = r.start();
+                                        if result.is_ok() {
+                                            Some(())
+                                        } else {
+                                            None
+                                        }
+                                    });
+                                match start_result {
+                                    Some(()) => {
+                                        RECORDING.store(RECORDING_MODE_TRANSLATION, Ordering::Relaxed);
+                                        if let Ok(mut start) = recording_start_handler.lock() {
+                                            *start = Some(Instant::now());
+                                        }
+                                        if let Some(tray) = app_handle.tray_by_id(TRAY_ID) {
+                                            let _ =
+                                                tray.set_icon(Some(recording_icon_owned.clone()));
+                                        }
+                                        let frontmost = std::process::Command::new("osascript")
+                                            .arg("-e")
+                                            .arg("tell application \"System Events\" to get name of first process whose frontmost is true")
+                                            .output()
+                                            .ok()
+                                            .filter(|o| o.status.success())
+                                            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
+                                        if let Some(ref app) = frontmost {
+                                            clipboard::save_target_app(app);
+                                        }
+                                        play_sound("Ping.aiff");
+                                        show_indicator(&app_handle);
+                                        if let Some(mw) = app_handle.get_webview_window("main") {
+                                            if mw.is_visible().unwrap_or(false) {
+                                                let _ = mw.hide();
+                                            }
+                                        }
+                                        if let Some(logger) = app_handle.try_state::<Logger>() {
+                                            logger.info("recording", "录音开始 (翻译模式)", None);
+                                        }
+                                        let h = app_handle.clone();
+                                        let esc = esc_shortcut_handler.clone();
+                                        std::thread::spawn(move || {
+                                            let _ = h.global_shortcut().register(esc);
+                                        });
+                                    }
+                                    None => {
+                                        let err_detail = recorder_handler
+                                            .lock()
+                                            .ok()
+                                            .and_then(|mut r| r.start().err())
+                                            .map(|e| e.to_string())
+                                            .unwrap_or_else(|| "Unknown error".into());
+                                        eprintln!("Failed to start recording: {}", err_detail);
+                                        if let Some(logger) = app_handle.try_state::<Logger>() {
+                                            logger.error("recording", "录音启动失败", Some(serde_json::json!({ "error": err_detail })));
+                                        }
+                                        show_notification(&app_handle, "录音失败", &err_detail);
+                                    }
+                                }
+                            }
+                            return;
+                        }
+
                         if let Some(window) = app_handle.get_webview_window("main") {
                             toggle_window(&window);
                         }
@@ -1002,6 +1169,11 @@ pub fn run() {
                     eprintln!("Failed to register recording shortcut: {}", e);
                 }
             }
+            if let Some(sc) = translate_shortcut {
+                if let Err(e) = app.global_shortcut().register(sc) {
+                    eprintln!("Failed to register translate shortcut: {}", e);
+                }
+            }
 
             // --- Tooltip update loop ---
             {
@@ -1009,7 +1181,7 @@ pub fn run() {
                 let recording_start_tooltip = recording_start.clone();
                 std::thread::spawn(move || loop {
                     std::thread::sleep(std::time::Duration::from_millis(200));
-                    let is_recording = RECORDING.load(Ordering::Relaxed);
+                    let is_recording = RECORDING.load(Ordering::Relaxed) != RECORDING_MODE_NONE;
                     if is_recording {
                         let tooltip = recording_start_tooltip
                             .lock()

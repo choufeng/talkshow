@@ -17,6 +17,10 @@
     await config.updateShortcut('recording', shortcut);
   }
 
+  async function handleUpdateTranslate(shortcut: string) {
+    await config.updateShortcut('translate', shortcut);
+  }
+
   const THEME_OPTIONS: { value: Theme; label: string; icon: typeof Sun }[] = [
     { value: 'light', label: '浅色', icon: Sun },
     { value: 'dark', label: '深色', icon: Moon },
@@ -40,6 +44,12 @@
       description="开始或结束录音"
       value={$config.recording_shortcut}
       onUpdate={handleUpdateRecording}
+    />
+    <ShortcutRecorder
+      label="AI 翻译"
+      description="录音并翻译为目标语言"
+      value={$config.translate_shortcut}
+      onUpdate={handleUpdateTranslate}
     />
     <div class="rounded-lg bg-accent/50 border border-accent p-5 mt-6">
       <p class="text-sm text-accent-foreground m-0">

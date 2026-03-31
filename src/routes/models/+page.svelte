@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { config, isBuiltinProvider, BUILTIN_PROVIDERS, MODEL_CAPABILITIES } from '$lib/stores/config';
+  import { config, isBuiltinProvider, BUILTIN_PROVIDERS, MODEL_CAPABILITIES, TRANSLATE_LANGUAGES } from '$lib/stores/config';
   import GroupedSelect from '$lib/components/ui/select/index.svelte';
   import EditableField from '$lib/components/ui/editable-field/index.svelte';
   import Dialog from '$lib/components/ui/dialog/index.svelte';
@@ -160,6 +160,17 @@
           ...$config.features.transcription,
           polish_enabled: enabled
         }
+      }
+    };
+    config.save(newConfig);
+  }
+
+  function handleTargetLangChange(lang: string) {
+    const newConfig: AppConfig = {
+      ...$config,
+      features: {
+        ...$config.features,
+        translation: { target_lang: lang }
       }
     };
     config.save(newConfig);
@@ -462,6 +473,24 @@
           />
         </div>
         {/if}
+        <div>
+          <div class="text-xs text-muted-foreground uppercase tracking-wider mb-3 mt-5">AI 翻译</div>
+          <div>
+            <label class="block text-sm text-foreground-alt mb-1.5">目标语言</label>
+            <select
+              class="flex h-9 w-full rounded-md border border-border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20"
+              value={$config.features.translation?.target_lang || 'English'}
+              onchange={(e) => handleTargetLangChange((e.target as HTMLSelectElement).value)}
+            >
+              {#each TRANSLATE_LANGUAGES as lang}
+                <option value={lang}>{lang}</option>
+              {/each}
+            </select>
+          </div>
+          <div class="text-xs text-muted-foreground mt-1.5">
+            翻译模型复用润色模型：{$config.features.transcription.polish_model || '未配置'}
+          </div>
+        </div>
         </div>
       </div>
     </div>

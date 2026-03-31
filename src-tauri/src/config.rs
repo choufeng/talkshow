@@ -5,6 +5,7 @@ use std::path::PathBuf;
 
 const DEFAULT_SHORTCUT: &str = "Control+Shift+Quote";
 const DEFAULT_RECORDING_SHORTCUT: &str = "Control+Backslash";
+const DEFAULT_TRANSLATE_SHORTCUT: &str = "Control+Shift+T";
 const CONFIG_FILE_NAME: &str = "config.json";
 
 fn builtin_providers() -> Vec<ProviderConfig> {
@@ -124,12 +125,19 @@ pub struct TranscriptionConfig {
 
 #[derive(Serialize, Deserialize, Clone, Default)]
 #[serde(default)]
+pub struct TranslationConfig {
+    pub target_lang: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(default)]
 pub struct Skill {
     pub id: String,
     pub name: String,
     pub description: String,
     pub prompt: String,
     pub builtin: bool,
+    pub editable: bool,
     pub enabled: bool,
 }
 
@@ -151,6 +159,7 @@ impl Default for SkillsConfig {
                     description: "去除嗯、啊、那个、就是等无意义口头语气词".to_string(),
                     prompt: "去除中文口语中常见的无意义语气词和填充词，包括但不限于：\n\"嗯\"、\"啊\"、\"额\"、\"呃\"、\"那个\"、\"就是\"、\"然后\"、\"对吧\"、\"的话\"、\"怎么说呢\"。\n注意保留有实际语义的词语，例如\"然后\"在表示时间顺序时应保留。不要改变原文的语义和语气。".to_string(),
                     builtin: true,
+                    editable: false,
                     enabled: true,
                 },
                 Skill {
@@ -159,6 +168,7 @@ impl Default for SkillsConfig {
                     description: "修正错别字、同音错误和输入法错误".to_string(),
                     prompt: "识别并修正文本中的错别字、同音错误和常见输入法导致的文字错误。\n只修正明确的错误，不要对有歧义的内容做主观改动。\n常见的同音错误示例：\"的/地/得\"、\"做/作\"、\"在/再\"、\"已/以\"、\"即/既\"。".to_string(),
                     builtin: true,
+                    editable: false,
                     enabled: true,
                 },
                 Skill {
@@ -167,15 +177,26 @@ impl Default for SkillsConfig {
                     description: "保持口语化风格，使表达更流畅自然".to_string(),
                     prompt: "保持口语化的表达风格，但使语句更流畅自然。\n具体做法：去除重复表达、调整语序使其更通顺、适当添加标点使句子结构更清晰。\n不要改变原文的口语化特征，不要转换为书面语。".to_string(),
                     builtin: true,
+                    editable: false,
                     enabled: false,
                 },
                 Skill {
                     id: "builtin-formal".to_string(),
                     name: "书面格式化".to_string(),
                     description: "口语转书面表达，适合邮件和文档场景".to_string(),
-                    prompt: "将口语化的表达转换为规范的书面表达，适合邮件、文档、报告等正式场景。\n\n具体做法：\n- 词汇替换：将口语化词汇替换为正式表达（如“搞定了”→“已完成”）\n- 列表结构化：将“第一/第二/第三”、“首先/其次/最后”、“一二三”等序列词转换为规范的有序列表格式\n- 段落重组：识别话题转换，合理分段；将碎片化短句合并为完整句子\n- 标点规范：统一使用全角标点，消除重复标点，合理使用冒号、分号等结构化标点\n- 句子结构：调整语序使其符合书面语法，消除冗余和重复表达\n- 层级关系：识别“总-分”、因果、递进等逻辑关系，用合适的连接词明确表达\n\n约束：\n- 保持原文的完整语义，不添加或删除信息\n- 输出纯文本，可使用 Markdown 列表格式\n- 不要添加解释性文字".to_string(),
+                    prompt: "将口语化的表达转换为规范的书面表达，适合邮件、文档、报告等正式场景。\n\n具体做法：\n- 词汇替换：将口语化词汇替换为正式表达（如\u{201c}搞定了\u{201d}→\u{201c}已完成\u{201d}）\n- 列表结构化：将\u{201c}第一/第二/第三\u{201d}、\u{201c}首先/其次/最后\u{201d}、\u{201c}一二三\u{201d}等序列词转换为规范的有序列表格式\n- 段落重组：识别话题转换，合理分段；将碎片化短句合并为完整句子\n- 标点规范：统一使用全角标点，消除重复标点，合理使用冒号、分号等结构化标点\n- 句子结构：调整语序使其符合书面语法，消除冗余和重复表达\n- 层级关系：识别\u{201c}总-分\u{201d}、因果、递进等逻辑关系，用合适的连接词明确表达\n\n约束：\n- 保持原文的完整语义，不添加或删除信息\n- 输出纯文本，可使用 Markdown 列表格式\n- 不要添加解释性文字".to_string(),
                     builtin: true,
+                    editable: false,
                     enabled: false,
+                },
+                Skill {
+                    id: "builtin-translation".to_string(),
+                    name: "翻译优化".to_string(),
+                    description: "自定义翻译规则，如术语、风格和行业特定要求".to_string(),
+                    prompt: "保持原文的语气和风格。确保技术术语翻译准确。如果某个术语没有标准翻译，保留原文。".to_string(),
+                    builtin: true,
+                    editable: true,
+                    enabled: true,
                 },
             ],
         }
@@ -186,6 +207,7 @@ impl Default for SkillsConfig {
 #[serde(default)]
 pub struct FeaturesConfig {
     pub transcription: TranscriptionConfig,
+    pub translation: TranslationConfig,
     pub skills: SkillsConfig,
 }
 
@@ -194,6 +216,7 @@ pub struct FeaturesConfig {
 pub struct AppConfig {
     pub shortcut: String,
     pub recording_shortcut: String,
+    pub translate_shortcut: String,
     pub ai: AiConfig,
     pub features: FeaturesConfig,
 }
@@ -203,6 +226,7 @@ impl Default for AppConfig {
         AppConfig {
             shortcut: DEFAULT_SHORTCUT.to_string(),
             recording_shortcut: DEFAULT_RECORDING_SHORTCUT.to_string(),
+            translate_shortcut: DEFAULT_TRANSLATE_SHORTCUT.to_string(),
             ai: AiConfig {
                 providers: builtin_providers(),
             },
@@ -213,6 +237,9 @@ impl Default for AppConfig {
                     polish_enabled: true,
                     polish_provider_id: String::new(),
                     polish_model: String::new(),
+                },
+                translation: TranslationConfig {
+                    target_lang: "English".to_string(),
                 },
                 skills: SkillsConfig::default(),
             },
@@ -256,6 +283,11 @@ fn migrate_builtin_skills(value: &mut serde_json::Value) {
             if let Some(id) = skill.get("id").and_then(|v| v.as_str()) {
                 if let Some(builtin) = skill.get("builtin").and_then(|v| v.as_bool()) {
                     if builtin {
+                        if let Some(editable) = skill.get("editable").and_then(|v| v.as_bool()) {
+                            if editable {
+                                continue;
+                            }
+                        }
                         if let Some(default) = default_skills.iter().find(|s| s.id == id) {
                             if let Some(current_prompt) =
                                 skill.get("prompt").and_then(|v| v.as_str())
@@ -268,6 +300,23 @@ fn migrate_builtin_skills(value: &mut serde_json::Value) {
                         }
                     }
                 }
+            }
+        }
+
+        let builtin_ids: std::collections::HashSet<String> = skills
+            .iter()
+            .filter_map(|s| {
+                if s.get("builtin").and_then(|v| v.as_bool()).unwrap_or(false) {
+                    s.get("id").and_then(|v| v.as_str()).map(String::from)
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        for default in &default_skills {
+            if !builtin_ids.contains(&default.id) {
+                skills.push(serde_json::to_value(default).unwrap_or_default());
             }
         }
     }
