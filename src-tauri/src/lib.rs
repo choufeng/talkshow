@@ -470,6 +470,13 @@ fn show_indicator(app_handle: &tauri::AppHandle, selected_text: Option<&str>) {
 
     match window {
         Ok(w) => {
+            #[cfg(target_os = "macos")]
+            {
+                if let Err(e) = macos::floating_panel::make_window_nonactivating(&w) {
+                    eprintln!("Failed to make window nonactivating: {}", e);
+                }
+            }
+
             let _ = w.show();
             let _ = app_handle.emit_to(INDICATOR_LABEL, "indicator:recording", &payload);
         }
