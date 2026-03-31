@@ -12,7 +12,7 @@
 
   let visible = $state(false);
   let editing = $state(false);
-  let editValue: string;
+  let editValue = $state(value);
 
   function mask(val: string): string {
     if (!val) return '';
