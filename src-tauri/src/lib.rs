@@ -953,6 +953,17 @@ pub fn run() {
                                         }
                                         play_sound("Ping.aiff");
                                         show_indicator(&app_handle);
+                                        if let Some(ref app_name) = frontmost {
+                                            if app_name != "TalkShow" {
+                                                let app_name_clone = app_name.clone();
+                                                std::thread::spawn(move || {
+                                                    let _ = std::process::Command::new("osascript")
+                                                        .arg("-e")
+                                                        .arg(format!("tell application \"{}\" to activate", app_name_clone))
+                                                        .output();
+                                                });
+                                            }
+                                        }
                                         if let Some(logger) = app_handle.try_state::<Logger>() {
                                             logger.info("recording", "录音开始", None);
                                         }
