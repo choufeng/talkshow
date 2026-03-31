@@ -681,7 +681,7 @@ class="flex h-9 w-full rounded-md border border-border-input bg-background px-3 
                 </button>
                 <span class="text-border">|</span>
                 <button
-                  class="text-xs text-accent-foreground hover:underline inline-flex items-center gap-0.5"
+                  class="text-caption text-accent-foreground hover:underline inline-flex items-center gap-0.5"
                   onclick={() => testAllModels(provider)}
                   disabled={provider.models.length === 0 || [...testingModels].some(k => k.startsWith(provider.id + '::'))}
                 >
