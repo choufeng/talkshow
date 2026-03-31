@@ -29,10 +29,10 @@
 </script>
 
 <div class="max-w-[640px]">
-  <h2 class="text-2xl font-semibold text-foreground m-0 mb-8">设置</h2>
+  <h2 class="text-title font-semibold text-foreground m-0 mb-8">设置</h2>
 
   <section class="mb-10">
-    <div class="text-xs text-muted-foreground uppercase tracking-wider mb-3">快捷键</div>
+    <div class="text-caption text-muted-foreground uppercase tracking-wider mb-3">快捷键</div>
     <ShortcutRecorder
       label="窗口切换"
       description="显示或隐藏主窗口"
@@ -52,7 +52,7 @@
       onUpdate={handleUpdateTranslate}
     />
     <div class="rounded-lg bg-accent/50 border border-accent p-5 mt-6">
-      <p class="text-sm text-accent-foreground m-0">
+      <p class="text-body text-accent-foreground m-0">
         <Lightbulb size={15} class="inline -align-[2px] mr-1" />
         提示：点击"修改"按钮后，直接按下键盘上的组合键即可完成设置。按 Esc 取消录制。
       </p>
@@ -60,12 +60,12 @@
   </section>
 
   <section class="mb-10">
-    <div class="text-xs text-muted-foreground uppercase tracking-wider mb-3">录音</div>
+    <div class="text-caption text-muted-foreground uppercase tracking-wider mb-3">录音</div>
     <div class="rounded-xl border border-border bg-background-alt p-5">
       <div class="flex items-center justify-between gap-4">
         <div>
           <div class="text-[15px] font-semibold text-foreground mb-1">录音时自动静音</div>
-          <div class="text-sm text-foreground-alt">开始录音后自动静音其他应用的声音，录音结束后自动恢复</div>
+          <div class="text-body text-foreground-alt">开始录音后自动静音其他应用的声音，录音结束后自动恢复</div>
         </div>
         <button
           class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors {$config.features?.recording?.auto_mute ? 'bg-btn-primary-to' : 'bg-border'}"
@@ -91,10 +91,10 @@
   </section>
 
   <section>
-    <div class="text-xs text-muted-foreground uppercase tracking-wider mb-3">外观</div>
+    <div class="text-caption text-muted-foreground uppercase tracking-wider mb-3">外观</div>
     <div class="rounded-xl border border-border bg-background-alt p-5">
       <div class="text-[15px] font-semibold text-foreground mb-1">主题模式</div>
-      <div class="text-sm text-foreground-alt mb-4">选择界面的色彩主题</div>
+      <div class="text-body text-foreground-alt mb-4">选择界面的色彩主题</div>
       <div class="flex gap-3">
         {#each THEME_OPTIONS as opt}
           {@const Icon = opt.icon}

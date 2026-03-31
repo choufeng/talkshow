@@ -108,13 +108,13 @@
 </script>
 
 <div class="max-w-[800px]">
-  <h2 class="text-2xl font-semibold text-foreground m-0 mb-8">技能设置</h2>
+  <h2 class="text-title font-semibold text-foreground m-0 mb-8">技能设置</h2>
 
   <section>
     <div class="flex items-center justify-between mb-2.5">
-      <div class="text-xs text-muted-foreground uppercase tracking-wider">技能列表</div>
+      <div class="text-caption text-muted-foreground uppercase tracking-wider">技能列表</div>
       <button
-        class="inline-flex items-center gap-1 text-sm text-accent-foreground hover:underline"
+        class="inline-flex items-center gap-1 text-body text-accent-foreground hover:underline"
         onclick={openAddDialog}
       >
         <Plus class="h-4 w-4" />
@@ -142,7 +142,7 @@
                     {skill.builtin ? '预置' : '自定义'}
                   </span>
                 </div>
-                <div class="text-sm text-foreground-alt mt-0.5">{skill.description}</div>
+                <div class="text-body text-foreground-alt mt-0.5">{skill.description}</div>
               </div>
             </div>
             <div class="flex items-center gap-1">
@@ -169,7 +169,7 @@
 
       {#if ($config.features.skills.skills || []).length === 0}
         <div class="rounded-lg border border-dashed border-border bg-background-alt/50 p-8 text-center">
-          <p class="text-sm text-muted-foreground">暂无技能，点击上方按钮添加</p>
+          <p class="text-body text-muted-foreground">暂无技能，点击上方按钮添加</p>
         </div>
       {/if}
     </div>
@@ -182,30 +182,30 @@
   >
     {#snippet children()}
       <div>
-        <label for="skill-name" class="block text-sm text-foreground-alt mb-1.5">名称</label>
+        <label for="skill-name" class="block text-body text-foreground-alt mb-1.5">名称</label>
         <input
           id="skill-name"
-          class="flex h-10 w-full rounded-md border border-border-input bg-background px-3 py-1 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-1"
+          class="flex h-10 w-full rounded-md border border-border-input bg-background px-3 py-1 text-body ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-1"
           type="text"
           placeholder="如：语气词剔除"
           bind:value={editForm.name}
         />
       </div>
       <div>
-        <label for="skill-desc" class="block text-sm text-foreground-alt mb-1.5">描述</label>
+        <label for="skill-desc" class="block text-body text-foreground-alt mb-1.5">描述</label>
         <input
           id="skill-desc"
-          class="flex h-10 w-full rounded-md border border-border-input bg-background px-3 py-1 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-1"
+          class="flex h-10 w-full rounded-md border border-border-input bg-background px-3 py-1 text-body ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-1"
           type="text"
           placeholder="简短描述功能"
           bind:value={editForm.description}
         />
       </div>
       <div>
-        <label for="skill-prompt" class="block text-sm text-foreground-alt mb-1.5">Prompt 内容</label>
+        <label for="skill-prompt" class="block text-body text-foreground-alt mb-1.5">Prompt 内容</label>
         <textarea
           id="skill-prompt"
-          class="flex min-h-[140px] w-full rounded-md border border-border-input bg-background px-3 py-3 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-1 resize-y"
+          class="flex min-h-[140px] w-full rounded-md border border-border-input bg-background px-3 py-3 text-body ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-1 resize-y"
           placeholder="输入发送给 LLM 的指令性 prompt"
           bind:value={editForm.prompt}
         ></textarea>
@@ -215,14 +215,14 @@
     {#snippet footer()}
       <button
         type="button"
-        class="rounded-md border border-btn-secondary-border bg-gradient-to-b from-btn-secondary-from to-btn-secondary-to px-4 py-2 text-sm text-accent-foreground hover:bg-muted transition-colors shadow-btn-secondary"
+        class="rounded-md border border-btn-secondary-border bg-gradient-to-b from-btn-secondary-from to-btn-secondary-to px-4 py-2 text-body text-accent-foreground hover:bg-muted transition-colors shadow-btn-secondary"
         onclick={() => handleEditDialogClose(false)}
       >
         取消
       </button>
       <button
         type="button"
-        class="rounded-md bg-gradient-to-b from-btn-primary-from to-btn-primary-to px-4 py-2 text-sm text-white hover:opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-btn-primary"
+        class="rounded-md bg-gradient-to-b from-btn-primary-from to-btn-primary-to px-4 py-2 text-body text-white hover:opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-btn-primary"
         onclick={handleSave}
         disabled={!canSave}
       >
@@ -240,14 +240,14 @@
     {#snippet footer()}
       <button
         type="button"
-        class="rounded-md border border-btn-secondary-border bg-gradient-to-b from-btn-secondary-from to-btn-secondary-to px-4 py-2 text-sm text-accent-foreground hover:bg-muted transition-colors shadow-btn-secondary"
+        class="rounded-md border border-btn-secondary-border bg-gradient-to-b from-btn-secondary-from to-btn-secondary-to px-4 py-2 text-body text-accent-foreground hover:bg-muted transition-colors shadow-btn-secondary"
         onclick={() => handleDeleteDialogClose(false)}
       >
         取消
       </button>
       <button
         type="button"
-        class="rounded-md bg-gradient-to-b from-btn-destructive-from to-btn-destructive-to px-4 py-2 text-sm text-white hover:opacity-90 transition-colors shadow-btn-destructive"
+        class="rounded-md bg-gradient-to-b from-btn-destructive-from to-btn-destructive-to px-4 py-2 text-body text-white hover:opacity-90 transition-colors shadow-btn-destructive"
         onclick={confirmDelete}
       >
         删除
