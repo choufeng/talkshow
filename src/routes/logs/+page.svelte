@@ -170,7 +170,7 @@
     <div class="flex gap-1">
       {#each MODULES as mod}
         <button
-          class="px-3 py-1.5 rounded text-xs transition-colors {selectedModule === mod ? 'bg-primary text-primary-foreground' : 'border border-border text-muted-foreground hover:text-foreground'}"
+          class="px-3 py-1.5 rounded text-xs transition-colors {selectedModule === mod ? 'bg-gradient-to-b from-btn-primary-from to-btn-primary-to text-white font-medium shadow-btn-primary' : 'border border-border text-muted-foreground hover:text-foreground'}"
           onclick={() => (selectedModule = mod)}
         >
           {mod === 'all' ? '全部' : mod}
@@ -183,7 +183,7 @@
         {filteredEntries.length} 条日志
       </span>
       <button
-        class="px-3 py-1 rounded text-xs border border-border text-muted-foreground hover:text-foreground transition-colors"
+        class="px-3 py-1 rounded text-xs border border-btn-secondary-border bg-gradient-to-b from-btn-secondary-from to-btn-secondary-to text-accent-foreground hover:opacity-90 transition-colors shadow-btn-secondary"
         onclick={copyAll}
         disabled={copied}
       >
@@ -244,7 +244,7 @@
 
       {#if activeTab === 'history' && selectedSession}
         <button
-          class="mt-3 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          class="mt-3 text-sm text-accent-foreground hover:opacity-80 transition-colors"
           onclick={() => { selectedSession = null; entries = []; }}
         >
           ← 返回历史列表
