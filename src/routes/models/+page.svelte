@@ -454,7 +454,7 @@
           <label class="block text-sm text-foreground-alt mb-1.5">润色模型</label>
           <GroupedSelect
             value={getPolishValue()}
-            groups={buildTranscriptionGroups()}
+            groups={buildPolishGroups()}
             placeholder="选择模型"
             onChange={handlePolishChange}
           />
