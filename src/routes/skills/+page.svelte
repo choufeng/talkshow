@@ -17,17 +17,6 @@
     config.load();
   });
 
-  function handleGlobalToggle(enabled: boolean) {
-    const newConfig: AppConfig = {
-      ...$config,
-      features: {
-        ...$config.features,
-        skills: { ...$config.features.skills, enabled }
-      }
-    };
-    config.save(newConfig);
-  }
-
   function handleSkillToggle(skillId: string, enabled: boolean) {
     const newSkills = $config.features.skills.skills.map((s: Skill) =>
       s.id === skillId ? { ...s, enabled } : s
@@ -36,7 +25,8 @@
       ...$config,
       features: {
         ...$config.features,
-        skills: { ...$config.features.skills, skills: newSkills }
+        // 全局开关已移除，Skills 管线始终启用
+        skills: { ...$config.features.skills, skills: newSkills, enabled: true }
       }
     };
     config.save(newConfig);
@@ -119,26 +109,6 @@
 
 <div class="max-w-[800px]">
   <h2 class="text-2xl font-semibold text-foreground m-0 mb-8">技能设置</h2>
-
-  <section class="mb-10">
-    <div class="text-xs text-muted-foreground uppercase tracking-wider mb-3">全局</div>
-    <div class="rounded-xl border border-border bg-background-alt p-5">
-      <div class="flex items-center justify-between">
-        <div>
-          <div class="text-[15px] font-semibold text-foreground">Skills 功能</div>
-          <div class="text-sm text-foreground-alt">启用后，转写文字将自动经过 Skill 处理管线</div>
-        </div>
-        <button
-          class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-2 {$config.features.skills.enabled ? 'bg-accent-foreground' : 'bg-border'}"
-          role="switch"
-          aria-checked={$config.features.skills.enabled}
-          onclick={() => handleGlobalToggle(!$config.features.skills.enabled)}
-        >
-          <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out {$config.features.skills.enabled ? 'translate-x-5' : 'translate-x-0'}"></span>
-        </button>
-      </div>
-    </div>
-  </section>
 
   <section>
     <div class="flex items-center justify-between mb-2.5">
