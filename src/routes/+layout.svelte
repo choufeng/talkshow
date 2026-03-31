@@ -26,8 +26,9 @@
 {:else}
 <div class="flex h-screen w-screen overflow-hidden">
   <aside class="w-52 bg-background-alt border-r border-border flex flex-col">
-    <div class="px-6 py-5 font-semibold text-base text-foreground border-b border-border">
-      TalkShow
+    <div class="flex items-center gap-2.5 px-6 py-5 font-semibold text-base text-foreground border-b border-border">
+      <img src="/logo.svg" alt="TalkShow" class="w-6 h-6 shrink-0" />
+      <span>TalkShow</span>
     </div>
     <nav class="py-3">
       <button
