@@ -15,6 +15,10 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-key-bg-from: var(--key-bg-from);
+  --color-key-bg-to: var(--key-bg-to);
+  --color-key-border: var(--key-border);
+  --color-key-text: var(--key-text);
 
   --shadow-card: 0px 2px 0px 1px rgba(0, 0, 0, 0.04);
   --shadow-popover: 0px 7px 12px 3px rgba(0, 0, 0, 0.08);
@@ -36,6 +40,10 @@
   --accent: oklch(84% 0.12 160);
   --accent-foreground: oklch(30% 0.08 160);
   --destructive: oklch(70% 0.191 22.216);
+  --key-bg-from: oklch(97% 0 0);
+  --key-bg-to: oklch(91% 0.005 160);
+  --key-border: oklch(75% 0.01 160 / 0.5);
+  --key-text: oklch(25% 0 0);
 }
 
 .dark {
@@ -50,6 +58,10 @@
   --accent: oklch(40% 0.08 160);
   --accent-foreground: oklch(90% 0.04 160);
   --destructive: oklch(71.753% 0.176 22.568);
+  --key-bg-from: oklch(35% 0.005 160);
+  --key-bg-to: oklch(28% 0.006 160);
+  --key-border: oklch(45% 0.01 160 / 0.6);
+  --key-text: oklch(85% 0.01 160);
 }
 
 @layer base {
