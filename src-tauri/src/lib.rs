@@ -7,6 +7,8 @@ mod sensevoice;
 mod skills;
 mod audio_control;
 mod translation;
+#[cfg(target_os = "macos")]
+mod macos;
 
 use logger::Logger;
 use recording::AudioRecorder;
