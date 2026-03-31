@@ -93,6 +93,20 @@
     }));
   }
 
+  function buildPolishGroups() {
+    return ($config.ai.providers || []).map((p: ProviderConfig) => ({
+      label: p.name,
+      items: (p.models || [])
+        .filter((m: ModelConfig) => 
+          m.capabilities.includes('chat') || m.capabilities.includes('text_generation')
+        )
+        .map((m: ModelConfig) => ({
+          value: `${p.id}::${m.name}`,
+          label: m.name
+        }))
+    }));
+  }
+
   function getTranscriptionValue(): string {
     const t = $config.features.transcription;
     if (t.provider_id && t.model) {
