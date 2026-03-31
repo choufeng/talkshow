@@ -113,6 +113,44 @@
     config.save(newConfig);
   }
 
+  function getPolishValue(): string {
+    const t = $config.features.transcription;
+    if (t.polish_provider_id && t.polish_model) {
+      return `${t.polish_provider_id}::${t.polish_model}`;
+    }
+    return '';
+  }
+
+  function handlePolishChange(val: string) {
+    const [providerId, model] = val.split('::');
+    const newConfig: AppConfig = {
+      ...$config,
+      features: {
+        ...$config.features,
+        transcription: {
+          ...$config.features.transcription,
+          polish_provider_id: providerId,
+          polish_model: model
+        }
+      }
+    };
+    config.save(newConfig);
+  }
+
+  function handlePolishEnabled(enabled: boolean) {
+    const newConfig: AppConfig = {
+      ...$config,
+      features: {
+        ...$config.features,
+        transcription: {
+          ...$config.features.transcription,
+          polish_enabled: enabled
+        }
+      }
+    };
+    config.save(newConfig);
+  }
+
   function handleProviderFieldChange(
     providerId: string,
     field: string,
@@ -369,17 +407,43 @@
   <h2 class="text-2xl font-semibold text-foreground m-0 mb-8">模型</h2>
 
   <section class="mb-10">
-    <div class="text-xs text-muted-foreground uppercase tracking-wider mb-3">Features</div>
-    <div class="grid grid-cols-2 gap-4">
-      <div class="rounded-xl border border-border bg-background-alt p-5">
-        <div class="text-[15px] font-semibold text-foreground mb-0.5">Transcription</div>
-        <div class="text-sm text-foreground-alt mb-3">转写服务</div>
-        <GroupedSelect
-          value={getTranscriptionValue()}
-          groups={buildTranscriptionGroups()}
-          placeholder="选择模型"
-          onChange={handleTranscriptionChange}
-        />
+    <div class="text-xs text-muted-foreground uppercase tracking-wider mb-3">转写服务</div>
+    <div class="rounded-xl border border-border bg-background-alt p-5">
+      <div class="flex flex-col gap-5">
+        <div>
+          <label class="block text-sm text-foreground-alt mb-1.5">转写模型</label>
+          <GroupedSelect
+            value={getTranscriptionValue()}
+            groups={buildTranscriptionGroups()}
+            placeholder="选择模型"
+            onChange={handleTranscriptionChange}
+          />
+        </div>
+
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-[15px] font-semibold text-foreground">启用润色</div>
+            <div class="text-sm text-foreground-alt">转写后自动使用 LLM 润色文字</div>
+          </div>
+          <button
+            class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-2 {$config.features.transcription.polish_enabled ? 'bg-accent-foreground' : 'bg-border'}"
+            role="switch"
+            aria-checked={$config.features.transcription.polish_enabled}
+            onclick={() => handlePolishEnabled(!$config.features.transcription.polish_enabled)}
+          >
+            <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out {$config.features.transcription.polish_enabled ? 'translate-x-5' : 'translate-x-0'}"></span>
+          </button>
+        </div>
+
+        <div>
+          <label class="block text-sm text-foreground-alt mb-1.5">润色模型</label>
+          <GroupedSelect
+            value={getPolishValue()}
+            groups={buildTranscriptionGroups()}
+            placeholder="选择模型"
+            onChange={handlePolishChange}
+          />
+        </div>
       </div>
     </div>
   </section>
