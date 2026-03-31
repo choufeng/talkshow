@@ -69,10 +69,15 @@ export interface SkillsConfig {
   skills: Skill[];
 }
 
+export interface RecordingFeaturesConfig {
+  auto_mute: boolean;
+}
+
 export interface FeaturesConfig {
   transcription: TranscriptionConfig;
   translation: TranslationConfig;
   skills: SkillsConfig;
+  recording: RecordingFeaturesConfig;
 }
 
 export interface AppConfig {
@@ -165,6 +170,9 @@ function createConfigStore() {
       skills: {
         enabled: true,
         skills: []
+      },
+      recording: {
+        auto_mute: false
       }
     }
   });
