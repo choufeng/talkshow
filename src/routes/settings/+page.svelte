@@ -59,6 +59,37 @@
     </div>
   </section>
 
+  <section class="mb-10">
+    <div class="text-xs text-muted-foreground uppercase tracking-wider mb-3">录音</div>
+    <div class="rounded-xl border border-border bg-background-alt p-5">
+      <div class="flex items-center justify-between gap-4">
+        <div>
+          <div class="text-[15px] font-semibold text-foreground mb-1">录音时自动静音</div>
+          <div class="text-sm text-foreground-alt">开始录音后自动静音其他应用的声音，录音结束后自动恢复</div>
+        </div>
+        <button
+          class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors {$config.features?.recording?.auto_mute ? 'bg-btn-primary-to' : 'bg-border'}"
+          onclick={() => {
+            const recording = $config.features?.recording ?? { auto_mute: false };
+            const newConfig = {
+              ...$config,
+              features: {
+                ...$config.features,
+                recording: {
+                  ...recording,
+                  auto_mute: !recording.auto_mute
+                }
+              }
+            };
+            config.save(newConfig);
+          }}
+        >
+          <span class="pointer-events-none block h-4 w-4 rounded-full bg-white shadow-lg transition-transform {$config.features?.recording?.auto_mute ? 'translate-x-5' : 'translate-x-0'}"></span>
+        </button>
+      </div>
+    </div>
+  </section>
+
   <section>
     <div class="text-xs text-muted-foreground uppercase tracking-wider mb-3">外观</div>
     <div class="rounded-xl border border-border bg-background-alt p-5">

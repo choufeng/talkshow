@@ -97,6 +97,12 @@ fn stop_recording(
     event_name: &str,
     recording_mode: u8,
 ) {
+    let app_data_dir_restore = app_handle.path().app_data_dir().unwrap_or_default();
+    let _ = audio_control::restore(
+        &app_data_dir_restore,
+        app_handle.try_state::<Logger>().as_deref(),
+    );
+
     let duration = recording_start
         .lock()
         .ok()
@@ -814,6 +820,7 @@ pub fn run() {
         ])
         .setup(|app| {
             let app_data_dir = app.path().app_data_dir().unwrap_or_default();
+            let _ = audio_control::cleanup_stale_state(&app_data_dir);
             let logger = Logger::new(&app_data_dir)
                 .expect("Failed to initialize logger");
             let app_config = config::load_config(&app_data_dir);
@@ -1045,6 +1052,16 @@ pub fn run() {
                                             }
                                         }
                                         play_sound("Ping.aiff");
+                                        {
+                                            let app_data_dir_mute = app_handle.path().app_data_dir().unwrap_or_default();
+                                            let app_config_mute = config::load_config(&app_data_dir_mute);
+                                            if app_config_mute.features.recording.auto_mute {
+                                                let _ = audio_control::save_and_mute(
+                                                    &app_data_dir_mute,
+                                                    app_handle.try_state::<Logger>().as_deref(),
+                                                );
+                                            }
+                                        }
                                         show_indicator(&app_handle, selected_text.as_deref());
                                         if let Some(mw) = app_handle.get_webview_window("main") {
                                             if mw.is_visible().unwrap_or(false) {
@@ -1140,6 +1157,16 @@ pub fn run() {
                                             clipboard::save_target_app(app);
                                         }
                                         play_sound("Ping.aiff");
+                                        {
+                                            let app_data_dir_mute = app_handle.path().app_data_dir().unwrap_or_default();
+                                            let app_config_mute = config::load_config(&app_data_dir_mute);
+                                            if app_config_mute.features.recording.auto_mute {
+                                                let _ = audio_control::save_and_mute(
+                                                    &app_data_dir_mute,
+                                                    app_handle.try_state::<Logger>().as_deref(),
+                                                );
+                                            }
+                                        }
                                         show_indicator(&app_handle, None);
                                         if let Some(mw) = app_handle.get_webview_window("main") {
                                             if mw.is_visible().unwrap_or(false) {
