@@ -90,7 +90,7 @@
           value: `${p.id}::${m.name}`,
           label: m.name
         }))
-    }));
+    })).filter((g) => g.items.length > 0);
   }
 
   function buildPolishGroups() {
@@ -104,7 +104,7 @@
           value: `${p.id}::${m.name}`,
           label: m.name
         }))
-    }));
+    })).filter((g) => g.items.length > 0);
   }
 
   function getTranscriptionValue(): string {
