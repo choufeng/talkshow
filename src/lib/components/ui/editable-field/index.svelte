@@ -50,14 +50,14 @@
       onkeydown={handleKeyDown}
     />
     <button
-      class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border-input bg-green-500/10 text-green-500 transition-colors hover:bg-green-500/20"
+      class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border-input bg-accent/10 text-accent-foreground transition-colors hover:bg-accent/20"
       onclick={confirm}
       title="确认"
     >
       <Check class="h-4 w-4" />
     </button>
     <button
-      class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border-input bg-red-500/10 text-red-500 transition-colors hover:bg-red-500/20"
+      class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border-input bg-destructive/10 text-destructive transition-colors hover:bg-destructive/20"
       onclick={cancel}
       title="取消"
     >
