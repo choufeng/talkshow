@@ -32,35 +32,35 @@
     </div>
     <nav class="py-3">
       <button
-        class="flex items-center gap-3 px-6 py-3 w-full text-[15px] text-foreground text-left transition-colors {activeMenu === 'home' ? 'bg-muted border-l-[3px] border-l-accent-foreground' : 'hover:bg-muted/50 border-l-[3px] border-l-transparent'}"
+        class="flex items-center gap-3 px-6 py-3 w-full text-[15px] text-foreground text-left transition-colors {activeMenu === 'home' ? 'bg-gradient-to-r from-btn-primary-from/15 to-btn-primary-from/5 border-l-[3px] border-l-accent-foreground font-medium shadow-[0_1px_3px_oklch(38%_0.1_160/0.1)]' : 'hover:bg-muted/50 border-l-[3px] border-l-transparent'}"
         onclick={() => navigateTo('/')}
       >
         <House size={20} class="shrink-0" />
         <span>首页</span>
       </button>
       <button
-        class="flex items-center gap-3 px-6 py-3 w-full text-[15px] text-foreground text-left transition-colors {activeMenu === 'models' ? 'bg-muted border-l-[3px] border-l-accent-foreground' : 'hover:bg-muted/50 border-l-[3px] border-l-transparent'}"
+        class="flex items-center gap-3 px-6 py-3 w-full text-[15px] text-foreground text-left transition-colors {activeMenu === 'models' ? 'bg-gradient-to-r from-btn-primary-from/15 to-btn-primary-from/5 border-l-[3px] border-l-accent-foreground font-medium shadow-[0_1px_3px_oklch(38%_0.1_160/0.1)]' : 'hover:bg-muted/50 border-l-[3px] border-l-transparent'}"
         onclick={() => navigateTo('/models')}
       >
         <Bot size={20} class="shrink-0" />
         <span>模型</span>
       </button>
       <button
-        class="flex items-center gap-3 px-6 py-3 w-full text-[15px] text-foreground text-left transition-colors {activeMenu === 'skills' ? 'bg-muted border-l-[3px] border-l-accent-foreground' : 'hover:bg-muted/50 border-l-[3px] border-l-transparent'}"
+        class="flex items-center gap-3 px-6 py-3 w-full text-[15px] text-foreground text-left transition-colors {activeMenu === 'skills' ? 'bg-gradient-to-r from-btn-primary-from/15 to-btn-primary-from/5 border-l-[3px] border-l-accent-foreground font-medium shadow-[0_1px_3px_oklch(38%_0.1_160/0.1)]' : 'hover:bg-muted/50 border-l-[3px] border-l-transparent'}"
         onclick={() => navigateTo('/skills')}
       >
         <Sparkles size={20} class="shrink-0" />
         <span>技能</span>
       </button>
       <button
-        class="flex items-center gap-3 px-6 py-3 w-full text-[15px] text-foreground text-left transition-colors {activeMenu === 'settings' ? 'bg-muted border-l-[3px] border-l-accent-foreground' : 'hover:bg-muted/50 border-l-[3px] border-l-transparent'}"
+        class="flex items-center gap-3 px-6 py-3 w-full text-[15px] text-foreground text-left transition-colors {activeMenu === 'settings' ? 'bg-gradient-to-r from-btn-primary-from/15 to-btn-primary-from/5 border-l-[3px] border-l-accent-foreground font-medium shadow-[0_1px_3px_oklch(38%_0.1_160/0.1)]' : 'hover:bg-muted/50 border-l-[3px] border-l-transparent'}"
         onclick={() => navigateTo('/settings')}
       >
         <Settings size={20} class="shrink-0" />
         <span>设置</span>
       </button>
       <button
-        class="flex items-center gap-3 px-6 py-3 w-full text-[15px] text-foreground text-left transition-colors {activeMenu === 'logs' ? 'bg-muted border-l-[3px] border-l-accent-foreground' : 'hover:bg-muted/50 border-l-[3px] border-l-transparent'}"
+        class="flex items-center gap-3 px-6 py-3 w-full text-[15px] text-foreground text-left transition-colors {activeMenu === 'logs' ? 'bg-gradient-to-r from-btn-primary-from/15 to-btn-primary-from/5 border-l-[3px] border-l-accent-foreground font-medium shadow-[0_1px_3px_oklch(38%_0.1_160/0.1)]' : 'hover:bg-muted/50 border-l-[3px] border-l-transparent'}"
         onclick={() => navigateTo('/logs')}
       >
         <ScrollText size={20} class="shrink-0" />
