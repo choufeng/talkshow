@@ -19,6 +19,21 @@
   --color-key-bg-to: var(--key-bg-to);
   --color-key-border: var(--key-border);
   --color-key-text: var(--key-text);
+  --color-btn-primary-from: var(--btn-primary-from);
+  --color-btn-primary-to: var(--btn-primary-to);
+  --color-btn-secondary-from: var(--btn-secondary-from);
+  --color-btn-secondary-to: var(--btn-secondary-to);
+  --color-btn-secondary-border: var(--btn-secondary-border);
+  --color-btn-destructive-from: var(--btn-destructive-from);
+  --color-btn-destructive-to: var(--btn-destructive-to);
+  --color-toggle-off-from: var(--toggle-off-from);
+  --color-toggle-off-to: var(--toggle-off-to);
+  --color-toggle-thumb-from: var(--toggle-thumb-from);
+  --color-toggle-thumb-to: var(--toggle-thumb-to);
+
+  --shadow-btn-primary: var(--btn-primary-shadow);
+  --shadow-btn-secondary: var(--btn-secondary-shadow);
+  --shadow-btn-destructive: var(--btn-destructive-shadow);
 
   --shadow-card: 0px 2px 0px 1px rgba(0, 0, 0, 0.04);
   --shadow-popover: 0px 7px 12px 3px rgba(0, 0, 0, 0.08);
@@ -44,6 +59,20 @@
   --key-bg-to: oklch(91% 0.005 160);
   --key-border: oklch(75% 0.01 160 / 0.5);
   --key-text: oklch(25% 0 0);
+  --btn-primary-from: oklch(48% 0.1 160);
+  --btn-primary-to: oklch(38% 0.1 160);
+  --btn-primary-shadow: 0 2px 4px oklch(38% 0.1 160 / 0.3), inset 0 1px 0 oklch(100% 0 0 / 0.15);
+  --btn-secondary-from: oklch(100% 0 0);
+  --btn-secondary-to: oklch(97% 0.003 160);
+  --btn-secondary-border: oklch(48% 0.1 160 / 0.3);
+  --btn-secondary-shadow: 0 1px 2px oklch(0% 0 0 / 0.06);
+  --btn-destructive-from: oklch(62% 0.2 25);
+  --btn-destructive-to: oklch(55% 0.2 25);
+  --btn-destructive-shadow: 0 2px 4px oklch(55% 0.2 25 / 0.3), inset 0 1px 0 oklch(100% 0 0 / 0.15);
+  --toggle-off-from: oklch(82% 0.005 160);
+  --toggle-off-to: oklch(76% 0.005 160);
+  --toggle-thumb-from: oklch(100% 0 0);
+  --toggle-thumb-to: oklch(96% 0 0);
 }
 
 .dark {
@@ -62,6 +91,20 @@
   --key-bg-to: oklch(28% 0.006 160);
   --key-border: oklch(45% 0.01 160 / 0.6);
   --key-text: oklch(85% 0.01 160);
+  --btn-primary-from: oklch(62% 0.1 160);
+  --btn-primary-to: oklch(55% 0.1 160);
+  --btn-primary-shadow: 0 2px 6px oklch(0% 0 0 / 0.4), 0 0 10px oklch(55% 0.1 160 / 0.2), inset 0 1px 0 oklch(100% 0 0 / 0.1);
+  --btn-secondary-from: oklch(24% 0.006 160);
+  --btn-secondary-to: oklch(18% 0.005 160);
+  --btn-secondary-border: oklch(55% 0.1 160 / 0.35);
+  --btn-secondary-shadow: 0 1px 3px oklch(0% 0 0 / 0.2);
+  --btn-destructive-from: oklch(62% 0.2 25);
+  --btn-destructive-to: oklch(55% 0.2 25);
+  --btn-destructive-shadow: 0 2px 6px oklch(0% 0 0 / 0.4), 0 0 8px oklch(55% 0.2 25 / 0.2), inset 0 1px 0 oklch(100% 0 0 / 0.1);
+  --toggle-off-from: oklch(30% 0.006 160);
+  --toggle-off-to: oklch(24% 0.005 160);
+  --toggle-thumb-from: oklch(45% 0 0);
+  --toggle-thumb-to: oklch(38% 0 0);
 }
 
 @layer base {
