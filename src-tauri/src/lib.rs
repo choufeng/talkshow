@@ -943,6 +943,7 @@ fn show_notification(app_handle: &tauri::AppHandle, title: &str, body: &str) {
         .ok();
 }
 
+#[allow(unused_variables)]
 fn play_sound(sound_name: &str) {
     #[cfg(target_os = "macos")]
     {
