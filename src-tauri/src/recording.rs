@@ -355,3 +355,84 @@ impl AudioRecorder {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_leap_year() {
+        assert!(!is_leap_year(2025));
+        assert!(is_leap_year(2024));
+        assert!(!is_leap_year(1900));
+        assert!(is_leap_year(2000));
+        assert!(!is_leap_year(2100));
+        assert!(is_leap_year(0));
+        assert!(is_leap_year(4));
+    }
+
+    #[test]
+    fn test_days_to_date_epoch() {
+        assert_eq!(days_to_date(0), (1970, 1, 1));
+    }
+
+    #[test]
+    fn test_days_to_date_2024_new_year() {
+        let days_from_epoch: u64 = 19723;
+        let (year, month, day) = days_to_date(days_from_epoch);
+        assert_eq!(year, 2024);
+        assert_eq!(month, 1);
+        assert_eq!(day, 1);
+    }
+
+    #[test]
+    fn test_days_to_date_leap_year_feb() {
+        let days_from_epoch: u64 = 19723 + 31 + 28;
+        let (year, month, day) = days_to_date(days_from_epoch);
+        assert_eq!(year, 2024);
+        assert_eq!(month, 2);
+        assert_eq!(day, 29);
+    }
+
+    #[test]
+    fn test_days_to_date_year_boundary() {
+        let days_in_2023: u64 = 365;
+        let days_2023_start: u64 = 19358;
+        let (_, month, day) = days_to_date(days_2023_start);
+        assert_eq!(month, 1);
+        assert_eq!(day, 1);
+
+        let (_, month, day) = days_to_date(days_2023_start + days_in_2023 - 1);
+        assert_eq!(month, 12);
+        assert_eq!(day, 31);
+    }
+
+    #[test]
+    fn test_generate_filename_format() {
+        let filename = generate_filename();
+        assert!(filename.starts_with("talkshow_"));
+        assert!(filename.ends_with(".flac"));
+        let parts: Vec<&str> = filename
+            .strip_prefix("talkshow_")
+            .unwrap()
+            .strip_suffix(".flac")
+            .unwrap()
+            .split('_')
+            .collect();
+        assert_eq!(parts.len(), 2);
+        assert_eq!(parts[0].len(), 8);
+        assert_eq!(parts[1].len(), 6);
+    }
+
+    #[test]
+    fn test_recordings_dir() {
+        let dir = recordings_dir();
+        assert!(dir.ends_with("talkshow"));
+    }
+
+    #[test]
+    fn test_ensure_recordings_dir() {
+        let dir = ensure_recordings_dir().unwrap();
+        assert!(dir.exists());
+    }
+}
