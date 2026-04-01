@@ -13,7 +13,7 @@ export default defineConfig(async () => ({
   test: {
     environment: "jsdom",
     include: ["src/**/*.test.{ts,js}"],
-    setupFiles: [],
+    setupFiles: ['./src/test-setup.ts'],
   },
 
   clearScreen: false,
