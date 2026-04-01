@@ -209,3 +209,74 @@ pub fn get_log_content(
     let logger = app_handle.state::<Logger>();
     logger.get_content(session_file.as_deref())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn create_logger() -> (Logger, tempfile::TempDir) {
+        let dir = tempfile::tempdir().unwrap();
+        let logger = Logger::new(dir.path()).unwrap();
+        (logger, dir)
+    }
+
+    #[test]
+    fn test_log_and_get_content() {
+        let (logger, _dir) = create_logger();
+        logger.info("test-module", "test message", None);
+        let entries = logger.get_content(None);
+        assert!(
+            !entries.is_empty(),
+            "expected at least 1 entry, got 0. log_dir={:?}",
+            logger.log_dir
+        );
+        assert_eq!(entries[0].module, "test-module");
+        assert_eq!(entries[0].level, "info");
+        assert_eq!(entries[0].msg, "test message");
+    }
+
+    #[test]
+    fn test_get_content_path_traversal_blocked() {
+        let (logger, _dir) = create_logger();
+        let entries = logger.get_content(Some("../etc/passwd"));
+        assert!(entries.is_empty());
+    }
+
+    #[test]
+    fn test_get_content_absolute_path_blocked() {
+        let (logger, _dir) = create_logger();
+        let entries = logger.get_content(Some("/etc/passwd"));
+        assert!(entries.is_empty());
+    }
+
+    #[test]
+    fn test_get_content_backslash_blocked() {
+        let (logger, _dir) = create_logger();
+        let entries = logger.get_content(Some("..\\windows\\system32"));
+        assert!(entries.is_empty());
+    }
+
+    #[test]
+    fn test_get_sessions() {
+        let (logger, _dir) = create_logger();
+        logger.info("test", "message", None);
+        let sessions = logger.get_sessions();
+        assert!(sessions.len() >= 1);
+        let current = sessions.iter().find(|s| s.is_current);
+        assert!(current.is_some());
+        assert!(current.unwrap().entry_count >= 1);
+    }
+
+    #[test]
+    fn test_log_with_meta() {
+        let (logger, _dir) = create_logger();
+        logger.warn(
+            "test",
+            "warning with meta",
+            Some(serde_json::json!({ "key": "value" })),
+        );
+        let entries = logger.get_content(None);
+        let entry = entries.iter().find(|e| e.level == "warn").unwrap();
+        assert_eq!(entry.meta.as_ref().unwrap()["key"], "value");
+    }
+}
