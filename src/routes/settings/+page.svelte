@@ -4,6 +4,8 @@
   import { config } from '$lib/stores/config';
   import { theme, type Theme } from '$lib/stores/theme';
   import ShortcutRecorder from '$lib/components/ui/shortcut-recorder/index.svelte';
+  import Toggle from '$lib/components/ui/toggle/index.svelte';
+  import { updateFeature } from '$lib/ai/shared';
 
   onMount(() => {
     config.load();
@@ -19,6 +21,14 @@
 
   async function handleUpdateTranslate(shortcut: string) {
     await config.updateShortcut('translate', shortcut);
+  }
+
+  function toggleAutoMute() {
+    const recording = $config.features?.recording ?? { auto_mute: false };
+    config.save(updateFeature($config, 'recording', () => ({
+      ...recording,
+      auto_mute: !recording.auto_mute
+    })));
   }
 
   const THEME_OPTIONS: { value: Theme; label: string; icon: typeof Sun }[] = [
@@ -67,26 +77,11 @@
           <div class="text-[15px] font-semibold text-foreground mb-1">录音时自动静音</div>
           <div class="text-body text-foreground-alt">开始录音后自动静音其他应用的声音，录音结束后自动恢复</div>
         </div>
-        <button
-          class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors {$config.features?.recording?.auto_mute ? 'bg-btn-primary-to' : 'bg-border'}"
-          aria-label="录音时自动静音"
-          onclick={() => {
-            const recording = $config.features?.recording ?? { auto_mute: false };
-            const newConfig = {
-              ...$config,
-              features: {
-                ...$config.features,
-                recording: {
-                  ...recording,
-                  auto_mute: !recording.auto_mute
-                }
-              }
-            };
-            config.save(newConfig);
-          }}
-        >
-          <span class="pointer-events-none block h-4 w-4 rounded-full bg-white shadow-lg transition-transform {$config.features?.recording?.auto_mute ? 'translate-x-5' : 'translate-x-0'}"></span>
-        </button>
+        <Toggle
+          checked={$config.features?.recording?.auto_mute ?? false}
+          onCheckedChange={() => toggleAutoMute()}
+          ariaLabel="录音时自动静音"
+        />
       </div>
     </div>
   </section>

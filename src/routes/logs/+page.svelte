@@ -2,6 +2,8 @@
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { ScrollText } from 'lucide-svelte';
+  import { formatTimestamp } from '$lib/utils';
+  import { invokeWithError } from '$lib/ai/shared';
 
   interface LogEntry {
     ts: string;
@@ -49,34 +51,20 @@
   });
 
   async function loadSessions() {
-    try {
-      sessions = await invoke<LogSession[]>('get_log_sessions');
-    } catch (e) {
-      console.error('Failed to load log sessions:', e);
-    }
+    sessions = await invokeWithError<LogSession[]>('get_log_sessions') ?? [];
   }
 
   async function loadCurrentLog() {
     loading = true;
-    try {
-      entries = await invoke<LogEntry[]>('get_log_content', { sessionFile: null });
-    } catch (e) {
-      console.error('Failed to load log content:', e);
-    } finally {
-      loading = false;
-    }
+    entries = await invokeWithError<LogEntry[]>('get_log_content', { sessionFile: null }) ?? [];
+    loading = false;
   }
 
   async function loadSessionLog(filename: string) {
     loading = true;
     selectedSession = filename;
-    try {
-      entries = await invoke<LogEntry[]>('get_log_content', { sessionFile: filename });
-    } catch (e) {
-      console.error('Failed to load session log:', e);
-    } finally {
-      loading = false;
-    }
+    entries = await invokeWithError<LogEntry[]>('get_log_content', { sessionFile: filename }) ?? [];
+    loading = false;
   }
 
   async function switchTab(tab: 'current' | 'history') {
@@ -87,16 +75,6 @@
     } else {
       entries = [];
       selectedSession = null;
-    }
-  }
-
-  function formatTimestamp(ts: string): string {
-    try {
-      const d = new Date(ts);
-      const pad = (n: number) => n.toString().padStart(2, '0');
-      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-    } catch {
-      return ts;
     }
   }
 

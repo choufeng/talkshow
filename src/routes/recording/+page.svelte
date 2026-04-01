@@ -2,6 +2,8 @@
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
+  import { formatTime } from '$lib/utils';
+  import { invokeWithError } from '$lib/ai/shared';
 
   const appWindow = getCurrentWindow();
 
@@ -16,21 +18,14 @@
   let closeTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
   async function fetchReplaceModeState() {
-    try {
-      const state = await invoke<{ replaceMode: boolean; selectedPreview: string }>("get_replace_mode_state");
+    const state = await invokeWithError<{ replaceMode: boolean; selectedPreview: string }>("get_replace_mode_state");
+    if (state) {
       replaceMode = state.replaceMode;
       selectedPreview = state.selectedPreview;
-    } catch {
     }
   }
 
   fetchReplaceModeState();
-
-  function formatTime(totalSeconds: number): string {
-    const mins = Math.floor(totalSeconds / 60);
-    const secs = totalSeconds % 60;
-    return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
-  }
 
   function startTimer() {
     if (intervalId) clearInterval(intervalId);
