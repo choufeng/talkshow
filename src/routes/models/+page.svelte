@@ -4,13 +4,22 @@
   import GroupedSelect from '$lib/components/ui/select/index.svelte';
   import EditableField from '$lib/components/ui/editable-field/index.svelte';
   import Dialog from '$lib/components/ui/dialog/index.svelte';
-  import { invoke } from '@tauri-apps/api/core';
+  import Toggle from '$lib/components/ui/toggle/index.svelte';
+  import DialogFooter from '$lib/components/ui/dialog-footer/index.svelte';
   import { listen } from '@tauri-apps/api/event';
   import { Plus, RotateCcw, Mic, Languages } from 'lucide-svelte';
-  import type { ProviderConfig, AppConfig, ModelConfig, ModelVerified } from '$lib/stores/config';
+  import type { ProviderConfig, AppConfig, ModelConfig, ModelVerified, TranscriptionConfig, TranslationConfig } from '$lib/stores/config';
   import { SENSEVOICE_LANGUAGES } from '$lib/stores/config';
+  import { updateFeature, updateNestedPath, invokeWithError } from '$lib/ai/shared';
+  import { formatDate, generateSlug } from '$lib/utils';
+  import { createDialogState } from '$lib/hooks';
 
-  let showAddDialog = $state(false);
+  const addProviderDialog = createDialogState({
+    onReset: () => {
+      newProvider = { name: '', type: '', id: '', endpoint: '' };
+      formErrors = {};
+    }
+  });
   let newProvider = $state({
     name: '',
     type: '',
@@ -18,14 +27,22 @@
     endpoint: ''
   });
   let formErrors = $state<Record<string, string>>({});
-  let showDeleteConfirm = $state(false);
-  let showResetConfirm = $state(false);
+  const deleteConfirmDialog = createDialogState({
+    onReset: () => { pendingActionProviderId = ''; }
+  });
   let pendingActionProviderId = $state('');
-  let showAddModelDialog = $state(false);
+  const resetConfirmDialog = createDialogState({
+    onReset: () => { pendingActionProviderId = ''; }
+  });
+  const addModelDialog = createDialogState({
+    onReset: () => { addModelProviderId = ''; newModelName = ''; newModelCapabilities = []; }
+  });
   let addModelProviderId = $state('');
   let newModelName = $state('');
   let newModelCapabilities = $state<string[]>([]);
-  let showRemoveModelConfirm = $state(false);
+  const removeModelDialog = createDialogState({
+    onReset: () => { pendingRemoveModel = { providerId: '', modelName: '' }; }
+  });
   let pendingRemoveModel = $state<{ providerId: string; modelName: string }>({ providerId: '', modelName: '' });
   let testingModels = $state<Set<string>>(new Set());
   let vertexEnvInfo = $state<{ project: string; location: string } | null>(null);
@@ -35,17 +52,13 @@
   let sensevoiceLanguage = $state(0);
 
   async function loadSenseVoiceStatus() {
-    try {
-      sensevoiceStatus = await invoke<{ status: string; size_bytes?: number }>('get_sensevoice_status');
-    } catch {
-      sensevoiceStatus = null;
-    }
+    sensevoiceStatus = await invokeWithError<{ status: string; size_bytes?: number }>('get_sensevoice_status');
   }
 
   async function downloadSenseVoice() {
     sensevoiceDownloading = true;
     try {
-      await invoke('download_sensevoice_model');
+      await invokeWithError('download_sensevoice_model');
       await loadSenseVoiceStatus();
     } catch (e) {
       console.error('Download failed:', e);
@@ -55,12 +68,8 @@
   }
 
   async function deleteSenseVoiceModel() {
-    try {
-      await invoke('delete_sensevoice_model');
-      await loadSenseVoiceStatus();
-    } catch (e) {
-      console.error('Delete failed:', e);
-    }
+    await invokeWithError('delete_sensevoice_model');
+    await loadSenseVoiceStatus();
   }
 
   const PROVIDER_TYPES = [
@@ -70,11 +79,7 @@
 
   onMount(async () => {
     config.load();
-    try {
-      vertexEnvInfo = await invoke<{ project: string; location: string }>('get_vertex_env_info');
-    } catch {
-      vertexEnvInfo = null;
-    }
+    vertexEnvInfo = await invokeWithError<{ project: string; location: string }>('get_vertex_env_info');
     await loadSenseVoiceStatus();
     listen('sensevoice:download-progress', (event) => {
       sensevoiceDownloadProgress = event.payload as any;
@@ -117,14 +122,11 @@
 
   function handleTranscriptionChange(val: string) {
     const [providerId, model] = val.split('::');
-    const newConfig: AppConfig = {
-      ...$config,
-      features: {
-        ...$config.features,
-        transcription: { provider_id: providerId, model, polish_enabled: $config.features.transcription.polish_enabled, polish_provider_id: $config.features.transcription.polish_provider_id, polish_model: $config.features.transcription.polish_model }
-      }
-    };
-    config.save(newConfig);
+    config.save(updateFeature($config, 'transcription', (t) => ({
+      ...(t as TranscriptionConfig),
+      provider_id: providerId,
+      model
+    })));
   }
 
   function getPolishValue(): string {
@@ -137,43 +139,25 @@
 
   function handlePolishChange(val: string) {
     const [providerId, model] = val.split('::');
-    const newConfig: AppConfig = {
-      ...$config,
-      features: {
-        ...$config.features,
-        transcription: {
-          ...$config.features.transcription,
-          polish_provider_id: providerId,
-          polish_model: model
-        }
-      }
-    };
-    config.save(newConfig);
+    config.save(updateFeature($config, 'transcription', (t) => ({
+      ...(t as TranscriptionConfig),
+      polish_provider_id: providerId,
+      polish_model: model
+    })));
   }
 
   function handlePolishEnabled(enabled: boolean) {
-    const newConfig: AppConfig = {
-      ...$config,
-      features: {
-        ...$config.features,
-        transcription: {
-          ...$config.features.transcription,
-          polish_enabled: enabled
-        }
-      }
-    };
-    config.save(newConfig);
+    config.save(updateFeature($config, 'transcription', (t) => ({
+      ...(t as TranscriptionConfig),
+      polish_enabled: enabled
+    })));
   }
 
   function handleTargetLangChange(lang: string) {
-    const newConfig: AppConfig = {
-      ...$config,
-      features: {
-        ...$config.features,
-        translation: { target_lang: lang }
-      }
-    };
-    config.save(newConfig);
+    config.save(updateFeature($config, 'translation', (t) => ({
+      ...(t as TranslationConfig),
+      target_lang: lang
+    })));
   }
 
   function handleProviderFieldChange(
@@ -181,45 +165,36 @@
     field: string,
     value: string
   ) {
-    const newProviders = $config.ai.providers.map((p: ProviderConfig) =>
-      p.id === providerId ? { ...p, [field]: value } : p
-    );
-    const newConfig: AppConfig = {
-      ...$config,
-      ai: { providers: newProviders }
-    };
-    config.save(newConfig);
+    config.save(updateNestedPath($config, ['ai', 'providers'], (providers) =>
+      (providers as ProviderConfig[]).map((p) =>
+        p.id === providerId ? { ...p, [field]: value } : p
+      )
+    ));
   }
 
   function handleApiKeyChange(providerId: string, value: string) {
-    const newProviders = $config.ai.providers.map((p: ProviderConfig) =>
-      p.id === providerId ? { ...p, api_key: value } : p
-    );
-    const newConfig: AppConfig = {
-      ...$config,
-      ai: { providers: newProviders }
-    };
-    config.save(newConfig);
+    config.save(updateNestedPath($config, ['ai', 'providers'], (providers) =>
+      (providers as ProviderConfig[]).map((p) =>
+        p.id === providerId ? { ...p, api_key: value } : p
+      )
+    ));
   }
 
   function handleAddModel(providerId: string, model: ModelConfig) {
-    const newProviders = $config.ai.providers.map((p: ProviderConfig) =>
-      p.id === providerId
-        ? { ...p, models: [...p.models, model] }
-        : p
-    );
-    const newConfig: AppConfig = {
-      ...$config,
-      ai: { providers: newProviders }
-    };
-    config.save(newConfig);
+    config.save(updateNestedPath($config, ['ai', 'providers'], (providers) =>
+      (providers as ProviderConfig[]).map((p) =>
+        p.id === providerId
+          ? { ...p, models: [...p.models, model] }
+          : p
+      )
+    ));
   }
 
   function openAddModelDialog(providerId: string) {
     addModelProviderId = providerId;
     newModelName = '';
     newModelCapabilities = [];
-    showAddModelDialog = true;
+    addModelDialog.open();
   }
 
   function confirmAddModel() {
@@ -229,31 +204,24 @@
       capabilities: [...newModelCapabilities]
     };
     handleAddModel(addModelProviderId, model);
-    showAddModelDialog = false;
-    addModelProviderId = '';
-    newModelName = '';
-    newModelCapabilities = [];
+    addModelDialog.close();
   }
 
   function handleRemoveModel(providerId: string, modelName: string) {
     pendingRemoveModel = { providerId, modelName };
-    showRemoveModelConfirm = true;
+    removeModelDialog.open();
   }
 
   function confirmRemoveModel() {
     const { providerId, modelName } = pendingRemoveModel;
-    const newProviders = $config.ai.providers.map((p: ProviderConfig) =>
-      p.id === providerId
-        ? { ...p, models: p.models.filter((m: ModelConfig) => m.name !== modelName) }
-        : p
-    );
-    const newConfig: AppConfig = {
-      ...$config,
-      ai: { providers: newProviders }
-    };
-    config.save(newConfig);
-    showRemoveModelConfirm = false;
-    pendingRemoveModel = { providerId: '', modelName: '' };
+    config.save(updateNestedPath($config, ['ai', 'providers'], (providers) =>
+      (providers as ProviderConfig[]).map((p) =>
+        p.id === providerId
+          ? { ...p, models: p.models.filter((m: ModelConfig) => m.name !== modelName) }
+          : p
+      )
+    ));
+    removeModelDialog.close();
   }
 
   function toggleCapability(cap: string) {
@@ -266,52 +234,34 @@
 
   function handleRemoveProvider(providerId: string) {
     pendingActionProviderId = providerId;
-    showDeleteConfirm = true;
+    deleteConfirmDialog.open();
   }
 
   function confirmRemoveProvider() {
-    const newProviders = $config.ai.providers.filter(
-      (p: ProviderConfig) => p.id !== pendingActionProviderId
-    );
-    const newConfig: AppConfig = {
-      ...$config,
-      ai: { providers: newProviders }
-    };
-    config.save(newConfig);
-    showDeleteConfirm = false;
-    pendingActionProviderId = '';
+    config.save(updateNestedPath($config, ['ai', 'providers'], (providers) =>
+      (providers as ProviderConfig[]).filter((p) => p.id !== pendingActionProviderId)
+    ));
+    deleteConfirmDialog.close();
   }
 
   function handleResetProvider(providerId: string) {
     pendingActionProviderId = providerId;
-    showResetConfirm = true;
+    resetConfirmDialog.open();
   }
 
   function confirmResetProvider() {
     const builtin = BUILTIN_PROVIDERS.find((p) => p.id === pendingActionProviderId);
     if (!builtin) return;
-    const newProviders = $config.ai.providers.map((p: ProviderConfig) =>
-      p.id === pendingActionProviderId ? { ...builtin } : p
-    );
-    const newConfig: AppConfig = {
-      ...$config,
-      ai: { providers: newProviders }
-    };
-    config.save(newConfig);
-    showResetConfirm = false;
-    pendingActionProviderId = '';
+    config.save(updateNestedPath($config, ['ai', 'providers'], (providers) =>
+      (providers as ProviderConfig[]).map((p) =>
+        p.id === pendingActionProviderId ? { ...builtin } : p
+      )
+    ));
+    resetConfirmDialog.close();
   }
 
   function needsApiKey(provider: ProviderConfig): boolean {
     return provider.type === 'openai-compatible';
-  }
-
-  function generateSlug(name: string): string {
-    return name
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '');
   }
 
   function handleNameInput(value: string) {
@@ -362,35 +312,8 @@
     };
 
     const newProviders = [...($config.ai.providers || []), provider];
-    const newConfig: AppConfig = {
-      ...$config,
-      ai: { providers: newProviders }
-    };
-
-    try {
-      await config.save(newConfig);
-      newProvider = { name: '', type: '', id: '', endpoint: '' };
-      formErrors = {};
-      showAddDialog = false;
-    } catch (error) {
-      console.error('Failed to add provider:', error);
-    }
-  }
-
-  function handleDialogOpenChange(open: boolean) {
-    if (!open) {
-      newProvider = { name: '', type: '', id: '', endpoint: '' };
-      formErrors = {};
-    }
-    showAddDialog = open;
-  }
-
-  function formatTestDate(isoStr: string): string {
-    try {
-      return new Date(isoStr).toLocaleDateString(undefined, { month: '2-digit', day: '2-digit' });
-    } catch {
-      return '';
-    }
+    config.save(updateNestedPath($config, ['ai', 'providers'], () => newProviders));
+    addProviderDialog.close();
   }
 
   function getTestKey(providerId: string, modelName: string): string {
@@ -405,7 +328,7 @@
     const key = getTestKey(providerId, modelName);
     testingModels = new Set([...testingModels, key]);
     try {
-      const result = await invoke<{ status: string; latency_ms?: number; message: string }>('test_model_connectivity', {
+      const result = await invokeWithError<{ status: string; latency_ms?: number; message: string }>('test_model_connectivity', {
         providerId,
         modelName,
       });
@@ -468,15 +391,11 @@
             <div class="text-[15px] font-semibold text-foreground">启用润色</div>
             <div class="text-body text-foreground-alt">转写后自动使用 LLM 润色文字</div>
           </div>
-          <button
-            class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-2 {$config.features.transcription.polish_enabled ? 'bg-gradient-to-b from-btn-primary-from to-btn-primary-to shadow-btn-primary' : 'bg-gradient-to-b from-toggle-off-from to-toggle-off-to shadow-btn-secondary'}"
-            role="switch"
-            aria-checked={$config.features.transcription.polish_enabled}
-            aria-label="启用润色"
-            onclick={() => handlePolishEnabled(!$config.features.transcription.polish_enabled)}
-          >
-            <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-gradient-to-b from-toggle-thumb-from to-toggle-thumb-to shadow ring-0 transition duration-200 ease-in-out {$config.features.transcription.polish_enabled ? 'translate-x-5' : 'translate-x-0'}"></span>
-          </button>
+          <Toggle
+            checked={$config.features.transcription.polish_enabled}
+            onCheckedChange={handlePolishEnabled}
+            ariaLabel="启用润色"
+          />
         </div>
 
         {#if $config.features.transcription.polish_enabled}
@@ -665,10 +584,10 @@ class="text-caption text-accent-foreground hover:underline"
                       <span class="animate-spin text-[10px]">⟳</span>
                     {:else if verified?.status === 'ok'}
                       <span class="text-green-500 text-[10px]">✓</span>
-                      <span class="text-[9px] text-green-500/70">{formatTestDate(verified.tested_at)}</span>
+                      <span class="text-[9px] text-green-500/70">{formatDate(verified.tested_at)}</span>
                     {:else if verified?.status === 'error'}
                       <span class="text-red-500 text-[10px]">✕</span>
-                      <span class="text-[9px] text-red-500/70">{formatTestDate(verified.tested_at)}</span>
+                      <span class="text-[9px] text-red-500/70">{formatDate(verified.tested_at)}</span>
                     {/if}
                     {#if provider.type !== 'sensevoice'}
                     <button
@@ -706,7 +625,7 @@ class="text-caption text-accent-foreground hover:underline"
       {/each}
       <button
         class="rounded-xl border-2 border-dashed border-border bg-background-alt/50 hover:bg-background-alt transition-colors flex flex-col items-center justify-center gap-1.5 cursor-pointer p-5 min-h-[160px]"
-        onclick={() => (showAddDialog = true)}
+        onclick={() => addProviderDialog.open()}
       >
         <Plus class="h-6 w-6 text-muted-foreground" />
         <span class="text-body text-muted-foreground">添加 Provider</span>
@@ -714,8 +633,8 @@ class="text-caption text-accent-foreground hover:underline"
     </div>
   </section>
   <Dialog
-    open={showAddDialog}
-    onOpenChange={handleDialogOpenChange}
+    open={addProviderDialog.isOpen}
+    onOpenChange={addProviderDialog.onOpenChange}
     title="添加 Provider"
     description="配置新的 AI 服务提供商"
   >
@@ -780,98 +699,64 @@ class="text-caption text-accent-foreground hover:underline"
     {/snippet}
 
     {#snippet footer()}
-      <button
-        type="button"
-        class="rounded-md border border-border px-4 py-2 text-body text-foreground hover:bg-muted transition-colors"
-        onclick={() => handleDialogOpenChange(false)}
-      >
-        取消
-      </button>
-      <button
-        type="button"
-        class="rounded-md bg-foreground px-4 py-2 text-body text-background hover:bg-foreground/90 transition-colors"
-        onclick={handleAddProvider}
-      >
-        添加
-      </button>
+      <DialogFooter
+        onCancel={() => addProviderDialog.close()}
+        onConfirm={handleAddProvider}
+        confirmText="添加"
+      />
     {/snippet}
   </Dialog>
 
   <Dialog
-    open={showDeleteConfirm}
-    onOpenChange={(open) => { showDeleteConfirm = open; if (!open) pendingActionProviderId = ''; }}
+    open={deleteConfirmDialog.isOpen}
+    onOpenChange={deleteConfirmDialog.onOpenChange}
     title="删除 Provider"
     description="确定要删除该 Provider 吗？此操作无法撤销。"
   >
     {#snippet footer()}
-      <button
-        type="button"
-        class="rounded-md border border-border px-4 py-2 text-body text-foreground hover:bg-muted transition-colors"
-        onclick={() => { showDeleteConfirm = false; pendingActionProviderId = ''; }}
-      >
-        取消
-      </button>
-      <button
-        type="button"
-        class="rounded-md bg-destructive px-4 py-2 text-body text-white hover:bg-destructive/90 transition-colors"
-        onclick={confirmRemoveProvider}
-      >
-        删除
-      </button>
+      <DialogFooter
+        onCancel={() => deleteConfirmDialog.close()}
+        onConfirm={confirmRemoveProvider}
+        confirmText="删除"
+        confirmVariant="danger"
+      />
     {/snippet}
   </Dialog>
 
   <Dialog
-    open={showResetConfirm}
-    onOpenChange={(open) => { showResetConfirm = open; if (!open) pendingActionProviderId = ''; }}
+    open={resetConfirmDialog.isOpen}
+    onOpenChange={resetConfirmDialog.onOpenChange}
     title="重置 Provider"
     description="确定要重置为默认设置吗？自定义的 Endpoint、API Key 和 Models 将被覆盖。"
   >
     {#snippet footer()}
-      <button
-        type="button"
-        class="rounded-md border border-border px-4 py-2 text-body text-foreground hover:bg-muted transition-colors"
-        onclick={() => { showResetConfirm = false; pendingActionProviderId = ''; }}
-      >
-        取消
-      </button>
-      <button
-        type="button"
-        class="rounded-md bg-foreground px-4 py-2 text-body text-background hover:bg-foreground/90 transition-colors"
-        onclick={confirmResetProvider}
-      >
-        重置
-      </button>
+      <DialogFooter
+        onCancel={() => resetConfirmDialog.close()}
+        onConfirm={confirmResetProvider}
+        confirmText="重置"
+      />
     {/snippet}
   </Dialog>
 
   <Dialog
-    open={showRemoveModelConfirm}
-    onOpenChange={(open) => { showRemoveModelConfirm = open; if (!open) pendingRemoveModel = { providerId: '', modelName: '' }; }}
+    open={removeModelDialog.isOpen}
+    onOpenChange={removeModelDialog.onOpenChange}
     title="删除模型"
     description="确定要删除该模型吗？此操作无法撤销。"
   >
     {#snippet footer()}
-      <button
-        type="button"
-        class="rounded-md border border-border px-4 py-2 text-body text-foreground hover:bg-muted transition-colors"
-        onclick={() => { showRemoveModelConfirm = false; pendingRemoveModel = { providerId: '', modelName: '' }; }}
-      >
-        取消
-      </button>
-      <button
-        type="button"
-        class="rounded-md bg-destructive px-4 py-2 text-body text-white hover:bg-destructive/90 transition-colors"
-        onclick={confirmRemoveModel}
-      >
-        删除
-      </button>
+      <DialogFooter
+        onCancel={() => removeModelDialog.close()}
+        onConfirm={confirmRemoveModel}
+        confirmText="删除"
+        confirmVariant="danger"
+      />
     {/snippet}
   </Dialog>
 
   <Dialog
-    open={showAddModelDialog}
-    onOpenChange={(open) => { showAddModelDialog = open; if (!open) { addModelProviderId = ''; newModelName = ''; newModelCapabilities = []; } }}
+    open={addModelDialog.isOpen}
+    onOpenChange={addModelDialog.onOpenChange}
     title="添加模型"
     description="为 Provider 添加新模型"
   >
@@ -905,21 +790,12 @@ class="text-caption text-accent-foreground hover:underline"
     {/snippet}
 
     {#snippet footer()}
-      <button
-        type="button"
-        class="rounded-md border border-border px-4 py-2 text-body text-foreground hover:bg-muted transition-colors"
-        onclick={() => { showAddModelDialog = false; addModelProviderId = ''; newModelName = ''; newModelCapabilities = []; }}
-      >
-        取消
-      </button>
-      <button
-        type="button"
-        class="rounded-md bg-foreground px-4 py-2 text-body text-background hover:bg-foreground/90 transition-colors"
-        onclick={confirmAddModel}
-        disabled={!newModelName.trim()}
-      >
-        添加
-      </button>
+      <DialogFooter
+        onCancel={() => addModelDialog.close()}
+        onConfirm={confirmAddModel}
+        confirmText="添加"
+        confirmDisabled={!newModelName.trim()}
+      />
     {/snippet}
   </Dialog>
 </div>
