@@ -2,12 +2,22 @@
   import { onMount } from 'svelte';
   import { config } from '$lib/stores/config';
   import Dialog from '$lib/components/ui/dialog/index.svelte';
-  import { invoke } from '@tauri-apps/api/core';
+  import Toggle from '$lib/components/ui/toggle/index.svelte';
+  import DialogFooter from '$lib/components/ui/dialog-footer/index.svelte';
   import { Plus, Pencil, Trash2 } from 'lucide-svelte';
   import type { Skill, AppConfig } from '$lib/stores/config';
+  import { updateFeature, invokeWithError } from '$lib/ai/shared';
+  import { createDialogState } from '$lib/hooks';
 
-  let showEditDialog = $state(false);
-  let showDeleteConfirm = $state(false);
+  const editDialog = createDialogState({
+    onReset: () => {
+      editingSkill = null;
+      editForm = { name: '', description: '', prompt: '' };
+    }
+  });
+  const deleteDialog = createDialogState({
+    onReset: () => { pendingDeleteId = ''; }
+  });
   let editingSkill = $state<Skill | null>(null);
   let editForm = $state({ name: '', description: '', prompt: '' });
   let pendingDeleteId = $state('');
@@ -18,39 +28,26 @@
   });
 
   function handleSkillToggle(skillId: string, enabled: boolean) {
-    const newSkills = $config.features.skills.skills.map((s: Skill) =>
-      s.id === skillId ? { ...s, enabled } : s
-    );
-    const newConfig: AppConfig = {
-      ...$config,
-      features: {
-        ...$config.features,
-        // 全局开关已移除，Skills 管线始终启用
-        skills: { ...$config.features.skills, skills: newSkills, enabled: true }
-      }
-    };
-    config.save(newConfig);
+    config.save(updateFeature($config, 'skills', (f) => ({
+      ...(f as NonNullable<typeof f>),
+      skills: (f as NonNullable<typeof f>).skills.map((s: Skill) =>
+        s.id === skillId ? { ...s, enabled } : s
+      ),
+      enabled: true
+    })));
   }
 
   function openAddDialog() {
     isAddMode = true;
     editForm = { name: '', description: '', prompt: '' };
-    showEditDialog = true;
+    editDialog.open();
   }
 
   function openEditDialog(skill: Skill) {
     isAddMode = false;
     editingSkill = skill;
     editForm = { name: skill.name, description: skill.description, prompt: skill.prompt };
-    showEditDialog = true;
-  }
-
-  function handleEditDialogClose(open: boolean) {
-    if (!open) {
-      showEditDialog = false;
-      editingSkill = null;
-      editForm = { name: '', description: '', prompt: '' };
-    }
+    editDialog.open();
   }
 
   async function handleSave() {
@@ -63,9 +60,10 @@
         description: editForm.description.trim(),
         prompt: editForm.prompt.trim(),
         builtin: false,
+        editable: true,
         enabled: true
       };
-      await invoke('add_skill', { skill: newSkill });
+      await invokeWithError('add_skill', { skill: newSkill });
     } else if (editingSkill) {
       const updated: Skill = {
         ...editingSkill,
@@ -73,31 +71,21 @@
         description: editForm.description.trim(),
         prompt: editForm.prompt.trim()
       };
-      await invoke('update_skill', { skill: updated });
+      await invokeWithError('update_skill', { skill: updated });
     }
     await config.load();
-    showEditDialog = false;
-    editingSkill = null;
-    editForm = { name: '', description: '', prompt: '' };
+    editDialog.close();
   }
 
   function openDeleteConfirm(skillId: string) {
     pendingDeleteId = skillId;
-    showDeleteConfirm = true;
+    deleteDialog.open();
   }
 
   async function confirmDelete() {
-    await invoke('delete_skill', { skillId: pendingDeleteId });
+    await invokeWithError('delete_skill', { skillId: pendingDeleteId });
     await config.load();
-    showDeleteConfirm = false;
-    pendingDeleteId = '';
-  }
-
-  function handleDeleteDialogClose(open: boolean) {
-    if (!open) {
-      showDeleteConfirm = false;
-      pendingDeleteId = '';
-    }
+    deleteDialog.close();
   }
 
   let canSave = $derived(
@@ -127,15 +115,12 @@
         <div class="rounded-xl border border-border bg-background-alt p-5">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2.5">
-              <button
-                class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-2 {skill.enabled ? 'bg-gradient-to-b from-btn-primary-from to-btn-primary-to shadow-btn-primary' : 'bg-gradient-to-b from-toggle-off-from to-toggle-off-to shadow-btn-secondary'}"
-                role="switch"
-                aria-checked={skill.enabled}
-                aria-label="启用 {skill.name}"
-                onclick={() => handleSkillToggle(skill.id, !skill.enabled)}
-              >
-                <span class="pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full bg-gradient-to-b from-toggle-thumb-from to-toggle-thumb-to shadow ring-0 transition duration-200 ease-in-out {skill.enabled ? 'translate-x-4' : 'translate-x-0'}"></span>
-              </button>
+              <Toggle
+                checked={skill.enabled}
+                onCheckedChange={(enabled) => handleSkillToggle(skill.id, enabled)}
+                size="sm"
+                ariaLabel={`启用 ${skill.name}`}
+              />
               <div>
                 <div class="flex items-center gap-1.5">
                   <span class="text-[15px] font-semibold text-foreground">{skill.name}</span>
@@ -177,8 +162,8 @@
   </section>
 
   <Dialog
-    open={showEditDialog}
-    onOpenChange={handleEditDialogClose}
+    open={editDialog.isOpen}
+    onOpenChange={editDialog.onOpenChange}
     title={isAddMode ? '添加 Skill' : '编辑 Skill'}
   >
     {#snippet children()}
@@ -214,45 +199,28 @@
     {/snippet}
 
     {#snippet footer()}
-      <button
-        type="button"
-        class="rounded-md border border-btn-secondary-border bg-gradient-to-b from-btn-secondary-from to-btn-secondary-to px-4 py-2 text-body text-accent-foreground hover:bg-muted transition-colors shadow-btn-secondary"
-        onclick={() => handleEditDialogClose(false)}
-      >
-        取消
-      </button>
-      <button
-        type="button"
-        class="rounded-md bg-gradient-to-b from-btn-primary-from to-btn-primary-to px-4 py-2 text-body text-white hover:opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-btn-primary"
-        onclick={handleSave}
-        disabled={!canSave}
-      >
-        保存
-      </button>
+      <DialogFooter
+        onCancel={() => editDialog.close()}
+        onConfirm={handleSave}
+        confirmText="保存"
+        confirmDisabled={!canSave}
+      />
     {/snippet}
   </Dialog>
 
   <Dialog
-    open={showDeleteConfirm}
-    onOpenChange={handleDeleteDialogClose}
+    open={deleteDialog.isOpen}
+    onOpenChange={deleteDialog.onOpenChange}
     title="删除 Skill"
     description="确定要删除该 Skill 吗？此操作无法撤销。"
   >
     {#snippet footer()}
-      <button
-        type="button"
-        class="rounded-md border border-btn-secondary-border bg-gradient-to-b from-btn-secondary-from to-btn-secondary-to px-4 py-2 text-body text-accent-foreground hover:bg-muted transition-colors shadow-btn-secondary"
-        onclick={() => handleDeleteDialogClose(false)}
-      >
-        取消
-      </button>
-      <button
-        type="button"
-        class="rounded-md bg-gradient-to-b from-btn-destructive-from to-btn-destructive-to px-4 py-2 text-body text-white hover:opacity-90 transition-colors shadow-btn-destructive"
-        onclick={confirmDelete}
-      >
-        删除
-      </button>
+      <DialogFooter
+        onCancel={() => deleteDialog.close()}
+        onConfirm={confirmDelete}
+        confirmText="删除"
+        confirmVariant="danger"
+      />
     {/snippet}
   </Dialog>
 </div>
