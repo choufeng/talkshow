@@ -17,6 +17,7 @@ fn get_translation_skill_prompt(skills_config: &SkillsConfig) -> Option<String> 
         .map(|s| s.prompt.clone())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn translate_text(
     logger: &Logger,
     text: &str,
@@ -109,6 +110,8 @@ pub async fn translate_text(
     }
 }
 
+#[allow(dead_code)]
+#[allow(clippy::too_many_arguments)]
 pub async fn translate_text_client(
     logger: &Logger,
     text: &str,
@@ -217,27 +220,42 @@ mod tests {
             .returning(|_, _, _, _| Ok("Hello World".to_string()));
 
         let result = translate_text_client(
-            &logger, "你好世界", "English", &skills,
-            "test-provider", "test-model", "https://example.com/v1",
+            &logger,
+            "你好世界",
+            "English",
+            &skills,
+            "test-provider",
+            "test-model",
+            "https://example.com/v1",
             &mut mock,
-        ).await;
+        )
+        .await;
         assert_eq!(result.unwrap(), "Hello World");
     }
 
     #[tokio::test]
     async fn test_translate_text_llm_error() {
         let logger = create_test_logger();
-        let skills = SkillsConfig { enabled: true, skills: vec![] };
+        let skills = SkillsConfig {
+            enabled: true,
+            skills: vec![],
+        };
 
         let mut mock = MockLlmClient::new();
         mock.expect_send_text()
             .returning(|_, _, _, _| Err("API error".to_string()));
 
         let result = translate_text_client(
-            &logger, "你好", "English", &skills,
-            "test-provider", "test-model", "https://example.com/v1",
+            &logger,
+            "你好",
+            "English",
+            &skills,
+            "test-provider",
+            "test-model",
+            "https://example.com/v1",
             &mut mock,
-        ).await;
+        )
+        .await;
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("翻译失败"));
     }
@@ -246,17 +264,26 @@ mod tests {
     #[ignore]
     async fn test_translate_text_timeout() {
         let logger = create_test_logger();
-        let skills = SkillsConfig { enabled: true, skills: vec![] };
+        let skills = SkillsConfig {
+            enabled: true,
+            skills: vec![],
+        };
 
         let mut mock = MockLlmClient::new();
         mock.expect_send_text()
             .returning(|_, _, _, _| Err("timeout simulation".to_string()));
 
         let result = translate_text_client(
-            &logger, "你好", "English", &skills,
-            "test-provider", "test-model", "https://example.com/v1",
+            &logger,
+            "你好",
+            "English",
+            &skills,
+            "test-provider",
+            "test-model",
+            "https://example.com/v1",
             &mut mock,
-        ).await;
+        )
+        .await;
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("翻译失败"));
     }
@@ -271,7 +298,10 @@ mod tests {
 
     #[test]
     fn test_get_translation_skill_prompt_not_found() {
-        let skills = SkillsConfig { enabled: true, skills: vec![] };
+        let skills = SkillsConfig {
+            enabled: true,
+            skills: vec![],
+        };
         let prompt = get_translation_skill_prompt(&skills);
         assert!(prompt.is_none());
     }

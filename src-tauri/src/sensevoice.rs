@@ -17,19 +17,21 @@ fn find_onnxruntime_dylib() -> Option<PathBuf> {
         }
     }
     if let Ok(output) = std::process::Command::new("python3")
-        .args(["-c", "import onnxruntime; import os; print(os.path.dirname(onnxruntime.__file__))"])
+        .args([
+            "-c",
+            "import onnxruntime; import os; print(os.path.dirname(onnxruntime.__file__))",
+        ])
         .output()
+        && output.status.success()
     {
-        if output.status.success() {
-            let dir = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            let path = PathBuf::from(&dir).join("capi");
-            if let Ok(entries) = std::fs::read_dir(&path) {
-                for entry in entries.flatten() {
-                    let name = entry.file_name();
-                    let name_str = name.to_string_lossy();
-                    if name_str.starts_with("libonnxruntime") && name_str.ends_with(".dylib") {
-                        return Some(entry.path());
-                    }
+        let dir = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let path = PathBuf::from(&dir).join("capi");
+        if let Ok(entries) = std::fs::read_dir(&path) {
+            for entry in entries.flatten() {
+                let name = entry.file_name();
+                let name_str = name.to_string_lossy();
+                if name_str.starts_with("libonnxruntime") && name_str.ends_with(".dylib") {
+                    return Some(entry.path());
                 }
             }
         }
@@ -43,7 +45,13 @@ fn ensure_ort_initialized() -> Result<(), SenseVoiceError> {
     }
     if let Some(dylib_path) = find_onnxruntime_dylib() {
         ort::init_from(&dylib_path)
-            .map_err(|e| SenseVoiceError::LoadFailed(format!("Failed to load ONNX Runtime from {}: {}", dylib_path.display(), e)))?
+            .map_err(|e| {
+                SenseVoiceError::LoadFailed(format!(
+                    "Failed to load ONNX Runtime from {}: {}",
+                    dylib_path.display(),
+                    e
+                ))
+            })?
             .commit();
         ORT_INITIALIZED.store(true, Ordering::Release);
         Ok(())
@@ -89,19 +97,17 @@ impl std::fmt::Display for SenseVoiceError {
 
 impl std::error::Error for SenseVoiceError {}
 
-fn model_dir(app_data_dir: &PathBuf) -> PathBuf {
+fn model_dir(app_data_dir: &std::path::Path) -> PathBuf {
     app_data_dir.join("models").join(MODEL_DIR_NAME)
 }
 
-pub fn model_status(app_data_dir: &PathBuf) -> SenseVoiceModelStatus {
+pub fn model_status(app_data_dir: &std::path::Path) -> SenseVoiceModelStatus {
     let dir = model_dir(app_data_dir);
     let onnx_path = dir.join("model_quant.onnx");
     if onnx_path.exists() {
         let size = std::fs::metadata(&onnx_path).map(|m| m.len()).unwrap_or(0);
         if size > 100_000_000 {
-            return SenseVoiceModelStatus::Ready {
-                size_bytes: size,
-            };
+            return SenseVoiceModelStatus::Ready { size_bytes: size };
         }
     }
     SenseVoiceModelStatus::NotDownloaded
@@ -114,7 +120,12 @@ pub enum SenseVoiceModelStatus {
     #[serde(rename = "not_downloaded")]
     NotDownloaded,
     #[serde(rename = "downloading")]
-    Downloading { file: String, percent: f64, downloaded: u64, total: u64 },
+    Downloading {
+        file: String,
+        percent: f64,
+        downloaded: u64,
+        total: u64,
+    },
     #[serde(rename = "ready")]
     Ready { size_bytes: u64 },
     #[serde(rename = "error")]
@@ -129,7 +140,7 @@ pub struct SenseVoiceEngine {
 }
 
 impl SenseVoiceEngine {
-    pub fn new(model_dir: &PathBuf) -> Result<Self, SenseVoiceError> {
+    pub fn new(model_dir: &std::path::Path) -> Result<Self, SenseVoiceError> {
         ensure_ort_initialized()?;
 
         let onnx_path = model_dir.join("model_quant.onnx");
@@ -140,18 +151,22 @@ impl SenseVoiceEngine {
             .commit_from_file(&onnx_path)
             .map_err(|e| SenseVoiceError::LoadFailed(e.to_string()))?;
 
-        let (cmvn_means, cmvn_vars) = parse_cmvn(&model_dir.join("am.mvn"))
-            .map_err(|e| SenseVoiceError::LoadFailed(e))?;
+        let (cmvn_means, cmvn_vars) =
+            parse_cmvn(&model_dir.join("am.mvn")).map_err(SenseVoiceError::LoadFailed)?;
 
         Ok(Self {
             session,
             cmvn_means,
             cmvn_vars,
-            model_dir: model_dir.clone(),
+            model_dir: model_dir.to_path_buf(),
         })
     }
 
-    pub fn transcribe(&mut self, audio_path: &PathBuf, language: i32) -> Result<String, SenseVoiceError> {
+    pub fn transcribe(
+        &mut self,
+        audio_path: &PathBuf,
+        language: i32,
+    ) -> Result<String, SenseVoiceError> {
         let (waveform, sample_rate) = load_audio(audio_path)?;
         let waveform_16k = resample_to_16k(&waveform, sample_rate)?;
         if waveform_16k.len() < 4800 {
@@ -187,14 +202,18 @@ impl SenseVoiceEngine {
         let textnorm_input = ort::value::TensorRef::from_array_view(textnorm_arr.view())
             .map_err(|e| SenseVoiceError::InferenceFailed(e.to_string()))?;
 
-        let outputs = self.session.run(ort::inputs![
-            feats_input,
-            feats_len_input,
-            language_input,
-            textnorm_input,
-        ]).map_err(|e| SenseVoiceError::InferenceFailed(e.to_string()))?;
+        let outputs = self
+            .session
+            .run(ort::inputs![
+                feats_input,
+                feats_len_input,
+                language_input,
+                textnorm_input,
+            ])
+            .map_err(|e| SenseVoiceError::InferenceFailed(e.to_string()))?;
 
-        let (logits_shape, logits_data) = outputs[0].try_extract_tensor::<f32>()
+        let (logits_shape, logits_data) = outputs[0]
+            .try_extract_tensor::<f32>()
             .map_err(|e| SenseVoiceError::InferenceFailed(e.to_string()))?;
         let vocab_size = logits_shape[2] as usize;
         let t_lfr_out = logits_shape[1] as usize;
@@ -202,10 +221,14 @@ impl SenseVoiceEngine {
         for t in 0..t_lfr_out {
             let start = t * vocab_size;
             let row = &logits_data[start..start + vocab_size];
-            if let Some((idx, _)) = row.iter().enumerate().max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal)) {
-                if idx != 0 && token_ids.last().copied() != Some(idx as i32) {
-                    token_ids.push(idx as i32);
-                }
+            if let Some((idx, _)) = row
+                .iter()
+                .enumerate()
+                .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
+                && idx != 0
+                && token_ids.last().copied() != Some(idx as i32)
+            {
+                token_ids.push(idx as i32);
             }
         }
         Ok(token_ids)
@@ -213,8 +236,8 @@ impl SenseVoiceEngine {
 }
 
 fn parse_cmvn(mvn_path: &PathBuf) -> Result<(Array1<f64>, Array1<f64>), String> {
-    let content = std::fs::read_to_string(mvn_path)
-        .map_err(|e| format!("Failed to read am.mvn: {}", e))?;
+    let content =
+        std::fs::read_to_string(mvn_path).map_err(|e| format!("Failed to read am.mvn: {}", e))?;
     let mut means: Vec<f64> = Vec::new();
     let mut vars: Vec<f64> = Vec::new();
     let mut current_section = "";
@@ -252,7 +275,10 @@ fn load_audio(path: &PathBuf) -> Result<(Vec<f32>, u32), SenseVoiceError> {
     } else {
         let tmp_dir = std::env::temp_dir().join("talkshow");
         let _ = std::fs::create_dir_all(&tmp_dir);
-        let tmp_wav = tmp_dir.join(format!("{}_sensevoice.wav", path.file_stem().and_then(|s| s.to_str()).unwrap_or("tmp")));
+        let tmp_wav = tmp_dir.join(format!(
+            "{}_sensevoice.wav",
+            path.file_stem().and_then(|s| s.to_str()).unwrap_or("tmp")
+        ));
         let output = std::process::Command::new("ffmpeg")
             .args(["-y", "-i"])
             .arg(path)
@@ -262,7 +288,10 @@ fn load_audio(path: &PathBuf) -> Result<(Vec<f32>, u32), SenseVoiceError> {
             .map_err(|e| SenseVoiceError::InvalidAudio(format!("ffmpeg failed: {}", e)))?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(SenseVoiceError::InvalidAudio(format!("ffmpeg conversion failed: {}", stderr)));
+            return Err(SenseVoiceError::InvalidAudio(format!(
+                "ffmpeg conversion failed: {}",
+                stderr
+            )));
         }
         (tmp_wav, true)
     };
@@ -273,16 +302,13 @@ fn load_audio(path: &PathBuf) -> Result<(Vec<f32>, u32), SenseVoiceError> {
     let samples: Vec<f32> = match spec.sample_format {
         hound::SampleFormat::Int => {
             let max_val = 2i32.pow(spec.bits_per_sample as u32 - 1) as f32;
-            reader.samples::<i32>()
+            reader
+                .samples::<i32>()
                 .filter_map(|s| s.ok())
                 .map(|s| s as f32 / max_val)
                 .collect()
         }
-        hound::SampleFormat::Float => {
-            reader.samples::<f32>()
-                .filter_map(|s| s.ok())
-                .collect()
-        }
+        hound::SampleFormat::Float => reader.samples::<f32>().filter_map(|s| s.ok()).collect(),
     };
     if converted {
         let _ = std::fs::remove_file(&wav_path);
@@ -311,7 +337,8 @@ fn resample_to_16k(samples: &[f32], src_rate: u32) -> Result<Vec<f32>, SenseVoic
         } else {
             chunk.to_vec()
         };
-        let out = resampler.process(&[&padded], None)
+        let out = resampler
+            .process(&[&padded], None)
             .map_err(|e| SenseVoiceError::InvalidAudio(format!("Resample failed: {}", e)))?;
         output.extend(out[0].iter().map(|&v| v as f32));
     }
@@ -319,8 +346,8 @@ fn resample_to_16k(samples: &[f32], src_rate: u32) -> Result<Vec<f32>, SenseVoic
 }
 
 fn extract_fbank(waveform: &[f32]) -> Result<Array2<f32>, SenseVoiceError> {
-    use kaldi_native_fbank::{FbankComputer, FbankOptions, OnlineFeature};
     use kaldi_native_fbank::online::FeatureComputer;
+    use kaldi_native_fbank::{FbankComputer, FbankOptions, OnlineFeature};
 
     let mut opts = FbankOptions::default();
     opts.frame_opts.samp_freq = 16000.0;
@@ -337,8 +364,9 @@ fn extract_fbank(waveform: &[f32]) -> Result<Array2<f32>, SenseVoiceError> {
     opts.use_log_fbank = true;
     opts.use_power = true;
 
-    let computer = FbankComputer::new(opts.clone())
-        .map_err(|e| SenseVoiceError::InferenceFailed(format!("FbankComputer init failed: {}", e)))?;
+    let computer = FbankComputer::new(opts.clone()).map_err(|e| {
+        SenseVoiceError::InferenceFailed(format!("FbankComputer init failed: {}", e))
+    })?;
     let mut online = OnlineFeature::new(FeatureComputer::Fbank(computer));
 
     let scaled: Vec<f32> = waveform.iter().map(|&s| s * 32768.0).collect();
@@ -348,7 +376,9 @@ fn extract_fbank(waveform: &[f32]) -> Result<Array2<f32>, SenseVoiceError> {
     let num_frames = online.num_frames_ready();
     let num_bins = opts.mel_opts.num_bins;
     if num_frames == 0 {
-        return Ok(Array2::from_shape_vec((0, num_bins), vec![]).unwrap_or(Array2::default((0, num_bins))));
+        return Ok(
+            Array2::from_shape_vec((0, num_bins), vec![]).unwrap_or(Array2::default((0, num_bins)))
+        );
     }
 
     let mut flat = Vec::with_capacity(num_frames * num_bins);
@@ -357,7 +387,8 @@ fn extract_fbank(waveform: &[f32]) -> Result<Array2<f32>, SenseVoiceError> {
             flat.extend_from_slice(frame);
         }
     }
-    Ok(Array2::from_shape_vec((num_frames, num_bins), flat).unwrap_or(Array2::default((num_frames, num_bins))))
+    Ok(Array2::from_shape_vec((num_frames, num_bins), flat)
+        .unwrap_or(Array2::default((num_frames, num_bins))))
 }
 
 fn apply_lfr(feat: &Array2<f32>) -> Array2<f32> {
@@ -414,15 +445,22 @@ fn pad_features(feat: &Array3<f32>) -> (Array3<f32>, i32) {
     (feat.clone(), t_lfr as i32)
 }
 
-fn decode_tokens(token_ids: &[i32], model_dir: &PathBuf) -> Result<String, SenseVoiceError> {
+fn decode_tokens(
+    token_ids: &[i32],
+    model_dir: &std::path::Path,
+) -> Result<String, SenseVoiceError> {
     let bpe_path = model_dir.join("chn_jpn_yue_eng_ko_spectok.bpe.model");
     if !bpe_path.exists() {
         return Err(SenseVoiceError::LoadFailed("BPE model not found".into()));
     }
     let sp = sentencepiece::SentencePieceProcessor::open(bpe_path.to_str().unwrap_or(""))
         .map_err(|e| SenseVoiceError::LoadFailed(format!("Failed to load BPE model: {}", e)))?;
-    let ids: Vec<u32> = token_ids.iter().filter_map(|&id| if id > 0 { Some(id as u32) } else { None }).collect();
-    let text = sp.decode_piece_ids(&ids)
+    let ids: Vec<u32> = token_ids
+        .iter()
+        .filter_map(|&id| if id > 0 { Some(id as u32) } else { None })
+        .collect();
+    let text = sp
+        .decode_piece_ids(&ids)
         .map_err(|e| SenseVoiceError::InferenceFailed(format!("BPE decode failed: {}", e)))?;
     Ok(text)
 }
@@ -436,15 +474,19 @@ fn postprocess(text: &str) -> String {
 pub async fn get_sensevoice_status(
     app_handle: tauri::AppHandle,
 ) -> Result<SenseVoiceModelStatus, String> {
-    let app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    let app_data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?;
     Ok(model_status(&app_data_dir))
 }
 
 #[tauri::command]
-pub async fn download_sensevoice_model(
-    app_handle: tauri::AppHandle,
-) -> Result<(), String> {
-    let app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+pub async fn download_sensevoice_model(app_handle: tauri::AppHandle) -> Result<(), String> {
+    let app_data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?;
     let dir = model_dir(&app_data_dir);
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
 
@@ -463,7 +505,10 @@ pub async fn download_sensevoice_model(
         if tmp_path.exists() {
             let _ = std::fs::remove_file(&tmp_path);
         }
-        let url = format!("https://huggingface.co/{}/resolve/main/{}", HF_REPO, filename);
+        let url = format!(
+            "https://huggingface.co/{}/resolve/main/{}",
+            HF_REPO, filename
+        );
         let response = client.get(&url).send().await.map_err(|e| e.to_string())?;
         let total = response.content_length().unwrap_or(0);
         let mut downloaded: u64 = 0;
@@ -474,15 +519,25 @@ pub async fn download_sensevoice_model(
         let mut async_file = tokio::fs::File::from_std(file);
         while let Some(chunk) = stream.next().await {
             let chunk = chunk.map_err(|e| e.to_string())?;
-            async_file.write_all(&chunk).await.map_err(|e| e.to_string())?;
+            async_file
+                .write_all(&chunk)
+                .await
+                .map_err(|e| e.to_string())?;
             downloaded += chunk.len() as u64;
-            let percent = if total > 0 { (downloaded as f64 / total as f64) * 100.0 } else { 0.0 };
-            let _ = app_handle.emit("sensevoice:download-progress", serde_json::json!({
-                "file": filename,
-                "downloaded": downloaded,
-                "total": total,
-                "percent": percent,
-            }));
+            let percent = if total > 0 {
+                (downloaded as f64 / total as f64) * 100.0
+            } else {
+                0.0
+            };
+            let _ = app_handle.emit(
+                "sensevoice:download-progress",
+                serde_json::json!({
+                    "file": filename,
+                    "downloaded": downloaded,
+                    "total": total,
+                    "percent": percent,
+                }),
+            );
         }
         async_file.flush().await.map_err(|e| e.to_string())?;
         drop(async_file);
@@ -493,10 +548,11 @@ pub async fn download_sensevoice_model(
 }
 
 #[tauri::command]
-pub async fn delete_sensevoice_model(
-    app_handle: tauri::AppHandle,
-) -> Result<(), String> {
-    let app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+pub async fn delete_sensevoice_model(app_handle: tauri::AppHandle) -> Result<(), String> {
+    let app_data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?;
     let dir = model_dir(&app_data_dir);
     if dir.exists() {
         std::fs::remove_dir_all(&dir).map_err(|e| e.to_string())?;
@@ -505,14 +561,14 @@ pub async fn delete_sensevoice_model(
 }
 
 #[allow(dead_code)]
-pub fn cleanup_tmp_files(app_data_dir: &PathBuf) {
+pub fn cleanup_tmp_files(app_data_dir: &std::path::Path) {
     let dir = model_dir(app_data_dir);
     if let Ok(entries) = std::fs::read_dir(&dir) {
         for entry in entries.flatten() {
-            if let Some(name) = entry.file_name().to_str() {
-                if name.ends_with(".tmp") {
-                    let _ = std::fs::remove_file(entry.path());
-                }
+            if let Some(name) = entry.file_name().to_str()
+                && name.ends_with(".tmp")
+            {
+                let _ = std::fs::remove_file(entry.path());
             }
         }
     }
@@ -521,20 +577,20 @@ pub fn cleanup_tmp_files(app_data_dir: &PathBuf) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::NamedTempFile;
     use std::io::Write;
+    use tempfile::NamedTempFile;
 
     #[test]
     fn test_parse_cmvn_valid_format() {
         let mut file = NamedTempFile::new().unwrap();
-        write!(file, "<AddShift>\n").unwrap();
-        write!(file, "[\n").unwrap();
-        write!(file, "  1.0 2.0 3.0\n").unwrap();
-        write!(file, "]\n").unwrap();
-        write!(file, "<Rescale>\n").unwrap();
-        write!(file, "[\n").unwrap();
-        write!(file, "  0.5 1.0 1.5\n").unwrap();
-        write!(file, "]\n").unwrap();
+        writeln!(file, "<AddShift>").unwrap();
+        writeln!(file, "[").unwrap();
+        writeln!(file, "  1.0 2.0 3.0").unwrap();
+        writeln!(file, "]").unwrap();
+        writeln!(file, "<Rescale>").unwrap();
+        writeln!(file, "[").unwrap();
+        writeln!(file, "  0.5 1.0 1.5").unwrap();
+        writeln!(file, "]").unwrap();
 
         let (means, vars) = parse_cmvn(&file.path().to_path_buf()).unwrap();
         assert_eq!(means.len(), 3);
@@ -548,18 +604,18 @@ mod tests {
     #[test]
     fn test_parse_cmvn_multiline_values() {
         let mut file = NamedTempFile::new().unwrap();
-        write!(file, "<AddShift>\n").unwrap();
-        write!(file, "[\n").unwrap();
-        write!(file, "  1.0\n").unwrap();
-        write!(file, "  2.0\n").unwrap();
-        write!(file, "  3.0\n").unwrap();
-        write!(file, "]\n").unwrap();
-        write!(file, "<Rescale>\n").unwrap();
-        write!(file, "[\n").unwrap();
-        write!(file, "  1.0\n").unwrap();
-        write!(file, "  2.0\n").unwrap();
-        write!(file, "  3.0\n").unwrap();
-        write!(file, "]\n").unwrap();
+        writeln!(file, "<AddShift>").unwrap();
+        writeln!(file, "[").unwrap();
+        writeln!(file, "  1.0").unwrap();
+        writeln!(file, "  2.0").unwrap();
+        writeln!(file, "  3.0").unwrap();
+        writeln!(file, "]").unwrap();
+        writeln!(file, "<Rescale>").unwrap();
+        writeln!(file, "[").unwrap();
+        writeln!(file, "  1.0").unwrap();
+        writeln!(file, "  2.0").unwrap();
+        writeln!(file, "  3.0").unwrap();
+        writeln!(file, "]").unwrap();
 
         let (means, vars) = parse_cmvn(&file.path().to_path_buf()).unwrap();
         assert_eq!(means.len(), 3);

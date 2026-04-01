@@ -76,10 +76,10 @@ pub fn detect_selected_text(_app_name: &str) -> Option<String> {
         .ok()
         .and_then(|mut cb| cb.get_text().ok());
 
-    if let Some(ref original) = original_clipboard {
-        if let Ok(mut cb) = arboard::Clipboard::new() {
-            let _ = cb.set_text(original);
-        }
+    if let Some(ref original) = original_clipboard
+        && let Ok(mut cb) = arboard::Clipboard::new()
+    {
+        let _ = cb.set_text(original);
     }
 
     match (original_clipboard, copied) {

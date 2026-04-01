@@ -261,7 +261,7 @@ mod tests {
         let (logger, _dir) = create_logger();
         logger.info("test", "message", None);
         let sessions = logger.get_sessions();
-        assert!(sessions.len() >= 1);
+        assert!(!sessions.is_empty());
         let current = sessions.iter().find(|s| s.is_current);
         assert!(current.is_some());
         assert!(current.unwrap().entry_count >= 1);

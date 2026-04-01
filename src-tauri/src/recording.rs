@@ -1,5 +1,5 @@
-use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::SampleFormat;
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use dasp_sample::Sample as DaspSample;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -185,7 +185,7 @@ impl AudioRecorder {
                 return AudioRecorder::Unavailable(format!(
                     "Failed to query microphone configs: {}",
                     e
-                ))
+                ));
             }
         };
 
@@ -194,7 +194,7 @@ impl AudioRecorder {
             None => {
                 return AudioRecorder::Unavailable(
                     "Microphone has no supported input configurations".into(),
-                )
+                );
             }
         };
 
@@ -212,14 +212,14 @@ impl AudioRecorder {
                 return AudioRecorder::Unavailable(format!(
                     "Unsupported sample format: {:?}",
                     sample_format
-                ))
+                ));
             }
         };
 
         let stream = match stream {
             Ok(s) => s,
             Err(e) => {
-                return AudioRecorder::Unavailable(format!("Failed to create audio stream: {}", e))
+                return AudioRecorder::Unavailable(format!("Failed to create audio stream: {}", e));
             }
         };
 
@@ -240,7 +240,9 @@ impl AudioRecorder {
                 start_time,
                 ..
             } => {
-                buffer.lock().ok().map(|mut b| b.clear());
+                if let Ok(mut b) = buffer.lock() {
+                    b.clear()
+                }
                 stream.play().map_err(|e| {
                     RecordingError::AudioStreamError(format!("Failed to start recording: {}", e))
                 })?;
@@ -267,7 +269,9 @@ impl AudioRecorder {
                 let duration_secs = start_time.map(|t| t.elapsed().as_secs()).unwrap_or(0);
 
                 if duration_secs == 0 {
-                    buffer.lock().ok().map(|mut b| b.clear());
+                    if let Ok(mut b) = buffer.lock() {
+                        b.clear()
+                    }
                     *start_time = None;
                     return Err(RecordingError::TooShort);
                 }
@@ -278,7 +282,7 @@ impl AudioRecorder {
                 };
                 *start_time = None;
 
-                let dir = ensure_recordings_dir().map_err(|e| RecordingError::FileError(e))?;
+                let dir = ensure_recordings_dir().map_err(RecordingError::FileError)?;
                 let flac_filename = generate_filename();
                 let flac_path = dir.join(&flac_filename);
                 let wav_path = flac_path.with_extension("wav");
@@ -339,7 +343,9 @@ impl AudioRecorder {
             } => {
                 let _ = stream.pause();
                 let duration_secs = start_time.map(|t| t.elapsed().as_secs()).unwrap_or(0);
-                buffer.lock().ok().map(|mut b| b.clear());
+                if let Ok(mut b) = buffer.lock() {
+                    b.clear()
+                }
                 *start_time = None;
                 duration_secs
             }

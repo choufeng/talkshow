@@ -13,7 +13,7 @@ struct MuteState {
     timestamp: u64,
 }
 
-fn state_file_path(app_data_dir: &PathBuf) -> PathBuf {
+fn state_file_path(app_data_dir: &std::path::Path) -> PathBuf {
     app_data_dir.join(MUTE_STATE_FILE)
 }
 
@@ -50,7 +50,7 @@ fn set_volume(volume: f64) -> Result<(), String> {
 }
 
 pub fn save_and_mute(
-    app_data_dir: &PathBuf,
+    app_data_dir: &std::path::Path,
     logger: Option<&logger::Logger>,
 ) -> Result<(), String> {
     let volume = get_current_volume()?;
@@ -87,7 +87,10 @@ pub fn save_and_mute(
     Ok(())
 }
 
-pub fn restore(app_data_dir: &PathBuf, logger: Option<&logger::Logger>) -> Result<(), String> {
+pub fn restore(
+    app_data_dir: &std::path::Path,
+    logger: Option<&logger::Logger>,
+) -> Result<(), String> {
     let path = state_file_path(app_data_dir);
 
     if !path.exists() {
@@ -112,7 +115,7 @@ pub fn restore(app_data_dir: &PathBuf, logger: Option<&logger::Logger>) -> Resul
     Ok(())
 }
 
-pub fn cleanup_stale_state(app_data_dir: &PathBuf) -> Result<(), String> {
+pub fn cleanup_stale_state(app_data_dir: &std::path::Path) -> Result<(), String> {
     let path = state_file_path(app_data_dir);
 
     if !path.exists() {
