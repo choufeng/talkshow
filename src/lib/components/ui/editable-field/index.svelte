@@ -14,7 +14,13 @@
 
   let visible = $state(false);
   let editing = $state(false);
-  let editValue = $state(value);
+  let editValue = $state('');
+
+  $effect(() => {
+    if (!editing) {
+      editValue = value;
+    }
+  });
 
   function mask(val: string): string {
     if (!val) return '';
