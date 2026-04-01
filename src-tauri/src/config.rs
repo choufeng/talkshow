@@ -432,3 +432,259 @@ pub fn save_config(app_data_dir: &PathBuf, config: &AppConfig) -> Result<(), Str
     let content = serde_json::to_string_pretty(config).map_err(|e| e.to_string())?;
     fs::write(&path, content).map_err(|e| e.to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_dedup_models_removes_duplicate_and_merges_capabilities() {
+        let mut models = vec![
+            ModelConfig {
+                name: "model-a".to_string(),
+                capabilities: vec!["transcription".to_string()],
+                verified: None,
+            },
+            ModelConfig {
+                name: "model-a".to_string(),
+                capabilities: vec!["chat".to_string()],
+                verified: None,
+            },
+            ModelConfig {
+                name: "model-b".to_string(),
+                capabilities: vec!["transcription".to_string()],
+                verified: None,
+            },
+        ];
+        dedup_models(&mut models);
+        assert_eq!(models.len(), 2);
+        assert_eq!(models[0].name, "model-a");
+        assert!(models[0]
+            .capabilities
+            .contains(&"transcription".to_string()));
+        assert!(models[0].capabilities.contains(&"chat".to_string()));
+        assert_eq!(models[1].name, "model-b");
+    }
+
+    #[test]
+    fn test_dedup_models_no_duplicates() {
+        let mut models = vec![
+            ModelConfig {
+                name: "a".to_string(),
+                capabilities: vec!["t".to_string()],
+                verified: None,
+            },
+            ModelConfig {
+                name: "b".to_string(),
+                capabilities: vec!["c".to_string()],
+                verified: None,
+            },
+        ];
+        dedup_models(&mut models);
+        assert_eq!(models.len(), 2);
+    }
+
+    #[test]
+    fn test_dedup_models_empty() {
+        let mut models: Vec<ModelConfig> = vec![];
+        dedup_models(&mut models);
+        assert!(models.is_empty());
+    }
+
+    #[test]
+    fn test_migrate_models_string_to_object() {
+        let mut value = serde_json::json!({
+            "ai": {
+                "providers": [
+                    {
+                        "id": "test",
+                        "type": "openai-compatible",
+                        "name": "Test",
+                        "endpoint": "",
+                        "models": ["old-model-1", "old-model-2"]
+                    }
+                ]
+            }
+        });
+        migrate_models(&mut value);
+        let models = value["ai"]["providers"][0]["models"].as_array().unwrap();
+        assert_eq!(models.len(), 2);
+        assert_eq!(models[0]["name"], "old-model-1");
+        assert_eq!(models[0]["capabilities"], serde_json::json!([]));
+        assert_eq!(models[1]["name"], "old-model-2");
+    }
+
+    #[test]
+    fn test_migrate_models_object_unchanged() {
+        let mut value = serde_json::json!({
+            "ai": {
+                "providers": [
+                    {
+                        "id": "test",
+                        "type": "openai-compatible",
+                        "name": "Test",
+                        "endpoint": "",
+                        "models": [{"name": "model-a", "capabilities": ["transcription"]}]
+                    }
+                ]
+            }
+        });
+        migrate_models(&mut value);
+        let models = value["ai"]["providers"][0]["models"].as_array().unwrap();
+        assert_eq!(models.len(), 1);
+        assert_eq!(models[0]["name"], "model-a");
+        assert_eq!(
+            models[0]["capabilities"],
+            serde_json::json!(["transcription"])
+        );
+    }
+
+    #[test]
+    fn test_migrate_builtin_skills_resets_modified_prompts() {
+        let mut value = serde_json::json!({
+            "features": {
+                "skills": {
+                    "enabled": true,
+                    "skills": [
+                        {
+                            "id": "builtin-fillers",
+                            "name": "语气词剔除",
+                            "prompt": "MODIFIED PROMPT",
+                            "builtin": true,
+                            "editable": false,
+                            "enabled": true,
+                        }
+                    ]
+                }
+            }
+        });
+        migrate_builtin_skills(&mut value);
+        let skills = value["features"]["skills"]["skills"].as_array().unwrap();
+        let filler = skills
+            .iter()
+            .find(|s| s["id"] == "builtin-fillers")
+            .unwrap();
+        assert_ne!(filler["prompt"].as_str().unwrap(), "MODIFIED PROMPT");
+    }
+
+    #[test]
+    fn test_migrate_builtin_skills_adds_missing_defaults() {
+        let mut value = serde_json::json!({
+            "features": {
+                "skills": {
+                    "enabled": true,
+                    "skills": []
+                }
+            }
+        });
+        migrate_builtin_skills(&mut value);
+        let skills = value["features"]["skills"]["skills"].as_array().unwrap();
+        let ids: Vec<&str> = skills.iter().map(|s| s["id"].as_str().unwrap()).collect();
+        assert!(ids.contains(&"builtin-fillers"));
+        assert!(ids.contains(&"builtin-typos"));
+        assert!(ids.contains(&"builtin-polish"));
+        assert!(ids.contains(&"builtin-formal"));
+        assert!(ids.contains(&"builtin-translation"));
+    }
+
+    #[test]
+    fn test_migrate_builtin_skills_preserves_editable() {
+        let mut value = serde_json::json!({
+            "features": {
+                "skills": {
+                    "enabled": true,
+                    "skills": [
+                        {
+                            "id": "builtin-translation",
+                            "name": "翻译优化",
+                            "prompt": "CUSTOM TRANSLATION PROMPT",
+                            "builtin": true,
+                            "editable": true,
+                            "enabled": true,
+                        }
+                    ]
+                }
+            }
+        });
+        migrate_builtin_skills(&mut value);
+        let skills = value["features"]["skills"]["skills"].as_array().unwrap();
+        let translation = skills
+            .iter()
+            .find(|s| s["id"] == "builtin-translation")
+            .unwrap();
+        assert_eq!(
+            translation["prompt"].as_str().unwrap(),
+            "CUSTOM TRANSLATION PROMPT"
+        );
+    }
+
+    #[test]
+    fn test_merge_builtin_providers_adds_missing() {
+        let providers = vec![ProviderConfig {
+            id: "custom".to_string(),
+            provider_type: "openai-compatible".to_string(),
+            name: "Custom".to_string(),
+            endpoint: "https://example.com".to_string(),
+            api_key: Some("key".to_string()),
+            models: vec![],
+        }];
+        let result = merge_builtin_providers(providers);
+        let ids: Vec<&str> = result.iter().map(|p| p.id.as_str()).collect();
+        assert!(ids.contains(&"vertex"));
+        assert!(ids.contains(&"dashscope"));
+        assert!(ids.contains(&"sensevoice"));
+        assert!(ids.contains(&"custom"));
+    }
+
+    #[test]
+    fn test_merge_builtin_providers_corrects_existing() {
+        let providers = vec![ProviderConfig {
+            id: "dashscope".to_string(),
+            provider_type: "openai-compatible".to_string(),
+            name: "阿里云".to_string(),
+            endpoint: "https://wrong-url.com".to_string(),
+            api_key: Some("key".to_string()),
+            models: vec![],
+        }];
+        let result = merge_builtin_providers(providers);
+        let dashscope = result.iter().find(|p| p.id == "dashscope").unwrap();
+        assert_eq!(
+            dashscope.endpoint,
+            "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        );
+    }
+
+    #[test]
+    fn test_load_and_save_config_roundtrip() {
+        let dir = tempfile::tempdir().unwrap();
+        let app_data_dir = dir.path().to_path_buf();
+
+        let mut config = load_config(&app_data_dir);
+        assert_eq!(config.shortcut, DEFAULT_SHORTCUT);
+        assert!(config.ai.providers.len() >= 3);
+
+        config.ai.providers[0].name = "Modified".to_string();
+        save_config(&app_data_dir, &config).unwrap();
+
+        let loaded = load_config(&app_data_dir);
+        assert_eq!(loaded.ai.providers[0].name, "Modified");
+    }
+
+    #[test]
+    fn test_load_config_creates_default_when_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let app_data_dir = dir.path().to_path_buf();
+        let config = load_config(&app_data_dir);
+        assert_eq!(config.shortcut, DEFAULT_SHORTCUT);
+        assert!(app_data_dir.join("config.json").exists());
+    }
+
+    #[test]
+    fn test_default_app_config() {
+        let config = AppConfig::default();
+        assert_eq!(config.shortcut, "Control+Shift+Quote");
+        assert_eq!(config.features.transcription.provider_id, "vertex");
+        assert_eq!(config.features.skills.enabled, true);
+        assert_eq!(config.features.recording.auto_mute, false);
+    }
+}
