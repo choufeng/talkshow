@@ -44,4 +44,9 @@ futures-util = "0.3"
 regex = "1"
 kaldi-native-fbank = "0.1"
 objc2-app-kit = "0.3"
+async-trait = "0.1"
+
+[dev-dependencies]
+mockall = "0.13"
+tempfile = "3"
 

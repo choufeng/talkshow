@@ -517,3 +517,109 @@ pub fn cleanup_tmp_files(app_data_dir: &PathBuf) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::NamedTempFile;
+    use std::io::Write;
+
+    #[test]
+    fn test_parse_cmvn_valid_format() {
+        let mut file = NamedTempFile::new().unwrap();
+        write!(file, "<AddShift>\n").unwrap();
+        write!(file, "[\n").unwrap();
+        write!(file, "  1.0 2.0 3.0\n").unwrap();
+        write!(file, "]\n").unwrap();
+        write!(file, "<Rescale>\n").unwrap();
+        write!(file, "[\n").unwrap();
+        write!(file, "  0.5 1.0 1.5\n").unwrap();
+        write!(file, "]\n").unwrap();
+
+        let (means, vars) = parse_cmvn(&file.path().to_path_buf()).unwrap();
+        assert_eq!(means.len(), 3);
+        assert_eq!(means[0], 1.0);
+        assert_eq!(means[1], 2.0);
+        assert_eq!(means[2], 3.0);
+        assert_eq!(vars.len(), 3);
+        assert_eq!(vars[0], 0.5);
+    }
+
+    #[test]
+    fn test_parse_cmvn_multiline_values() {
+        let mut file = NamedTempFile::new().unwrap();
+        write!(file, "<AddShift>\n").unwrap();
+        write!(file, "[\n").unwrap();
+        write!(file, "  1.0\n").unwrap();
+        write!(file, "  2.0\n").unwrap();
+        write!(file, "  3.0\n").unwrap();
+        write!(file, "]\n").unwrap();
+        write!(file, "<Rescale>\n").unwrap();
+        write!(file, "[\n").unwrap();
+        write!(file, "  1.0\n").unwrap();
+        write!(file, "  2.0\n").unwrap();
+        write!(file, "  3.0\n").unwrap();
+        write!(file, "]\n").unwrap();
+
+        let (means, vars) = parse_cmvn(&file.path().to_path_buf()).unwrap();
+        assert_eq!(means.len(), 3);
+        assert_eq!(vars.len(), 3);
+    }
+
+    #[test]
+    fn test_postprocess_removes_special_tokens() {
+        assert_eq!(postprocess("<|nospeech|>"), "");
+        assert_eq!(postprocess("<|zh|><|en|>Hello"), "Hello");
+        assert_eq!(postprocess("Hello <|ja|> World"), "Hello  World");
+        assert_eq!(postprocess("plain text"), "plain text");
+    }
+
+    #[test]
+    fn test_postprocess_trims_whitespace() {
+        assert_eq!(postprocess("  <|zh|>hello  "), "hello");
+        assert_eq!(postprocess(""), "");
+    }
+
+    #[test]
+    fn test_apply_lfr_basic() {
+        let feat = Array2::from_shape_vec((10, 80), vec![1.0f32; 10 * 80]).unwrap();
+        let result = apply_lfr(&feat);
+        let (t_lfr, lfr_dim) = result.dim();
+        assert_eq!(lfr_dim, 80 * 7);
+        assert!(t_lfr > 0);
+    }
+
+    #[test]
+    fn test_apply_lfr_empty_input() {
+        let feat = Array2::from_shape_vec((0, 80), vec![]).unwrap();
+        let result = apply_lfr(&feat);
+        assert_eq!(result.dim(), (0, 80 * 7));
+    }
+
+    #[test]
+    fn test_apply_cmvn_dimensions() {
+        let feat = Array2::from_shape_vec((5, 3), vec![1.0f32; 15]).unwrap();
+        let means = Array1::from_vec(vec![0.0f64; 3]);
+        let vars = Array1::from_vec(vec![1.0f64; 3]);
+        let result = apply_cmvn(&feat, &means, &vars);
+        assert_eq!(result.dim(), (1, 5, 3));
+    }
+
+    #[test]
+    fn test_apply_cmvn_applies_transform() {
+        let feat = Array2::from_shape_vec((1, 2), vec![0.0f32, 0.0]).unwrap();
+        let means = Array1::from_vec(vec![10.0f64, 20.0f64]);
+        let vars = Array1::from_vec(vec![2.0f64, 0.5f64]);
+        let result = apply_cmvn(&feat, &means, &vars);
+        assert_eq!(result[[0, 0, 0]], (0.0 + 10.0) * 2.0);
+        assert_eq!(result[[0, 0, 1]], (0.0 + 20.0) * 0.5);
+    }
+
+    #[test]
+    fn test_pad_features_returns_correct_length() {
+        let feat = Array3::from_shape_vec((1, 10, 560), vec![0.0f32; 10 * 560]).unwrap();
+        let (padded, len) = pad_features(&feat);
+        assert_eq!(len, 10);
+        assert_eq!(padded.dim(), (1, 10, 560));
+    }
+}

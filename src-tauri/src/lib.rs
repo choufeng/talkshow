@@ -1,7 +1,9 @@
 mod ai;
 mod clipboard;
 mod config;
+mod llm_client;
 mod logger;
+mod real_llm_client;
 mod recording;
 mod sensevoice;
 mod skills;
@@ -1286,4 +1288,59 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_shortcut_control_shift_quote() {
+        let result = parse_shortcut("Control+Shift+Quote");
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_parse_shortcut_control_backslash() {
+        let result = parse_shortcut("Control+Backslash");
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_parse_shortcut_single_key() {
+        let result = parse_shortcut("KeyA");
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_parse_shortcut_empty_string() {
+        let result = parse_shortcut("");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_parse_shortcut_only_modifiers() {
+        let result = parse_shortcut("Control+Shift");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_parse_shortcut_command_super_alias() {
+        let cmd_result = parse_shortcut("Command+KeyA");
+        let super_result = parse_shortcut("Super+KeyA");
+        assert_eq!(cmd_result.is_some(), super_result.is_some());
+    }
+
+    #[test]
+    fn test_format_elapsed() {
+        let start = Instant::now();
+        assert!(format_elapsed(&start).contains("录音中"));
+    }
+
+    #[test]
+    fn test_recording_mode_constants() {
+        assert_eq!(RECORDING_MODE_NONE, 0);
+        assert_eq!(RECORDING_MODE_TRANSCRIPTION, 1);
+        assert_eq!(RECORDING_MODE_TRANSLATION, 2);
+    }
 }
