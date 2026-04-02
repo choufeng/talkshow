@@ -585,11 +585,11 @@ pub async fn download_sensevoice_model(app_handle: tauri::AppHandle) -> Result<(
         }
         async_file.flush().await.map_err(|e| e.to_string())?;
         drop(async_file);
-        if let Ok(valid) = verify_file_hash(&tmp_path, expected_hash) {
-            if !valid {
-                let _ = std::fs::remove_file(&tmp_path);
-                return Err(format!("SHA-256 hash mismatch for {}", filename));
-            }
+        if let Ok(valid) = verify_file_hash(&tmp_path, expected_hash)
+            && !valid
+        {
+            let _ = std::fs::remove_file(&tmp_path);
+            return Err(format!("SHA-256 hash mismatch for {}", filename));
         }
         std::fs::rename(&tmp_path, &file_path).map_err(|e| e.to_string())?;
     }

@@ -429,13 +429,13 @@ pub fn save_config(app_data_dir: &std::path::Path, config: &AppConfig) -> Result
 
 pub fn mask_api_keys(mut config: AppConfig) -> AppConfig {
     for provider in &mut config.ai.providers {
-        if let Some(ref key) = provider.api_key {
-            if !key.is_empty() {
-                if key.len() <= 8 {
-                    provider.api_key = Some("*".repeat(key.len()));
-                } else {
-                    provider.api_key = Some(format!("{}...{}", &key[..3], &key[key.len() - 4..]));
-                }
+        if let Some(ref key) = provider.api_key
+            && !key.is_empty()
+        {
+            if key.len() <= 8 {
+                provider.api_key = Some("*".repeat(key.len()));
+            } else {
+                provider.api_key = Some(format!("{}...{}", &key[..3], &key[key.len() - 4..]));
             }
         }
     }
@@ -467,15 +467,15 @@ pub fn validate_config(config: &AppConfig) -> Result<(), String> {
             }
         }
 
-        if provider.provider_type == "openai-compatible" && !provider.endpoint.is_empty() {
-            if !provider.endpoint.starts_with("https://")
-                && !provider.endpoint.starts_with("http://")
-            {
-                return Err(format!(
-                    "Endpoint must start with http:// or https:// for provider '{}'",
-                    provider.id
-                ));
-            }
+        if provider.provider_type == "openai-compatible"
+            && !provider.endpoint.is_empty()
+            && !provider.endpoint.starts_with("https://")
+            && !provider.endpoint.starts_with("http://")
+        {
+            return Err(format!(
+                "Endpoint must start with http:// or https:// for provider '{}'",
+                provider.id
+            ));
         }
 
         if provider.id.trim().is_empty() {
@@ -866,8 +866,10 @@ mod tests {
 
     #[test]
     fn test_validate_config_rejects_too_long_shortcut() {
-        let mut config = AppConfig::default();
-        config.shortcut = "A".repeat(101);
+        let config = AppConfig {
+            shortcut: "A".repeat(101),
+            ..Default::default()
+        };
         assert!(validate_config(&config).is_err());
     }
 }

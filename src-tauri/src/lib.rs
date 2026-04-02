@@ -702,20 +702,21 @@ fn save_config_cmd(app_handle: tauri::AppHandle, config: config::AppConfig) -> R
     // 首次保存时迁移旧密钥到 keyring
     let existing_config = config::load_config(&app_data_dir);
     for provider in &existing_config.ai.providers {
-        if let Some(ref key) = provider.api_key {
-            if !key.is_empty() {
-                let _ = keyring_store::store_api_key(&provider.id, key);
-            }
+        if let Some(ref key) = provider.api_key
+            && !key.is_empty()
+        {
+            let _ = keyring_store::store_api_key(&provider.id, key);
         }
     }
 
     // 保存 api_key 到 keyring，从 JSON 中剥离
     let (clean_config, keys) = config::strip_api_keys(config);
     for (provider_id, api_key) in keys {
-        if let Some(key) = api_key {
-            if !key.is_empty() && !key.contains("...") {
-                keyring_store::store_api_key(&provider_id, &key)?;
-            }
+        if let Some(key) = api_key
+            && !key.is_empty()
+            && !key.contains("...")
+        {
+            keyring_store::store_api_key(&provider_id, &key)?;
         }
     }
 
