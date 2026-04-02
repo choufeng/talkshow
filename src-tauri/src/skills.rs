@@ -25,12 +25,17 @@ fn get_frontmost_app() -> Result<(String, String), String> {
 
     let bundle_output = std::process::Command::new("osascript")
         .arg("-e")
-        .arg(format!("tell application \"System Events\" to get bundle identifier of process \"{}\"", app_name))
+        .arg(format!(
+            "tell application \"System Events\" to get bundle identifier of process \"{}\"",
+            app_name
+        ))
         .output()
         .map_err(|e| format!("Failed to get bundle id: {}", e))?;
 
     let bundle_id = if bundle_output.status.success() {
-        String::from_utf8_lossy(&bundle_output.stdout).trim().to_string()
+        String::from_utf8_lossy(&bundle_output.stdout)
+            .trim()
+            .to_string()
     } else {
         "unknown".to_string()
     };
@@ -90,11 +95,7 @@ pub async fn process_with_skills(
         return Ok(transcription.to_string());
     }
 
-    let enabled_skills: Vec<&Skill> = skills_config
-        .skills
-        .iter()
-        .filter(|s| s.enabled)
-        .collect();
+    let enabled_skills: Vec<&Skill> = skills_config.skills.iter().filter(|s| s.enabled).collect();
 
     if enabled_skills.is_empty() {
         logger.info("skills", "没有启用的 Skill，跳过处理", None);
@@ -106,7 +107,9 @@ pub async fn process_with_skills(
         return Ok(transcription.to_string());
     }
 
-    if transcription_config.polish_provider_id.is_empty() || transcription_config.polish_model.is_empty() {
+    if transcription_config.polish_provider_id.is_empty()
+        || transcription_config.polish_model.is_empty()
+    {
         logger.warn("skills", "Skills Provider 未配置，跳过处理", None);
         return Ok(transcription.to_string());
     }
@@ -136,8 +139,13 @@ pub async fn process_with_skills(
     let start = std::time::Instant::now();
 
     let skills_owned: Vec<Skill> = enabled_skills.into_iter().cloned().collect();
-    let (system_prompt, user_message) =
-        assemble_skills_prompt(&skills_owned, transcription, &app_name, &bundle_id, selected_text);
+    let (system_prompt, user_message) = assemble_skills_prompt(
+        &skills_owned,
+        transcription,
+        &app_name,
+        &bundle_id,
+        selected_text,
+    );
 
     let provider = match providers
         .iter()
@@ -158,12 +166,19 @@ pub async fn process_with_skills(
 
     let full_prompt = format!("{}\n\n输入文本：\n{}", system_prompt, user_message);
 
-    let timeout_secs = SKILLS_BASE_TIMEOUT_SECS
-        + (skills_owned.len() as u64) * SKILLS_PER_SKILL_TIMEOUT_SECS;
+    let timeout_secs =
+        SKILLS_BASE_TIMEOUT_SECS + (skills_owned.len() as u64) * SKILLS_PER_SKILL_TIMEOUT_SECS;
 
     let result = tokio::time::timeout(
         std::time::Duration::from_secs(timeout_secs),
-        crate::ai::send_text_prompt(logger, &full_prompt, &transcription_config.polish_model, provider, vertex_cache, crate::ai::ThinkingMode::Disabled),
+        crate::ai::send_text_prompt(
+            logger,
+            &full_prompt,
+            &transcription_config.polish_model,
+            provider,
+            vertex_cache,
+            crate::ai::ThinkingMode::Disabled,
+        ),
     )
     .await;
 
@@ -203,6 +218,7 @@ pub async fn process_with_skills(
     }
 }
 
+#[allow(dead_code)]
 pub async fn process_with_skills_client(
     logger: &Logger,
     skills_config: &SkillsConfig,
@@ -216,11 +232,7 @@ pub async fn process_with_skills_client(
         return Ok(transcription.to_string());
     }
 
-    let enabled_skills: Vec<&Skill> = skills_config
-        .skills
-        .iter()
-        .filter(|s| s.enabled)
-        .collect();
+    let enabled_skills: Vec<&Skill> = skills_config.skills.iter().filter(|s| s.enabled).collect();
 
     if enabled_skills.is_empty() {
         logger.info("skills", "没有启用的 Skill，跳过处理", None);
@@ -232,7 +244,9 @@ pub async fn process_with_skills_client(
         return Ok(transcription.to_string());
     }
 
-    if transcription_config.polish_provider_id.is_empty() || transcription_config.polish_model.is_empty() {
+    if transcription_config.polish_provider_id.is_empty()
+        || transcription_config.polish_model.is_empty()
+    {
         logger.warn("skills", "Skills Provider 未配置，跳过处理", None);
         return Ok(transcription.to_string());
     }
@@ -255,20 +269,31 @@ pub async fn process_with_skills_client(
     };
 
     let skills_owned: Vec<Skill> = enabled_skills.into_iter().cloned().collect();
-    let (app_name, bundle_id) = get_frontmost_app().unwrap_or(("Unknown".to_string(), "unknown".to_string()));
-    let (system_prompt, user_message) =
-        assemble_skills_prompt(&skills_owned, transcription, &app_name, &bundle_id, selected_text);
+    let (app_name, bundle_id) =
+        get_frontmost_app().unwrap_or(("Unknown".to_string(), "unknown".to_string()));
+    let (system_prompt, user_message) = assemble_skills_prompt(
+        &skills_owned,
+        transcription,
+        &app_name,
+        &bundle_id,
+        selected_text,
+    );
 
     let full_prompt = format!("{}\n\n输入文本：\n{}", system_prompt, user_message);
 
-    let timeout_secs = SKILLS_BASE_TIMEOUT_SECS
-        + (skills_owned.len() as u64) * SKILLS_PER_SKILL_TIMEOUT_SECS;
+    let timeout_secs =
+        SKILLS_BASE_TIMEOUT_SECS + (skills_owned.len() as u64) * SKILLS_PER_SKILL_TIMEOUT_SECS;
 
     let start = std::time::Instant::now();
 
     let result = tokio::time::timeout(
         std::time::Duration::from_secs(timeout_secs),
-        client.send_text(&full_prompt, &transcription_config.polish_model, &provider.id, &provider.endpoint),
+        client.send_text(
+            &full_prompt,
+            &transcription_config.polish_model,
+            &provider.id,
+            &provider.endpoint,
+        ),
     )
     .await;
 
@@ -276,23 +301,35 @@ pub async fn process_with_skills_client(
 
     match result {
         Ok(Ok(text)) => {
-            logger.info("skills", "LLM 调用成功", Some(serde_json::json!({
-                "elapsed_ms": elapsed_ms,
-                "original_length": transcription.len(),
-                "processed_length": text.len(),
-            })));
+            logger.info(
+                "skills",
+                "LLM 调用成功",
+                Some(serde_json::json!({
+                    "elapsed_ms": elapsed_ms,
+                    "original_length": transcription.len(),
+                    "processed_length": text.len(),
+                })),
+            );
             Ok(text)
         }
         Ok(Err(e)) => {
-            logger.error("skills", "LLM 调用失败，回退原始文字", Some(serde_json::json!({
-                "elapsed_ms": elapsed_ms, "error": e,
-            })));
+            logger.error(
+                "skills",
+                "LLM 调用失败，回退原始文字",
+                Some(serde_json::json!({
+                    "elapsed_ms": elapsed_ms, "error": e,
+                })),
+            );
             Ok(transcription.to_string())
         }
         Err(_) => {
-            logger.error("skills", "LLM 调用超时，回退原始文字", Some(serde_json::json!({
-                "elapsed_ms": elapsed_ms, "timeout_secs": timeout_secs,
-            })));
+            logger.error(
+                "skills",
+                "LLM 调用超时，回退原始文字",
+                Some(serde_json::json!({
+                    "elapsed_ms": elapsed_ms, "timeout_secs": timeout_secs,
+                })),
+            );
             Ok(transcription.to_string())
         }
     }
@@ -307,17 +344,15 @@ mod tests {
     fn enabled_skills_config() -> SkillsConfig {
         SkillsConfig {
             enabled: true,
-            skills: vec![
-                Skill {
-                    id: "builtin-fillers".to_string(),
-                    name: "语气词剔除".to_string(),
-                    description: "去除语气词".to_string(),
-                    prompt: "去除语气词".to_string(),
-                    builtin: true,
-                    editable: false,
-                    enabled: true,
-                },
-            ],
+            skills: vec![Skill {
+                id: "builtin-fillers".to_string(),
+                name: "语气词剔除".to_string(),
+                description: "去除语气词".to_string(),
+                prompt: "去除语气词".to_string(),
+                builtin: true,
+                editable: false,
+                enabled: true,
+            }],
         }
     }
 
@@ -357,9 +392,15 @@ mod tests {
 
         let mut mock = MockLlmClient::new();
         let result = process_with_skills_client(
-            &logger, &config, &tc, &providers,
-            "你好世界", &mut mock, None,
-        ).await;
+            &logger,
+            &config,
+            &tc,
+            &providers,
+            "你好世界",
+            &mut mock,
+            None,
+        )
+        .await;
         assert_eq!(result.unwrap(), "你好世界");
     }
 
@@ -371,25 +412,33 @@ mod tests {
         let providers = test_providers();
 
         let mut mock = MockLlmClient::new();
-        let result = process_with_skills_client(
-            &logger, &config, &tc, &providers,
-            "", &mut mock, None,
-        ).await;
+        let result =
+            process_with_skills_client(&logger, &config, &tc, &providers, "", &mut mock, None)
+                .await;
         assert_eq!(result.unwrap(), "");
     }
 
     #[tokio::test]
     async fn test_process_with_skills_returns_original_when_no_skills_enabled() {
         let logger = create_test_logger();
-        let config = SkillsConfig { enabled: true, skills: vec![] };
+        let config = SkillsConfig {
+            enabled: true,
+            skills: vec![],
+        };
         let tc = test_transcription_config();
         let providers = test_providers();
 
         let mut mock = MockLlmClient::new();
         let result = process_with_skills_client(
-            &logger, &config, &tc, &providers,
-            "你好世界", &mut mock, None,
-        ).await;
+            &logger,
+            &config,
+            &tc,
+            &providers,
+            "你好世界",
+            &mut mock,
+            None,
+        )
+        .await;
         assert_eq!(result.unwrap(), "你好世界");
     }
 
@@ -408,9 +457,15 @@ mod tests {
 
         let mut mock = MockLlmClient::new();
         let result = process_with_skills_client(
-            &logger, &config, &tc, &providers,
-            "你好世界", &mut mock, None,
-        ).await;
+            &logger,
+            &config,
+            &tc,
+            &providers,
+            "你好世界",
+            &mut mock,
+            None,
+        )
+        .await;
         assert_eq!(result.unwrap(), "你好世界");
     }
 
@@ -429,9 +484,15 @@ mod tests {
 
         let mut mock = MockLlmClient::new();
         let result = process_with_skills_client(
-            &logger, &config, &tc, &providers,
-            "你好世界", &mut mock, None,
-        ).await;
+            &logger,
+            &config,
+            &tc,
+            &providers,
+            "你好世界",
+            &mut mock,
+            None,
+        )
+        .await;
         assert_eq!(result.unwrap(), "你好世界");
     }
 
@@ -447,9 +508,15 @@ mod tests {
             .returning(|_, _, _, _| Ok("处理后的文本".to_string()));
 
         let result = process_with_skills_client(
-            &logger, &config, &tc, &providers,
-            "嗯那个你好世界啊", &mut mock, None,
-        ).await;
+            &logger,
+            &config,
+            &tc,
+            &providers,
+            "嗯那个你好世界啊",
+            &mut mock,
+            None,
+        )
+        .await;
         assert_eq!(result.unwrap(), "处理后的文本");
     }
 
@@ -465,9 +532,15 @@ mod tests {
             .returning(|_, _, _, _| Err("LLM error".to_string()));
 
         let result = process_with_skills_client(
-            &logger, &config, &tc, &providers,
-            "你好世界", &mut mock, None,
-        ).await;
+            &logger,
+            &config,
+            &tc,
+            &providers,
+            "你好世界",
+            &mut mock,
+            None,
+        )
+        .await;
         assert_eq!(result.unwrap(), "你好世界");
     }
 
@@ -491,7 +564,13 @@ mod tests {
     #[test]
     fn test_assemble_skills_prompt_includes_app_context() {
         let skills = vec![];
-        let (system, _) = assemble_skills_prompt(&skills, "你好", "Finder", "com.apple.finder", Some("选中文本"));
+        let (system, _) = assemble_skills_prompt(
+            &skills,
+            "你好",
+            "Finder",
+            "com.apple.finder",
+            Some("选中文本"),
+        );
         assert!(system.contains("Finder"));
         assert!(system.contains("com.apple.finder"));
         assert!(system.contains("选中文本"));

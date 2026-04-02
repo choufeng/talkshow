@@ -13,9 +13,10 @@
     placeholder?: string;
     onChange: (value: string) => void;
     'aria-labelledby'?: string;
+    'aria-label'?: string;
   }
 
-  let { value, groups, placeholder = "请选择", onChange, 'aria-labelledby': ariaLabelledby }: Props = $props();
+  let { value, groups, placeholder = "请选择", onChange, 'aria-labelledby': ariaLabelledby, 'aria-label': ariaLabel }: Props = $props();
 
   function getDisplayLabel(): string {
     for (const group of groups) {
@@ -34,6 +35,7 @@
 >
   <Select.Trigger
     aria-labelledby={ariaLabelledby}
+    aria-label={ariaLabel}
     class="flex h-10 w-full items-center justify-between rounded-md border border-border-input bg-background px-4 py-2 text-body ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent-foreground/20 focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50"
   >
     <span class="truncate">{getDisplayLabel()}</span>

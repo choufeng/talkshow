@@ -1,19 +1,25 @@
-use crate::ai::{send_audio_prompt_from_bytes, send_text_prompt, ThinkingMode};
+use crate::ai::{ThinkingMode, send_audio_prompt_from_bytes, send_text_prompt};
 use crate::config::ProviderConfig;
 use crate::llm_client::LlmClient;
 use crate::logger::Logger;
 use std::sync::{Arc, Mutex};
 
+#[allow(dead_code)]
 type VertexClientCache = Arc<Mutex<Option<rig_vertexai::Client>>>;
 
+#[allow(dead_code)]
 pub struct RealLlmClient<'a> {
     logger: &'a Logger,
     vertex_cache: &'a VertexClientCache,
 }
 
 impl<'a> RealLlmClient<'a> {
+    #[allow(dead_code)]
     pub fn new(logger: &'a Logger, vertex_cache: &'a VertexClientCache) -> Self {
-        Self { logger, vertex_cache }
+        Self {
+            logger,
+            vertex_cache,
+        }
     }
 }
 

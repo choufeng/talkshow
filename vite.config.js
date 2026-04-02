@@ -15,6 +15,12 @@ export default defineConfig(async () => ({
     environment: "jsdom",
     include: ["src/**/*.test.{ts,js}"],
     setupFiles: ['./src/test-setup.ts'],
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "lcov"],
+      include: ["src/lib/**"],
+      exclude: ["src/**/*.test.{ts,js}", "src/test-setup.ts"],
+    },
   },
 
   clearScreen: false,

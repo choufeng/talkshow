@@ -65,11 +65,11 @@ fn merge_builtin_providers(mut providers: Vec<ProviderConfig>) -> Vec<ProviderCo
         .collect();
 
     for provider in &mut providers {
-        if let Some(builtin) = builtin_map.get(&provider.id) {
-            if builtin_ids.contains(&provider.id) {
-                provider.provider_type = builtin.provider_type.clone();
-                provider.endpoint = builtin.endpoint.clone();
-            }
+        if let Some(builtin) = builtin_map.get(&provider.id)
+            && builtin_ids.contains(&provider.id)
+        {
+            provider.provider_type = builtin.provider_type.clone();
+            provider.endpoint = builtin.endpoint.clone();
         }
     }
 
@@ -255,7 +255,7 @@ impl Default for AppConfig {
     }
 }
 
-pub fn config_file_path(app_data_dir: &PathBuf) -> PathBuf {
+pub fn config_file_path(app_data_dir: &std::path::Path) -> PathBuf {
     app_data_dir.join(CONFIG_FILE_NAME)
 }
 
@@ -288,25 +288,20 @@ fn migrate_builtin_skills(value: &mut serde_json::Value) {
     {
         let default_skills = SkillsConfig::default().skills;
         for skill in skills.iter_mut() {
-            if let Some(id) = skill.get("id").and_then(|v| v.as_str()) {
-                if let Some(builtin) = skill.get("builtin").and_then(|v| v.as_bool()) {
-                    if builtin {
-                        if let Some(editable) = skill.get("editable").and_then(|v| v.as_bool()) {
-                            if editable {
-                                continue;
-                            }
-                        }
-                        if let Some(default) = default_skills.iter().find(|s| s.id == id) {
-                            if let Some(current_prompt) =
-                                skill.get("prompt").and_then(|v| v.as_str())
-                            {
-                                if current_prompt != default.prompt {
-                                    *skill.get_mut("prompt").unwrap() =
-                                        serde_json::json!(default.prompt);
-                                }
-                            }
-                        }
-                    }
+            if let Some(id) = skill.get("id").and_then(|v| v.as_str())
+                && let Some(builtin) = skill.get("builtin").and_then(|v| v.as_bool())
+                && builtin
+            {
+                if let Some(editable) = skill.get("editable").and_then(|v| v.as_bool())
+                    && editable
+                {
+                    continue;
+                }
+                if let Some(default) = default_skills.iter().find(|s| s.id == id)
+                    && let Some(current_prompt) = skill.get("prompt").and_then(|v| v.as_str())
+                    && current_prompt != default.prompt
+                {
+                    *skill.get_mut("prompt").unwrap() = serde_json::json!(default.prompt);
                 }
             }
         }
@@ -337,29 +332,29 @@ fn migrate_models(value: &mut serde_json::Value) {
         .and_then(|p| p.as_array_mut())
     {
         for provider in providers.iter_mut() {
-            if let Some(models) = provider.get_mut("models") {
-                if let Some(arr) = models.as_array_mut() {
-                    let migrated: Vec<serde_json::Value> = arr
-                        .drain(..)
-                        .map(|m| {
-                            if m.is_string() {
-                                serde_json::json!({
-                                    "name": m,
-                                    "capabilities": []
-                                })
-                            } else {
-                                m
-                            }
-                        })
-                        .collect();
-                    *arr = migrated;
-                }
+            if let Some(models) = provider.get_mut("models")
+                && let Some(arr) = models.as_array_mut()
+            {
+                let migrated: Vec<serde_json::Value> = arr
+                    .drain(..)
+                    .map(|m| {
+                        if m.is_string() {
+                            serde_json::json!({
+                                "name": m,
+                                "capabilities": []
+                            })
+                        } else {
+                            m
+                        }
+                    })
+                    .collect();
+                *arr = migrated;
             }
         }
     }
 }
 
-pub fn load_config(app_data_dir: &PathBuf) -> AppConfig {
+pub fn load_config(app_data_dir: &std::path::Path) -> AppConfig {
     let path = config_file_path(app_data_dir);
     if path.exists() {
         match fs::read_to_string(&path) {
@@ -388,18 +383,17 @@ pub fn load_config(app_data_dir: &PathBuf) -> AppConfig {
                     None
                 };
 
-                if let Some((Some(provider_id), model)) = migration_target {
-                    if let Some(features) = raw.get_mut("features") {
-                        if let Some(transcription) = features.get_mut("transcription") {
-                            if let Some(polish) = transcription.get_mut("polish_provider_id") {
-                                *polish = serde_json::json!(provider_id);
-                            }
-                            if let Some(polish) = transcription.get_mut("polish_model") {
-                                if let Some(model) = model {
-                                    *polish = serde_json::json!(model);
-                                }
-                            }
-                        }
+                if let Some((Some(provider_id), model)) = migration_target
+                    && let Some(features) = raw.get_mut("features")
+                    && let Some(transcription) = features.get_mut("transcription")
+                {
+                    if let Some(polish) = transcription.get_mut("polish_provider_id") {
+                        *polish = serde_json::json!(provider_id);
+                    }
+                    if let Some(polish) = transcription.get_mut("polish_model")
+                        && let Some(model) = model
+                    {
+                        *polish = serde_json::json!(model);
                     }
                 }
 
@@ -424,7 +418,7 @@ pub fn load_config(app_data_dir: &PathBuf) -> AppConfig {
     }
 }
 
-pub fn save_config(app_data_dir: &PathBuf, config: &AppConfig) -> Result<(), String> {
+pub fn save_config(app_data_dir: &std::path::Path, config: &AppConfig) -> Result<(), String> {
     let path = config_file_path(app_data_dir);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
@@ -459,9 +453,11 @@ mod tests {
         dedup_models(&mut models);
         assert_eq!(models.len(), 2);
         assert_eq!(models[0].name, "model-a");
-        assert!(models[0]
-            .capabilities
-            .contains(&"transcription".to_string()));
+        assert!(
+            models[0]
+                .capabilities
+                .contains(&"transcription".to_string())
+        );
         assert!(models[0].capabilities.contains(&"chat".to_string()));
         assert_eq!(models[1].name, "model-b");
     }
@@ -684,7 +680,7 @@ mod tests {
         let config = AppConfig::default();
         assert_eq!(config.shortcut, "Control+Shift+Quote");
         assert_eq!(config.features.transcription.provider_id, "vertex");
-        assert_eq!(config.features.skills.enabled, true);
-        assert_eq!(config.features.recording.auto_mute, false);
+        assert!(config.features.skills.enabled);
+        assert!(!config.features.recording.auto_mute);
     }
 }

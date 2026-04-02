@@ -2,6 +2,7 @@ use async_trait::async_trait;
 
 #[cfg_attr(test, mockall::automock)]
 #[async_trait]
+#[allow(dead_code)]
 pub trait LlmClient: Send + Sync {
     async fn send_text(
         &self,

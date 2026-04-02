@@ -1,12 +1,12 @@
 use base64::Engine;
-use rig::completion::message::{AudioMediaType, MimeType, UserContent};
+use rig::OneOrMany;
 use rig::client::CompletionClient;
 use rig::client::transcription::TranscriptionClient;
 use rig::completion::CompletionModel;
+use rig::completion::message::Message;
+use rig::completion::message::{AudioMediaType, MimeType, UserContent};
 use rig::providers::openai;
 use rig::transcription::TranscriptionModel;
-use rig::OneOrMany;
-use rig::completion::message::Message;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
@@ -22,6 +22,7 @@ pub enum AiError {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum ThinkingMode {
     Default,
     Enabled,
@@ -38,12 +39,14 @@ fn get_or_create_vertex_client(
     if let Some(ref client) = *guard {
         return Ok(client.clone());
     }
-    let client = rig_vertexai::Client::builder()
-        .build()
-        .map_err(|e| {
-            logger.error("ai", "Vertex AI client 初始化失败", Some(serde_json::json!({ "error": e.to_string() })));
-            AiError::RequestError(format!("Vertex AI client init failed: {}", e))
-        })?;
+    let client = rig_vertexai::Client::builder().build().map_err(|e| {
+        logger.error(
+            "ai",
+            "Vertex AI client 初始化失败",
+            Some(serde_json::json!({ "error": e.to_string() })),
+        );
+        AiError::RequestError(format!("Vertex AI client init failed: {}", e))
+    })?;
     *guard = Some(client.clone());
     logger.info("ai", "Vertex AI client 已创建并缓存", None);
     Ok(client)
@@ -68,8 +71,8 @@ pub async fn send_audio_prompt(
     provider: &ProviderConfig,
     vertex_cache: &VertexClientCache,
 ) -> Result<String, AiError> {
-    let audio_data = std::fs::read(audio_path)
-        .map_err(|e| AiError::FileReadError(e.to_string()))?;
+    let audio_data =
+        std::fs::read(audio_path).map_err(|e| AiError::FileReadError(e.to_string()))?;
     let audio_b64 = base64::engine::general_purpose::STANDARD.encode(&audio_data);
 
     let extension = audio_path
@@ -87,7 +90,15 @@ pub async fn send_audio_prompt(
     match provider.provider_type.as_str() {
         "vertex" => {
             let client = get_or_create_vertex_client(logger, vertex_cache)?;
-            send_via_vertex(logger, &client, &audio_b64, media_type, text_prompt, model_name).await
+            send_via_vertex(
+                logger,
+                &client,
+                &audio_b64,
+                media_type,
+                text_prompt,
+                model_name,
+            )
+            .await
         }
         "openai-compatible" => {
             let api_key = provider
@@ -120,12 +131,16 @@ async fn send_via_vertex(
     text_prompt: &str,
     model_name: &str,
 ) -> Result<String, AiError> {
-    logger.info("ai", "准备发送 Vertex AI 音频请求", Some(serde_json::json!({
-        "model": model_name,
-        "media_type": media_type,
-        "audio_size_b64": audio_b64.len(),
-        "prompt": text_prompt,
-    })));
+    logger.info(
+        "ai",
+        "准备发送 Vertex AI 音频请求",
+        Some(serde_json::json!({
+            "model": model_name,
+            "media_type": media_type,
+            "audio_size_b64": audio_b64.len(),
+            "prompt": text_prompt,
+        })),
+    );
 
     let audio_mt: Option<AudioMediaType> = AudioMediaType::from_mime_type(media_type);
 
@@ -142,16 +157,21 @@ async fn send_via_vertex(
         content: prompt_content,
     };
 
-    logger.info("ai", "Vertex AI 请求发送中", Some(serde_json::json!({ "model": model_name })));
+    logger.info(
+        "ai",
+        "Vertex AI 请求发送中",
+        Some(serde_json::json!({ "model": model_name })),
+    );
 
     let request = model.completion_request(message).build();
-    let response = model
-        .completion(request)
-        .await
-        .map_err(|e| {
-            logger.error("ai", "Vertex AI 请求失败", Some(serde_json::json!({ "error": e.to_string(), "model": model_name })));
-            AiError::RequestError(e.to_string())
-        })?;
+    let response = model.completion(request).await.map_err(|e| {
+        logger.error(
+            "ai",
+            "Vertex AI 请求失败",
+            Some(serde_json::json!({ "error": e.to_string(), "model": model_name })),
+        );
+        AiError::RequestError(e.to_string())
+    })?;
 
     let text = response
         .choice
@@ -163,7 +183,11 @@ async fn send_via_vertex(
         .collect::<Vec<_>>()
         .join("");
 
-    logger.info("ai", "Vertex AI 请求成功", Some(serde_json::json!({ "response_length": text.len() })));
+    logger.info(
+        "ai",
+        "Vertex AI 请求成功",
+        Some(serde_json::json!({ "response_length": text.len() })),
+    );
 
     Ok(text)
 }
@@ -177,7 +201,7 @@ async fn send_via_openai_compatible(
     api_key: &str,
     base_url: &str,
 ) -> Result<String, AiError> {
-    let extension = media_type.split('/').last().unwrap_or("wav");
+    let extension = media_type.split('/').next_back().unwrap_or("wav");
 
     let final_url = format!("{}/audio/transcriptions", base_url.trim_end_matches('/'));
     logger.info(
@@ -290,10 +314,14 @@ async fn send_text_via_vertex(
     model_name: &str,
     _thinking: ThinkingMode,
 ) -> Result<String, AiError> {
-    logger.info("ai", "准备发送 Vertex AI 文本请求", Some(serde_json::json!({
-        "model": model_name,
-        "prompt": text_prompt,
-    })));
+    logger.info(
+        "ai",
+        "准备发送 Vertex AI 文本请求",
+        Some(serde_json::json!({
+            "model": model_name,
+            "prompt": text_prompt,
+        })),
+    );
 
     let model = client.completion_model(model_name);
 
@@ -302,16 +330,21 @@ async fn send_text_via_vertex(
         content: prompt_content,
     };
 
-    logger.info("ai", "Vertex AI 文本请求发送中", Some(serde_json::json!({ "model": model_name })));
+    logger.info(
+        "ai",
+        "Vertex AI 文本请求发送中",
+        Some(serde_json::json!({ "model": model_name })),
+    );
 
     let request = model.completion_request(message).build();
-    let response = model
-        .completion(request)
-        .await
-        .map_err(|e| {
-            logger.error("ai", "Vertex AI 文本请求失败", Some(serde_json::json!({ "error": e.to_string(), "model": model_name })));
-            AiError::RequestError(e.to_string())
-        })?;
+    let response = model.completion(request).await.map_err(|e| {
+        logger.error(
+            "ai",
+            "Vertex AI 文本请求失败",
+            Some(serde_json::json!({ "error": e.to_string(), "model": model_name })),
+        );
+        AiError::RequestError(e.to_string())
+    })?;
 
     let text = response
         .choice
@@ -323,7 +356,11 @@ async fn send_text_via_vertex(
         .collect::<Vec<_>>()
         .join("");
 
-    logger.info("ai", "Vertex AI 文本请求成功", Some(serde_json::json!({ "response_length": text.len() })));
+    logger.info(
+        "ai",
+        "Vertex AI 文本请求成功",
+        Some(serde_json::json!({ "response_length": text.len() })),
+    );
 
     Ok(text)
 }
@@ -388,22 +425,19 @@ async fn send_text_via_openai_compatible(
     let build_req_ms = t_before_model.elapsed().as_millis();
 
     let t_before_completion = Instant::now();
-    let response = model
-        .completion(request)
-        .await
-        .map_err(|e| {
-            let err_str = e.to_string();
-            logger.error(
-                "ai",
-                "AI 文本请求失败",
-                Some(serde_json::json!({
-                    "error": err_str,
-                    "url": final_url,
-                    "model": model_name,
-                })),
-            );
-            AiError::RequestError(err_str)
-        })?;
+    let response = model.completion(request).await.map_err(|e| {
+        let err_str = e.to_string();
+        logger.error(
+            "ai",
+            "AI 文本请求失败",
+            Some(serde_json::json!({
+                "error": err_str,
+                "url": final_url,
+                "model": model_name,
+            })),
+        );
+        AiError::RequestError(err_str)
+    })?;
     let completion_ms = t_before_completion.elapsed().as_millis();
 
     let t_before_parse = Instant::now();
@@ -451,7 +485,15 @@ pub async fn send_audio_prompt_from_bytes(
         "vertex" => {
             let audio_b64 = base64::engine::general_purpose::STANDARD.encode(audio_bytes);
             let client = get_or_create_vertex_client(logger, vertex_cache)?;
-            send_via_vertex(logger, &client, &audio_b64, media_type, text_prompt, model_name).await
+            send_via_vertex(
+                logger,
+                &client,
+                &audio_b64,
+                media_type,
+                text_prompt,
+                model_name,
+            )
+            .await
         }
         "openai-compatible" => {
             let api_key = provider
