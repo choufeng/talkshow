@@ -208,11 +208,9 @@ async fn send_via_openai_compatible(
         "ai",
         "准备发送 Transcription 请求",
         Some(serde_json::json!({
-            "url": final_url,
             "model": model_name,
             "media_type": media_type,
             "audio_size_bytes": audio_bytes.len(),
-            "prompt": text_prompt,
         })),
     );
 
@@ -235,7 +233,6 @@ async fn send_via_openai_compatible(
         "ai",
         "请求构建完成，正在发送",
         Some(serde_json::json!({
-            "client_base_url": client.base_url(),
             "model": model_name,
         })),
     );
@@ -319,7 +316,6 @@ async fn send_text_via_vertex(
         "准备发送 Vertex AI 文本请求",
         Some(serde_json::json!({
             "model": model_name,
-            "prompt": text_prompt,
         })),
     );
 
@@ -382,9 +378,7 @@ async fn send_text_via_openai_compatible(
         "ai",
         "准备发送 OpenAI 兼容文本请求",
         Some(serde_json::json!({
-            "url": final_url,
             "model": model_name,
-            "prompt": text_prompt,
         })),
     );
 
