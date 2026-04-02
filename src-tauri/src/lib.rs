@@ -1210,8 +1210,10 @@ pub fn run() {
                                 play_sound("Submarine.aiff");
                                 restore_default_tray(&app_handle, default_icon_owned.clone());
                             } else {
+                                let app_data_dir_rec = app_handle.path().app_data_dir().unwrap_or_default();
                                 let start_result =
                                     recorder_handler.lock().ok().and_then(|mut r| {
+                                        r.set_output_dir(app_data_dir_rec);
                                         let result = r.start();
                                         if result.is_ok() {
                                             Some(())
@@ -1323,8 +1325,10 @@ pub fn run() {
                                 play_sound("Submarine.aiff");
                                 restore_default_tray(&app_handle, default_icon_owned.clone());
                             } else {
+                                let app_data_dir_rec = app_handle.path().app_data_dir().unwrap_or_default();
                                 let start_result =
                                     recorder_handler.lock().ok().and_then(|mut r| {
+                                        r.set_output_dir(app_data_dir_rec);
                                         let result = r.start();
                                         if result.is_ok() {
                                             Some(())

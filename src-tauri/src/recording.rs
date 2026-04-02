@@ -1,5 +1,5 @@
-use cpal::SampleFormat;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+use cpal::SampleFormat;
 use dasp_sample::Sample as DaspSample;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -45,6 +45,7 @@ pub enum AudioRecorder {
         sample_rate: u32,
         channels: u16,
         start_time: Option<Instant>,
+        output_dir: Option<PathBuf>,
     },
     Unavailable(String),
 }
@@ -110,6 +111,16 @@ pub fn recordings_dir() -> PathBuf {
 
 pub fn ensure_recordings_dir() -> Result<PathBuf, String> {
     let dir = recordings_dir();
+    std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create recordings dir: {}", e))?;
+    Ok(dir)
+}
+
+pub fn recordings_dir_in(app_data_dir: &std::path::Path) -> PathBuf {
+    app_data_dir.join(RECORDINGS_DIR_NAME)
+}
+
+pub fn ensure_recordings_dir_in(app_data_dir: &std::path::Path) -> Result<PathBuf, String> {
+    let dir = recordings_dir_in(app_data_dir);
     std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create recordings dir: {}", e))?;
     Ok(dir)
 }
@@ -230,6 +241,7 @@ impl AudioRecorder {
             sample_rate: config.sample_rate.0,
             channels: config.channels,
             start_time: None,
+            output_dir: None,
         }
     }
 
@@ -264,6 +276,7 @@ impl AudioRecorder {
                 sample_rate,
                 channels,
                 start_time,
+                output_dir,
             } => {
                 let _ = stream.pause();
 
@@ -283,7 +296,11 @@ impl AudioRecorder {
                 };
                 *start_time = None;
 
-                let dir = ensure_recordings_dir().map_err(RecordingError::FileError)?;
+                let dir = if let Some(d) = &output_dir {
+                    ensure_recordings_dir_in(d).map_err(RecordingError::FileError)?
+                } else {
+                    ensure_recordings_dir().map_err(RecordingError::FileError)?
+                };
                 let flac_filename = generate_filename();
                 let flac_path = dir.join(&flac_filename);
                 let wav_path = flac_path.with_extension("wav");
@@ -359,6 +376,12 @@ impl AudioRecorder {
         match self {
             AudioRecorder::Ready { start_time, .. } => start_time.is_some(),
             AudioRecorder::Unavailable(_) => false,
+        }
+    }
+
+    pub fn set_output_dir(&mut self, dir: PathBuf) {
+        if let AudioRecorder::Ready { output_dir, .. } = self {
+            *output_dir = Some(dir);
         }
     }
 }
