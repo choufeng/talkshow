@@ -9,6 +9,11 @@ const SKILLS_BASE_TIMEOUT_SECS: u64 = 15;
 const SKILLS_PER_SKILL_TIMEOUT_SECS: u64 = 5;
 
 #[cfg(target_os = "macos")]
+fn escape_applescript_string(s: &str) -> String {
+    s.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+#[cfg(target_os = "macos")]
 fn get_frontmost_app() -> Result<(String, String), String> {
     let output = std::process::Command::new("osascript")
         .arg("-e")
@@ -27,7 +32,7 @@ fn get_frontmost_app() -> Result<(String, String), String> {
         .arg("-e")
         .arg(format!(
             "tell application \"System Events\" to get bundle identifier of process \"{}\"",
-            app_name
+            escape_applescript_string(&app_name)
         ))
         .output()
         .map_err(|e| format!("Failed to get bundle id: {}", e))?;

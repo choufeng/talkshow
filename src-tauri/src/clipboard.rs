@@ -39,12 +39,17 @@ pub fn write_and_paste(text: &str) -> Result<(), String> {
 }
 
 #[cfg(target_os = "macos")]
+fn escape_applescript_string(s: &str) -> String {
+    s.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+#[cfg(target_os = "macos")]
 fn simulate_paste() {
     let target_app = TARGET_APP.lock().ok().and_then(|g| g.clone());
     if let Some(app) = target_app {
         let _ = std::process::Command::new("osascript")
             .arg("-e")
-            .arg(format!("tell application \"{}\" to activate", app))
+            .arg(format!("tell application \"{}\" to activate", escape_applescript_string(&app)))
             .output();
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
