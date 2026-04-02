@@ -613,7 +613,8 @@ fn destroy_indicator(app_handle: &tauri::AppHandle) {
 #[tauri::command]
 fn get_config(app_handle: tauri::AppHandle) -> config::AppConfig {
     let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
-    config::load_config(&app_data_dir)
+    let config = config::load_config(&app_data_dir);
+    config::mask_api_keys(config)
 }
 
 #[tauri::command]
@@ -683,6 +684,7 @@ fn update_shortcut(
 
 #[tauri::command]
 fn save_config_cmd(app_handle: tauri::AppHandle, config: config::AppConfig) -> Result<(), String> {
+    config::validate_config(&config)?;
     let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
     config::save_config(&app_data_dir, &config)
 }

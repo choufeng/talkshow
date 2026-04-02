@@ -427,6 +427,67 @@ pub fn save_config(app_data_dir: &std::path::Path, config: &AppConfig) -> Result
     fs::write(&path, content).map_err(|e| e.to_string())
 }
 
+pub fn mask_api_keys(mut config: AppConfig) -> AppConfig {
+    for provider in &mut config.ai.providers {
+        if let Some(ref key) = provider.api_key {
+            if !key.is_empty() {
+                if key.len() <= 8 {
+                    provider.api_key = Some("*".repeat(key.len()));
+                } else {
+                    provider.api_key = Some(format!("{}...{}", &key[..3], &key[key.len() - 4..]));
+                }
+            }
+        }
+    }
+    config
+}
+
+pub fn validate_config(config: &AppConfig) -> Result<(), String> {
+    for provider in &config.ai.providers {
+        match provider.provider_type.as_str() {
+            "vertex" | "openai-compatible" | "sensevoice" => {}
+            _ => return Err(format!(
+                "Invalid provider type '{}' for provider '{}'",
+                provider.provider_type, provider.id
+            )),
+        }
+
+        if provider.provider_type == "openai-compatible" && !provider.endpoint.is_empty() {
+            if !provider.endpoint.starts_with("https://")
+                && !provider.endpoint.starts_with("http://")
+            {
+                return Err(format!(
+                    "Endpoint must start with http:// or https:// for provider '{}'",
+                    provider.id
+                ));
+            }
+        }
+
+        if provider.id.trim().is_empty() {
+            return Err("Provider ID cannot be empty".to_string());
+        }
+
+        if provider.name.trim().is_empty() {
+            return Err(format!(
+                "Provider name cannot be empty for '{}'",
+                provider.id
+            ));
+        }
+    }
+
+    if config.shortcut.len() > 100 {
+        return Err("Shortcut string too long".to_string());
+    }
+    if config.recording_shortcut.len() > 100 {
+        return Err("Recording shortcut string too long".to_string());
+    }
+    if config.translate_shortcut.len() > 100 {
+        return Err("Translate shortcut string too long".to_string());
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -682,5 +743,119 @@ mod tests {
         assert_eq!(config.features.transcription.provider_id, "vertex");
         assert!(config.features.skills.enabled);
         assert!(!config.features.recording.auto_mute);
+    }
+
+    #[test]
+    fn test_mask_api_keys_masks_long_keys() {
+        let mut config = AppConfig::default();
+        config.ai.providers = vec![ProviderConfig {
+            id: "test".to_string(),
+            provider_type: "openai-compatible".to_string(),
+            name: "Test".to_string(),
+            endpoint: "https://api.example.com".to_string(),
+            api_key: Some("sk-abcdefghijklmnop".to_string()),
+            models: vec![],
+        }];
+        let masked = mask_api_keys(config);
+        assert_eq!(
+            masked.ai.providers[0].api_key,
+            Some("sk-...mnop".to_string())
+        );
+    }
+
+    #[test]
+    fn test_mask_api_keys_masks_short_keys() {
+        let mut config = AppConfig::default();
+        config.ai.providers = vec![ProviderConfig {
+            id: "test".to_string(),
+            provider_type: "openai-compatible".to_string(),
+            name: "Test".to_string(),
+            endpoint: "https://api.example.com".to_string(),
+            api_key: Some("short".to_string()),
+            models: vec![],
+        }];
+        let masked = mask_api_keys(config);
+        assert_eq!(
+            masked.ai.providers[0].api_key,
+            Some("*****".to_string())
+        );
+    }
+
+    #[test]
+    fn test_mask_api_keys_preserves_empty_string() {
+        let mut config = AppConfig::default();
+        config.ai.providers = vec![ProviderConfig {
+            id: "test".to_string(),
+            provider_type: "openai-compatible".to_string(),
+            name: "Test".to_string(),
+            endpoint: "https://api.example.com".to_string(),
+            api_key: Some("".to_string()),
+            models: vec![],
+        }];
+        let masked = mask_api_keys(config);
+        assert_eq!(masked.ai.providers[0].api_key, Some("".to_string()));
+    }
+
+    #[test]
+    fn test_validate_config_rejects_invalid_provider_type() {
+        let mut config = AppConfig::default();
+        config.ai.providers = vec![ProviderConfig {
+            id: "bad".to_string(),
+            provider_type: "malicious-type".to_string(),
+            name: "Bad".to_string(),
+            endpoint: "https://evil.com".to_string(),
+            api_key: None,
+            models: vec![],
+        }];
+        assert!(validate_config(&config).is_err());
+    }
+
+    #[test]
+    fn test_validate_config_rejects_non_https_endpoint() {
+        let mut config = AppConfig::default();
+        config.ai.providers = vec![ProviderConfig {
+            id: "bad".to_string(),
+            provider_type: "openai-compatible".to_string(),
+            name: "Bad".to_string(),
+            endpoint: "ftp://evil.com".to_string(),
+            api_key: None,
+            models: vec![],
+        }];
+        assert!(validate_config(&config).is_err());
+    }
+
+    #[test]
+    fn test_validate_config_allows_empty_endpoint_for_vertex() {
+        let mut config = AppConfig::default();
+        config.ai.providers = vec![ProviderConfig {
+            id: "vertex".to_string(),
+            provider_type: "vertex".to_string(),
+            name: "Vertex AI".to_string(),
+            endpoint: "".to_string(),
+            api_key: None,
+            models: vec![],
+        }];
+        assert!(validate_config(&config).is_ok());
+    }
+
+    #[test]
+    fn test_validate_config_rejects_empty_id() {
+        let mut config = AppConfig::default();
+        config.ai.providers = vec![ProviderConfig {
+            id: "".to_string(),
+            provider_type: "openai-compatible".to_string(),
+            name: "Test".to_string(),
+            endpoint: "https://api.example.com".to_string(),
+            api_key: None,
+            models: vec![],
+        }];
+        assert!(validate_config(&config).is_err());
+    }
+
+    #[test]
+    fn test_validate_config_rejects_too_long_shortcut() {
+        let mut config = AppConfig::default();
+        config.shortcut = "A".repeat(101);
+        assert!(validate_config(&config).is_err());
     }
 }
