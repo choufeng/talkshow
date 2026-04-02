@@ -133,11 +133,7 @@ pub fn cleanup_stale_state(app_data_dir: &std::path::Path) -> Result<(), String>
     if now - state.timestamp > MAX_STALE_SECONDS {
         let _ = fs::remove_file(&path);
         set_volume(state.volume)?;
-        return Ok(());
     }
-
-    let _ = fs::remove_file(&path);
-    set_volume(state.volume)?;
 
     Ok(())
 }
