@@ -2,6 +2,7 @@ mod ai;
 mod audio_control;
 mod clipboard;
 mod config;
+mod keyring_store;
 mod llm_client;
 mod logger;
 #[cfg(target_os = "macos")]
@@ -11,7 +12,6 @@ mod recording;
 mod sensevoice;
 mod skills;
 mod translation;
-mod keyring_store;
 
 use logger::Logger;
 use recording::AudioRecorder;
@@ -358,11 +358,11 @@ fn stop_recording(
                                             show_notification(
                                                 &h,
                                                 "翻译失败",
-                                                 "请先启用润色并配置润色模型",
-                                             );
-                                             destroy_indicator(&h);
-                                             if RECORDING.load(Ordering::SeqCst)
-                                                 == RECORDING_MODE_NONE
+                                                "请先启用润色并配置润色模型",
+                                            );
+                                            destroy_indicator(&h);
+                                            if RECORDING.load(Ordering::SeqCst)
+                                                == RECORDING_MODE_NONE
                                             {
                                                 let _ = h
                                                     .global_shortcut()
@@ -375,8 +375,7 @@ fn stop_recording(
                                     if CANCELLED.load(Ordering::SeqCst) {
                                         logger.info("pipeline", "流水线已取消", None);
                                         destroy_indicator(&h);
-                                        if RECORDING.load(Ordering::SeqCst) == RECORDING_MODE_NONE
-                                        {
+                                        if RECORDING.load(Ordering::SeqCst) == RECORDING_MODE_NONE {
                                             let _ = h
                                                 .global_shortcut()
                                                 .unregister(Shortcut::new(None, Code::Escape));
@@ -413,9 +412,9 @@ fn stop_recording(
                                                     "clipboard_ms": clipboard_elapsed,
                                                 })),
                                             );
-                                             emit_indicator(&h, "indicator:done");
-                                             if RECORDING.load(Ordering::SeqCst)
-                                                 == RECORDING_MODE_NONE
+                                            emit_indicator(&h, "indicator:done");
+                                            if RECORDING.load(Ordering::SeqCst)
+                                                == RECORDING_MODE_NONE
                                             {
                                                 let _ = h
                                                     .global_shortcut()
@@ -428,10 +427,10 @@ fn stop_recording(
                                                 "剪贴板写入/粘贴失败",
                                                 Some(serde_json::json!({ "error": e })),
                                             );
-                                             show_notification(&h, "剪贴板写入失败", &e);
-                                             destroy_indicator(&h);
-                                             if RECORDING.load(Ordering::SeqCst)
-                                                 == RECORDING_MODE_NONE
+                                            show_notification(&h, "剪贴板写入失败", &e);
+                                            destroy_indicator(&h);
+                                            if RECORDING.load(Ordering::SeqCst)
+                                                == RECORDING_MODE_NONE
                                             {
                                                 let _ = h
                                                     .global_shortcut()

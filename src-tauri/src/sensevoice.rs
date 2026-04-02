@@ -66,15 +66,35 @@ const MODEL_DIR_NAME: &str = "sensevoice";
 const HF_REPO: &str = "haixuantao/SenseVoiceSmall-onnx";
 
 const MODEL_FILES: &[(&str, u64, &str)] = &[
-    ("model_quant.onnx", 241_216_270, "21dc965f689a78d1604717bf561e40d5a236087c85a95584567835750549e822"),
-    ("config.yaml", 1_855, "f71e239ba36705564b5bf2d2ffd07eece07b8e3f2bbf6d2c99d8df856339ac19"),
-    ("am.mvn", 11_203, "29b3c740a2c0cfc6b308126d31d7f265fa2be74f3bb095cd2f143ea970896ae5"),
-    ("chn_jpn_yue_eng_ko_spectok.bpe.model", 377_341, "a2594fc1474e78973149cba8cd1f603ebed8c39c7decb470631f66e70ce58e97"),
-    ("tokens.json", 352_064, "aa87f86064c3730d799ddf7af3c04659151102cba548bce325cf06ba4da4e6a8"),
+    (
+        "model_quant.onnx",
+        241_216_270,
+        "21dc965f689a78d1604717bf561e40d5a236087c85a95584567835750549e822",
+    ),
+    (
+        "config.yaml",
+        1_855,
+        "f71e239ba36705564b5bf2d2ffd07eece07b8e3f2bbf6d2c99d8df856339ac19",
+    ),
+    (
+        "am.mvn",
+        11_203,
+        "29b3c740a2c0cfc6b308126d31d7f265fa2be74f3bb095cd2f143ea970896ae5",
+    ),
+    (
+        "chn_jpn_yue_eng_ko_spectok.bpe.model",
+        377_341,
+        "a2594fc1474e78973149cba8cd1f603ebed8c39c7decb470631f66e70ce58e97",
+    ),
+    (
+        "tokens.json",
+        352_064,
+        "aa87f86064c3730d799ddf7af3c04659151102cba548bce325cf06ba4da4e6a8",
+    ),
 ];
 
-use std::io::Read as _;
 use sha2::Digest as _;
+use std::io::Read as _;
 
 fn verify_file_hash(file_path: &std::path::Path, expected_hash: &str) -> Result<bool, String> {
     let mut file = std::fs::File::open(file_path).map_err(|e| e.to_string())?;
@@ -82,7 +102,9 @@ fn verify_file_hash(file_path: &std::path::Path, expected_hash: &str) -> Result<
     let mut buffer = [0u8; 8192];
     loop {
         let n = file.read(&mut buffer).map_err(|e| e.to_string())?;
-        if n == 0 { break; }
+        if n == 0 {
+            break;
+        }
         hasher.update(&buffer[..n]);
     }
     let result = format!("{:x}", hasher.finalize());

@@ -1,5 +1,5 @@
-use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::SampleFormat;
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use dasp_sample::Sample as DaspSample;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};

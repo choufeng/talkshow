@@ -459,10 +459,12 @@ pub fn validate_config(config: &AppConfig) -> Result<(), String> {
     for provider in &config.ai.providers {
         match provider.provider_type.as_str() {
             "vertex" | "openai-compatible" | "sensevoice" => {}
-            _ => return Err(format!(
-                "Invalid provider type '{}' for provider '{}'",
-                provider.provider_type, provider.id
-            )),
+            _ => {
+                return Err(format!(
+                    "Invalid provider type '{}' for provider '{}'",
+                    provider.provider_type, provider.id
+                ));
+            }
         }
 
         if provider.provider_type == "openai-compatible" && !provider.endpoint.is_empty() {
@@ -788,10 +790,7 @@ mod tests {
             models: vec![],
         }];
         let masked = mask_api_keys(config);
-        assert_eq!(
-            masked.ai.providers[0].api_key,
-            Some("*****".to_string())
-        );
+        assert_eq!(masked.ai.providers[0].api_key, Some("*****".to_string()));
     }
 
     #[test]

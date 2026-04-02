@@ -49,7 +49,10 @@ fn simulate_paste() {
     if let Some(app) = target_app {
         let _ = std::process::Command::new("osascript")
             .arg("-e")
-            .arg(format!("tell application \"{}\" to activate", escape_applescript_string(&app)))
+            .arg(format!(
+                "tell application \"{}\" to activate",
+                escape_applescript_string(&app)
+            ))
             .output();
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
