@@ -442,6 +442,19 @@ pub fn mask_api_keys(mut config: AppConfig) -> AppConfig {
     config
 }
 
+pub fn strip_api_keys(mut config: AppConfig) -> (AppConfig, Vec<(String, Option<String>)>) {
+    let keys: Vec<(String, Option<String>)> = config
+        .ai
+        .providers
+        .iter()
+        .map(|p| (p.id.clone(), p.api_key.clone()))
+        .collect();
+    for provider in &mut config.ai.providers {
+        provider.api_key = None;
+    }
+    (config, keys)
+}
+
 pub fn validate_config(config: &AppConfig) -> Result<(), String> {
     for provider in &config.ai.providers {
         match provider.provider_type.as_str() {

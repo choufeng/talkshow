@@ -11,6 +11,7 @@ mod recording;
 mod sensevoice;
 mod skills;
 mod translation;
+mod keyring_store;
 
 use logger::Logger;
 use recording::AudioRecorder;
@@ -613,7 +614,18 @@ fn destroy_indicator(app_handle: &tauri::AppHandle) {
 #[tauri::command]
 fn get_config(app_handle: tauri::AppHandle) -> config::AppConfig {
     let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
-    let config = config::load_config(&app_data_dir);
+    let mut config = config::load_config(&app_data_dir);
+
+    // 从 keyring 读取 api_key
+    let provider_ids: Vec<String> = config.ai.providers.iter().map(|p| p.id.clone()).collect();
+    let keyring_keys = keyring_store::load_all_api_keys(&provider_ids);
+
+    for provider in &mut config.ai.providers {
+        if let Some(key) = keyring_keys.get(&provider.id) {
+            provider.api_key = Some(key.clone());
+        }
+    }
+
     config::mask_api_keys(config)
 }
 
@@ -685,8 +697,30 @@ fn update_shortcut(
 #[tauri::command]
 fn save_config_cmd(app_handle: tauri::AppHandle, config: config::AppConfig) -> Result<(), String> {
     config::validate_config(&config)?;
+
     let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
-    config::save_config(&app_data_dir, &config)
+
+    // 首次保存时迁移旧密钥到 keyring
+    let existing_config = config::load_config(&app_data_dir);
+    for provider in &existing_config.ai.providers {
+        if let Some(ref key) = provider.api_key {
+            if !key.is_empty() {
+                let _ = keyring_store::store_api_key(&provider.id, key);
+            }
+        }
+    }
+
+    // 保存 api_key 到 keyring，从 JSON 中剥离
+    let (clean_config, keys) = config::strip_api_keys(config);
+    for (provider_id, api_key) in keys {
+        if let Some(key) = api_key {
+            if !key.is_empty() && !key.contains("...") {
+                keyring_store::store_api_key(&provider_id, &key)?;
+            }
+        }
+    }
+
+    config::save_config(&app_data_dir, &clean_config)
 }
 
 #[derive(serde::Serialize, Clone)]
