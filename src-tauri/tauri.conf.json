@@ -20,7 +20,7 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: avatar:; connect-src https: http://localhost:* tauri: ipc: https://tauri.localhost"
     }
   },
   "bundle": {
