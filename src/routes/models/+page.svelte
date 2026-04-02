@@ -278,12 +278,30 @@
     }
   }
 
+  function validateEndpointUrl(url: string): string | null {
+    if (!url.trim()) return null;
+    try {
+      const parsed = new URL(url);
+      if (!['http:', 'https:'].includes(parsed.protocol)) {
+        return 'Endpoint 必须以 http:// 或 https:// 开头';
+      }
+    } catch {
+      return 'Endpoint 格式无效';
+    }
+    return null;
+  }
+
   function validateForm(): boolean {
     const errors: Record<string, string> = {};
     if (!newProvider.name.trim()) errors.name = '请输入名称';
     if (!newProvider.type) errors.type = '请选择类型';
     if (!newProvider.id.trim()) errors.id = '请输入 ID';
-    if (!newProvider.endpoint.trim()) errors.endpoint = '请输入端点';
+
+    const needsEndpoint = newProvider.type === 'openai-compatible' || newProvider.type === 'anthropic-compatible';
+    if (needsEndpoint && !newProvider.endpoint.trim()) errors.endpoint = '请输入端点';
+
+    const urlError = validateEndpointUrl(newProvider.endpoint);
+    if (urlError) errors.endpoint = urlError;
 
     const idRegex = /^[a-z0-9-]+$/;
     if (newProvider.id && !idRegex.test(newProvider.id)) {
