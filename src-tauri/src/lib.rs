@@ -1487,6 +1487,30 @@ pub fn run() {
 
             app.manage(logger);
 
+            // --- Pre-create indicator window for instant show ---
+            let indicator_url = tauri::WebviewUrl::App("/recording".into());
+            let indicator_window = WebviewWindowBuilder::new(app.handle(), INDICATOR_LABEL, indicator_url)
+                .inner_size(180.0, 48.0)
+                .position(620.0, 700.0)
+                .transparent(true)
+                .decorations(false)
+                .shadow(false)
+                .background_color(Color(0, 0, 0, 0))
+                .resizable(false)
+                .always_on_top(true)
+                .skip_taskbar(true)
+                .visible(false)
+                .focusable(false)
+                .accept_first_mouse(true)
+                .build();
+
+            if let Ok(w) = indicator_window {
+                #[cfg(target_os = "macos")]
+                {
+                    let _ = macos::floating_panel::make_window_nonactivating(&w);
+                }
+            }
+
             Ok(())
         })
         .run(tauri::generate_context!())
