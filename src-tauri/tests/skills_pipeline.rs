@@ -1,9 +1,8 @@
 mod common;
 
 use common::*;
-use talkshow_lib::LlmClient;
 use talkshow_lib::{assemble_skills_prompt, process_with_skills_client};
-use talkshow_lib::{ProviderConfig, Skill, SkillsConfig, TranscriptionConfig};
+use talkshow_lib::{Skill, SkillsConfig, TranscriptionConfig};
 
 #[tokio::test]
 async fn test_skills_disabled_returns_original() {
@@ -79,6 +78,29 @@ async fn test_skills_no_polish_provider_returns_original() {
         model: "test".to_string(),
         polish_enabled: true,
         polish_provider_id: "".to_string(),
+        polish_model: "".to_string(),
+    };
+    let providers = test_providers();
+    let mut mock = MockLlmClientIntegration::new();
+
+    let result = process_with_skills_client(
+        &logger, &config, &tc, &providers, "原始文本", &mut mock, None,
+    )
+    .await;
+
+    assert_eq!(result.unwrap(), "原始文本");
+    assert_eq!(mock.send_text_call_count(), 0);
+}
+
+#[tokio::test]
+async fn test_skills_empty_polish_model_returns_original() {
+    let (logger, _dir) = create_test_logger();
+    let config = enabled_skills_config();
+    let tc = TranscriptionConfig {
+        provider_id: "test".to_string(),
+        model: "test".to_string(),
+        polish_enabled: true,
+        polish_provider_id: "test-provider".to_string(),
         polish_model: "".to_string(),
     };
     let providers = test_providers();
