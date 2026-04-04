@@ -1,3 +1,10 @@
+//! Common test utilities for integration tests.
+//!
+//! This module is compiled separately for each test target, so items may appear
+//! unused in some targets while being used in others.
+#![allow(dead_code)]
+#![allow(clippy::type_complexity)]
+
 use talkshow_lib::{
     AiConfig, AppConfig, FeaturesConfig, LlmClient, Logger, ProviderConfig,
     RecordingFeaturesConfig, Skill, SkillsConfig, TranscriptionConfig, TranslationConfig,

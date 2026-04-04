@@ -7,7 +7,7 @@ fn find_provider<'a>(providers: &'a [ProviderConfig], id: &str) -> &'a ProviderC
     providers
         .iter()
         .find(|p| p.id == id)
-        .expect(&format!("Provider '{}' not found", id))
+        .unwrap_or_else(|| panic!("Provider '{}' not found", id))
 }
 
 #[test]
