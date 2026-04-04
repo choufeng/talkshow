@@ -198,14 +198,39 @@
     {#if currentSession && activeTab === 'current'}
       <span class="ml-auto text-caption text-muted-foreground">
         {filteredEntries.length} 条日志
+        {#if selectMode && selectedIds.size > 0}
+          · 已选 {selectedIds.size} 条
+        {/if}
       </span>
-      <button
-        class="px-3 py-1 rounded text-caption border border-btn-secondary-border bg-gradient-to-b from-btn-secondary-from to-btn-secondary-to text-accent-foreground hover:opacity-90 transition-colors shadow-btn-secondary"
-        onclick={copyAll}
-        disabled={copied}
-      >
-        {copied ? '已拷贝' : '拷贝全部'}
-      </button>
+      {#if selectMode}
+        <button
+          class="px-3 py-1 rounded text-caption border border-btn-secondary-border bg-gradient-to-b from-btn-secondary-from to-btn-secondary-to text-accent-foreground hover:opacity-90 transition-colors shadow-btn-secondary disabled:opacity-50"
+          onclick={copySelected}
+          disabled={selectedIds.size === 0 || copied}
+        >
+          {copied ? '已复制' : `复制选中 (${selectedIds.size})`}
+        </button>
+        <button
+          class="px-3 py-1 rounded text-caption border border-border text-muted-foreground hover:text-foreground transition-colors"
+          onclick={toggleSelectMode}
+        >
+          取消
+        </button>
+      {:else}
+        <button
+          class="px-3 py-1 rounded text-caption border border-border text-muted-foreground hover:text-foreground transition-colors"
+          onclick={toggleSelectMode}
+        >
+          选择
+        </button>
+        <button
+          class="px-3 py-1 rounded text-caption border border-btn-secondary-border bg-gradient-to-b from-btn-secondary-from to-btn-secondary-to text-accent-foreground hover:opacity-90 transition-colors shadow-btn-secondary"
+          onclick={copyAll}
+          disabled={copied}
+        >
+          {copied ? '已复制' : '复制'}
+        </button>
+      {/if}
     {/if}
   </div>
 
@@ -244,7 +269,15 @@
       <div class="border border-border rounded-xl overflow-hidden">
         <div class="max-h-[calc(100vh-200px)] overflow-y-auto font-mono text-body">
           {#each filteredEntries as entry, i}
-            <div class="flex gap-3 px-5 py-2 border-b border-border last:border-b-0 hover:bg-muted/30">
+            <div class="flex gap-3 px-5 py-2 border-b border-border last:border-b-0 hover:bg-muted/30 {selectMode && selectedIds.has(i) ? 'bg-muted/50' : ''}">
+              {#if selectMode}
+                <input
+                  type="checkbox"
+                  checked={selectedIds.has(i)}
+                  onchange={(e) => toggleEntrySelection(i, e)}
+                  class="mt-0.5 cursor-pointer"
+                />
+              {/if}
               <span class="text-muted-foreground whitespace-nowrap shrink-0">{formatTimestamp(entry.ts)}</span>
               <span class="{levelColor(entry.level)} shrink-0 w-4 text-center">
                 {entry.level === 'error' ? '✕' : entry.level === 'warn' ? '!' : '·'}
