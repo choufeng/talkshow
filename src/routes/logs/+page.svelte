@@ -154,7 +154,7 @@
   }
 
   async function copySelected() {
-    const indices = Array.from(selectedIds).sort((a, b) => a - b);
+    const indices = Array.from(selectedIds).sort((a, b) => a - b).filter((i) => i < filteredEntries.length);
     const text = indices.map((i) => formatEntryForCopy(filteredEntries[i])).join('\n');
     await navigator.clipboard.writeText(text);
     copied = true;
