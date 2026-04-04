@@ -1402,6 +1402,7 @@ pub fn run() {
                                             });
                                         match rec_result {
                                             Some(()) => {
+                                                // === Phase 1: Immediate response (< 10ms) ===
                                                 if let Ok(mut start) = recording_start_handler.lock() {
                                                     *start = Some(Instant::now());
                                                 }
@@ -1409,39 +1410,40 @@ pub fn run() {
                                                     let _ =
                                                         tray.set_icon(Some(recording_icon_owned.clone()));
                                                 }
-                                                let frontmost = std::process::Command::new("osascript")
-                                                    .arg("-e")
-                                                    .arg("tell application \"System Events\" to get name of first process whose frontmost is true")
-                                                    .output()
-                                                    .ok()
-                                                    .filter(|o| o.status.success())
-                                                    .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
-                                                if let Some(ref app) = frontmost {
-                                                    clipboard::save_target_app(app);
-                                                }
+
+                                                // Show indicator immediately
+                                                show_indicator(&app_handle, None);
                                                 play_sound("Ping.aiff");
-                                                {
-                                                    let app_data_dir_mute = app_handle.path().app_data_dir().unwrap_or_default();
+
+                                                // === Phase 2: Background async operations ===
+                                                let app_handle_bg = app_handle.clone();
+                                                let esc_bg = esc_shortcut_handler;
+
+                                                std::thread::spawn(move || {
+                                                    // Auto mute
+                                                    let app_data_dir_mute = app_handle_bg.path().app_data_dir().unwrap_or_default();
                                                     let app_config_mute = config::load_config(&app_data_dir_mute);
                                                     if app_config_mute.features.recording.auto_mute {
                                                         let _ = audio_control::save_and_mute(
                                                             &app_data_dir_mute,
-                                                            app_handle.try_state::<Logger>().as_deref(),
+                                                            app_handle_bg.try_state::<Logger>().as_deref(),
                                                         );
                                                     }
-                                                }
-                                                show_indicator(&app_handle, None);
-                                                if let Some(mw) = app_handle.get_webview_window("main")
-                                                    && mw.is_visible().unwrap_or(false) {
-                                                        let _ = mw.hide();
+
+                                                    // Hide main window
+                                                    if let Some(mw) = app_handle_bg.get_webview_window("main")
+                                                        && mw.is_visible().unwrap_or(false) {
+                                                            let _ = mw.hide();
+                                                        }
+
+                                                    // Register ESC shortcut
+                                                    let h = app_handle_bg.clone();
+                                                    let _ = h.global_shortcut().register(esc_bg);
+
+                                                    // Log
+                                                    if let Some(logger) = app_handle_bg.try_state::<Logger>() {
+                                                        logger.info("recording", "录音开始 (翻译模式)", None);
                                                     }
-                                                if let Some(logger) = app_handle.try_state::<Logger>() {
-                                                    logger.info("recording", "录音开始 (翻译模式)", None);
-                                                }
-                                                let h = app_handle.clone();
-                                                let esc = esc_shortcut_handler;
-                                                std::thread::spawn(move || {
-                                                    let _ = h.global_shortcut().register(esc);
                                                 });
                                             }
                                             None => {
