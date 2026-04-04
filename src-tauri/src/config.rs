@@ -455,6 +455,18 @@ pub fn strip_api_keys(mut config: AppConfig) -> (AppConfig, Vec<(String, Option<
     (config, keys)
 }
 
+pub fn merge_api_keys_into_config(
+    mut config: AppConfig,
+    keys: &std::collections::HashMap<String, String>,
+) -> AppConfig {
+    for provider in &mut config.ai.providers {
+        if let Some(key) = keys.get(&provider.id) {
+            provider.api_key = Some(key.clone());
+        }
+    }
+    config
+}
+
 pub fn validate_config(config: &AppConfig) -> Result<(), String> {
     for provider in &config.ai.providers {
         match provider.provider_type.as_str() {
@@ -871,5 +883,98 @@ mod tests {
             ..Default::default()
         };
         assert!(validate_config(&config).is_err());
+    }
+
+    #[test]
+    fn test_merge_api_keys_into_config_fills_missing_keys() {
+        let mut config = AppConfig::default();
+        config.ai.providers = vec![
+            ProviderConfig {
+                id: "provider-a".to_string(),
+                provider_type: "openai-compatible".to_string(),
+                name: "Provider A".to_string(),
+                endpoint: "https://example.com".to_string(),
+                api_key: None,
+                models: vec![],
+            },
+            ProviderConfig {
+                id: "provider-b".to_string(),
+                provider_type: "openai-compatible".to_string(),
+                name: "Provider B".to_string(),
+                endpoint: "https://example.com".to_string(),
+                api_key: Some(String::new()),
+                models: vec![],
+            },
+        ];
+        let mut keys = std::collections::HashMap::new();
+        keys.insert("provider-a".to_string(), "sk-test-key-a".to_string());
+        keys.insert("provider-b".to_string(), "sk-test-key-b".to_string());
+
+        let merged = merge_api_keys_into_config(config, &keys);
+
+        let provider_a = merged.ai.providers.iter().find(|p| p.id == "provider-a").unwrap();
+        assert_eq!(provider_a.api_key.as_deref(), Some("sk-test-key-a"));
+
+        let provider_b = merged.ai.providers.iter().find(|p| p.id == "provider-b").unwrap();
+        assert_eq!(provider_b.api_key.as_deref(), Some("sk-test-key-b"));
+    }
+
+    #[test]
+    fn test_merge_api_keys_into_config_overwrites_existing_key_from_keyring() {
+        let mut config = AppConfig::default();
+        config.ai.providers = vec![ProviderConfig {
+            id: "provider-a".to_string(),
+            provider_type: "openai-compatible".to_string(),
+            name: "Provider A".to_string(),
+            endpoint: "https://example.com".to_string(),
+            api_key: Some("existing-key".to_string()),
+            models: vec![],
+        }];
+        let mut keys = std::collections::HashMap::new();
+        keys.insert("provider-a".to_string(), "new-key-from-keyring".to_string());
+
+        let merged = merge_api_keys_into_config(config, &keys);
+
+        let provider_a = merged.ai.providers.iter().find(|p| p.id == "provider-a").unwrap();
+        assert_eq!(provider_a.api_key.as_deref(), Some("new-key-from-keyring"));
+    }
+
+    #[test]
+    fn test_merge_api_keys_into_config_handles_no_keyring_keys() {
+        let mut config = AppConfig::default();
+        config.ai.providers = vec![ProviderConfig {
+            id: "provider-a".to_string(),
+            provider_type: "openai-compatible".to_string(),
+            name: "Provider A".to_string(),
+            endpoint: "https://example.com".to_string(),
+            api_key: None,
+            models: vec![],
+        }];
+        let keys = std::collections::HashMap::new();
+
+        let merged = merge_api_keys_into_config(config, &keys);
+
+        let provider_a = merged.ai.providers.iter().find(|p| p.id == "provider-a").unwrap();
+        assert_eq!(provider_a.api_key, None);
+    }
+
+    #[test]
+    fn test_merge_api_keys_into_config_ignores_unknown_provider_keys() {
+        let mut config = AppConfig::default();
+        config.ai.providers = vec![ProviderConfig {
+            id: "provider-a".to_string(),
+            provider_type: "openai-compatible".to_string(),
+            name: "Provider A".to_string(),
+            endpoint: "https://example.com".to_string(),
+            api_key: None,
+            models: vec![],
+        }];
+        let mut keys = std::collections::HashMap::new();
+        keys.insert("unknown-provider".to_string(), "should-be-ignored".to_string());
+
+        let merged = merge_api_keys_into_config(config, &keys);
+
+        let provider_a = merged.ai.providers.iter().find(|p| p.id == "provider-a").unwrap();
+        assert_eq!(provider_a.api_key, None);
     }
 }
