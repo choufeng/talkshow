@@ -36,6 +36,9 @@
   let selectedSession = $state<string | null>(null);
   let loading = $state(false);
   let copied = $state(false);
+  let selectMode = $state(false);
+  let selectedIds = $state<Set<number>>(new Set());
+  let lastClickedIndex = $state<number>(-1);
 
   let filteredEntries = $derived(
     selectedModule === 'all'
@@ -122,6 +125,42 @@
     const text = filteredEntries.map(formatEntryForCopy).join('\n');
     await navigator.clipboard.writeText(text);
     copied = true;
+    setTimeout(() => { copied = false; }, 2000);
+  }
+
+  function toggleSelectMode() {
+    selectMode = !selectMode;
+    if (!selectMode) {
+      selectedIds.clear();
+      lastClickedIndex = -1;
+    }
+  }
+
+  function toggleEntrySelection(index: number, event: MouseEvent) {
+    if (event.shiftKey && lastClickedIndex >= 0) {
+      const start = Math.min(lastClickedIndex, index);
+      const end = Math.max(lastClickedIndex, index);
+      for (let i = start; i <= end; i++) {
+        selectedIds.add(i);
+      }
+    } else {
+      if (selectedIds.has(index)) {
+        selectedIds.delete(index);
+      } else {
+        selectedIds.add(index);
+      }
+      lastClickedIndex = index;
+    }
+  }
+
+  async function copySelected() {
+    const indices = Array.from(selectedIds).sort((a, b) => a - b);
+    const text = indices.map((i) => formatEntryForCopy(filteredEntries[i])).join('\n');
+    await navigator.clipboard.writeText(text);
+    copied = true;
+    selectMode = false;
+    selectedIds.clear();
+    lastClickedIndex = -1;
     setTimeout(() => { copied = false; }, 2000);
   }
 </script>
