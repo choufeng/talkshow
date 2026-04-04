@@ -136,8 +136,8 @@
     }
   }
 
-  function toggleEntrySelection(index: number, event: MouseEvent) {
-    if (event.shiftKey && lastClickedIndex >= 0) {
+  function toggleEntrySelection(index: number, event: Event) {
+    if ((event as MouseEvent).shiftKey && lastClickedIndex >= 0) {
       const start = Math.min(lastClickedIndex, index);
       const end = Math.max(lastClickedIndex, index);
       for (let i = start; i <= end; i++) {
