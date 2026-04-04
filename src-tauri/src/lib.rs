@@ -13,7 +13,17 @@ mod sensevoice;
 mod skills;
 mod translation;
 
-use logger::Logger;
+// Re-export types and functions for integration tests
+pub use config::{
+    AiConfig, AppConfig, FeaturesConfig, ModelConfig, ModelVerified, ProviderConfig,
+    RecordingFeaturesConfig, Skill, SkillsConfig, TranscriptionConfig, TranslationConfig,
+    load_config, save_config, validate_config,
+};
+pub use llm_client::LlmClient;
+pub use logger::Logger;
+pub use skills::{assemble_skills_prompt, process_with_skills_client};
+pub use translation::translate_text_client;
+
 use recording::AudioRecorder;
 use sensevoice::SenseVoiceEngine;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
