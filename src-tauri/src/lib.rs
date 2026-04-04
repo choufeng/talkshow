@@ -1579,11 +1579,15 @@ pub fn run() {
                 .accept_first_mouse(true)
                 .build();
 
-            if let Ok(w) = indicator_window {
-                #[cfg(target_os = "macos")]
-                {
-                    let _ = macos::floating_panel::make_window_nonactivating(&w);
+            #[cfg(target_os = "macos")]
+            {
+                if let Ok(w) = &indicator_window {
+                    let _ = macos::floating_panel::make_window_nonactivating(w);
                 }
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                let _ = indicator_window;
             }
 
             Ok(())
