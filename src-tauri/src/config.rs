@@ -912,10 +912,20 @@ mod tests {
 
         let merged = merge_api_keys_into_config(config, &keys);
 
-        let provider_a = merged.ai.providers.iter().find(|p| p.id == "provider-a").unwrap();
+        let provider_a = merged
+            .ai
+            .providers
+            .iter()
+            .find(|p| p.id == "provider-a")
+            .unwrap();
         assert_eq!(provider_a.api_key.as_deref(), Some("sk-test-key-a"));
 
-        let provider_b = merged.ai.providers.iter().find(|p| p.id == "provider-b").unwrap();
+        let provider_b = merged
+            .ai
+            .providers
+            .iter()
+            .find(|p| p.id == "provider-b")
+            .unwrap();
         assert_eq!(provider_b.api_key.as_deref(), Some("sk-test-key-b"));
     }
 
@@ -935,7 +945,12 @@ mod tests {
 
         let merged = merge_api_keys_into_config(config, &keys);
 
-        let provider_a = merged.ai.providers.iter().find(|p| p.id == "provider-a").unwrap();
+        let provider_a = merged
+            .ai
+            .providers
+            .iter()
+            .find(|p| p.id == "provider-a")
+            .unwrap();
         assert_eq!(provider_a.api_key.as_deref(), Some("new-key-from-keyring"));
     }
 
@@ -954,7 +969,12 @@ mod tests {
 
         let merged = merge_api_keys_into_config(config, &keys);
 
-        let provider_a = merged.ai.providers.iter().find(|p| p.id == "provider-a").unwrap();
+        let provider_a = merged
+            .ai
+            .providers
+            .iter()
+            .find(|p| p.id == "provider-a")
+            .unwrap();
         assert_eq!(provider_a.api_key, None);
     }
 
@@ -970,11 +990,19 @@ mod tests {
             models: vec![],
         }];
         let mut keys = std::collections::HashMap::new();
-        keys.insert("unknown-provider".to_string(), "should-be-ignored".to_string());
+        keys.insert(
+            "unknown-provider".to_string(),
+            "should-be-ignored".to_string(),
+        );
 
         let merged = merge_api_keys_into_config(config, &keys);
 
-        let provider_a = merged.ai.providers.iter().find(|p| p.id == "provider-a").unwrap();
+        let provider_a = merged
+            .ai
+            .providers
+            .iter()
+            .find(|p| p.id == "provider-a")
+            .unwrap();
         assert_eq!(provider_a.api_key, None);
     }
 }
