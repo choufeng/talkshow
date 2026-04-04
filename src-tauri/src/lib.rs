@@ -395,8 +395,15 @@ fn stop_recording(
                                     }
 
                                     let clipboard_start = Instant::now();
-                                    match clipboard::write_and_paste(&final_text) {
-                                        Ok(()) => {
+                                    let final_text_clone = final_text.clone();
+                                    let clipboard_result = tokio::time::timeout(
+                                        std::time::Duration::from_secs(5),
+                                        async move { clipboard::write_and_paste(&final_text_clone) },
+                                    )
+                                    .await;
+
+                                    match clipboard_result {
+                                        Ok(Ok(())) => {
                                             let clipboard_elapsed =
                                                 clipboard_start.elapsed().as_millis();
                                             let total_elapsed =
@@ -427,13 +434,35 @@ fn stop_recording(
                                                     .unregister(Shortcut::new(None, Code::Escape));
                                             }
                                         }
-                                        Err(e) => {
+                                        Ok(Err(e)) => {
                                             logger.error(
                                                 "clipboard",
                                                 "剪贴板写入/粘贴失败",
                                                 Some(serde_json::json!({ "error": e })),
                                             );
                                             show_notification(&h, "剪贴板写入失败", &e);
+                                            destroy_indicator(&h);
+                                            if RECORDING.load(Ordering::SeqCst)
+                                                == RECORDING_MODE_NONE
+                                            {
+                                                let _ = h
+                                                    .global_shortcut()
+                                                    .unregister(Shortcut::new(None, Code::Escape));
+                                            }
+                                        }
+                                        Err(_) => {
+                                            logger.error(
+                                                "clipboard",
+                                                "剪贴板操作超时 (5s)，强制关闭浮窗",
+                                                Some(serde_json::json!({
+                                                    "text_length": final_text.len(),
+                                                })),
+                                            );
+                                            show_notification(
+                                                &h,
+                                                "剪贴板操作超时",
+                                                "文字已保存到剪贴板，请手动粘贴",
+                                            );
                                             destroy_indicator(&h);
                                             if RECORDING.load(Ordering::SeqCst)
                                                 == RECORDING_MODE_NONE
