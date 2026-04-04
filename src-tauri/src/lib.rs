@@ -546,20 +546,20 @@ fn show_indicator(app_handle: &tauri::AppHandle, selected_text: Option<&str>) {
     // Try to get the pre-created indicator window
     if let Some(window) = app_handle.get_webview_window(INDICATOR_LABEL) {
         // Dynamically adjust position based on current main window's monitor
-        if let Some(main_window) = app_handle.get_webview_window("main") {
-            if let Ok(Some(monitor)) = main_window.primary_monitor() {
-                let size = monitor.size();
-                let scale = monitor.scale_factor();
-                let screen_w = size.width as f64 / scale;
-                let screen_h = size.height as f64 / scale;
-                let win_w = 180.0;
-                let win_h = 48.0;
-                let bottom_margin = 24.0;
-                let _ = window.set_position(tauri::LogicalPosition::new(
-                    (screen_w - win_w) / 2.0,
-                    screen_h - win_h - bottom_margin,
-                ));
-            }
+        if let Some(main_window) = app_handle.get_webview_window("main")
+            && let Ok(Some(monitor)) = main_window.primary_monitor()
+        {
+            let size = monitor.size();
+            let scale = monitor.scale_factor();
+            let screen_w = size.width as f64 / scale;
+            let screen_h = size.height as f64 / scale;
+            let win_w = 180.0;
+            let win_h = 48.0;
+            let bottom_margin = 24.0;
+            let _ = window.set_position(tauri::LogicalPosition::new(
+                (screen_w - win_w) / 2.0,
+                screen_h - win_h - bottom_margin,
+            ));
         }
 
         let _ = window.show();
