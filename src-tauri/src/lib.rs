@@ -161,7 +161,13 @@ fn stop_recording(
 
                         let config_start = Instant::now();
                         let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
-                        let app_config = config::load_config(&app_data_dir);
+                        let app_config = {
+                            let base = config::load_config(&app_data_dir);
+                            let provider_ids: Vec<String> =
+                                base.ai.providers.iter().map(|p| p.id.clone()).collect();
+                            let keyring_keys = keyring_store::load_all_api_keys(&provider_ids);
+                            config::merge_api_keys_into_config(base, &keyring_keys)
+                        };
                         let config_elapsed = config_start.elapsed().as_millis();
                         let transcription = app_config.features.transcription.clone();
                         let provider = app_config
@@ -613,18 +619,10 @@ fn destroy_indicator(app_handle: &tauri::AppHandle) {
 #[tauri::command]
 fn get_config(app_handle: tauri::AppHandle) -> config::AppConfig {
     let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
-    let mut config = config::load_config(&app_data_dir);
-
-    // 从 keyring 读取 api_key
+    let config = config::load_config(&app_data_dir);
     let provider_ids: Vec<String> = config.ai.providers.iter().map(|p| p.id.clone()).collect();
     let keyring_keys = keyring_store::load_all_api_keys(&provider_ids);
-
-    for provider in &mut config.ai.providers {
-        if let Some(key) = keyring_keys.get(&provider.id) {
-            provider.api_key = Some(key.clone());
-        }
-    }
-
+    let config = config::merge_api_keys_into_config(config, &keyring_keys);
     config::mask_api_keys(config)
 }
 
