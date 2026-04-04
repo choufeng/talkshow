@@ -53,7 +53,7 @@ fn get_frontmost_app() -> Result<(String, String), String> {
     Ok(("Unknown".to_string(), "unknown".to_string()))
 }
 
-fn assemble_skills_prompt(
+pub fn assemble_skills_prompt(
     skills: &[Skill],
     transcription: &str,
     app_name: &str,
