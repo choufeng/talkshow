@@ -2,8 +2,7 @@ mod common;
 
 use common::*;
 use talkshow_lib::{
-    AppConfig, Skill, SkillsConfig, TranscriptionConfig,
-    save_config, load_config, validate_config,
+    AppConfig, Skill, SkillsConfig, TranscriptionConfig, load_config, save_config, validate_config,
 };
 
 // 配置保存契约测试
@@ -139,5 +138,8 @@ fn test_app_config_full_serialization() {
     let loaded: AppConfig = serde_json::from_str(&json).unwrap();
     assert_eq!(loaded.shortcut, config.shortcut);
     assert_eq!(loaded.ai.providers.len(), config.ai.providers.len());
-    assert_eq!(loaded.features.skills.enabled, config.features.skills.enabled);
+    assert_eq!(
+        loaded.features.skills.enabled,
+        config.features.skills.enabled
+    );
 }

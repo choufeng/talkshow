@@ -1,12 +1,13 @@
 mod common;
 
 use common::*;
-use talkshow_lib::{
-    load_config, save_config, ModelConfig, ProviderConfig, Skill,
-};
+use talkshow_lib::{ModelConfig, ProviderConfig, Skill, load_config, save_config};
 
 fn find_provider<'a>(providers: &'a [ProviderConfig], id: &str) -> &'a ProviderConfig {
-    providers.iter().find(|p| p.id == id).expect(&format!("Provider '{}' not found", id))
+    providers
+        .iter()
+        .find(|p| p.id == id)
+        .expect(&format!("Provider '{}' not found", id))
 }
 
 #[test]
@@ -36,10 +37,7 @@ fn test_save_and_load_with_api_keys() {
     let loaded = load_config(dir.path());
 
     let provider = find_provider(&loaded.ai.providers, "test-provider");
-    assert_eq!(
-        provider.api_key,
-        Some("sk-secret-key-123".to_string())
-    );
+    assert_eq!(provider.api_key, Some("sk-secret-key-123".to_string()));
 }
 
 #[test]
@@ -92,7 +90,13 @@ fn test_save_and_load_features_config() {
     assert_eq!(loaded.features.translation.target_lang, "Japanese");
     assert!(loaded.features.skills.enabled);
     // load_config migrates builtin skills, so custom non-builtin skills are preserved
-    let custom_skill = loaded.features.skills.skills.iter().find(|s| s.id == "custom-skill").expect("custom skill not found");
+    let custom_skill = loaded
+        .features
+        .skills
+        .skills
+        .iter()
+        .find(|s| s.id == "custom-skill")
+        .expect("custom skill not found");
     assert!(custom_skill.enabled);
     assert!(loaded.features.recording.auto_mute);
 }

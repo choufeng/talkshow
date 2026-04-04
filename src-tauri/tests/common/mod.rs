@@ -1,6 +1,6 @@
 use talkshow_lib::{
-    AiConfig, AppConfig, FeaturesConfig, LlmClient, Logger, ProviderConfig, Skill, SkillsConfig,
-    TranscriptionConfig, TranslationConfig, RecordingFeaturesConfig,
+    AiConfig, AppConfig, FeaturesConfig, LlmClient, Logger, ProviderConfig,
+    RecordingFeaturesConfig, Skill, SkillsConfig, TranscriptionConfig, TranslationConfig,
 };
 
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -28,9 +28,7 @@ pub fn test_app_config() -> AppConfig {
                 target_lang: "English".to_string(),
             },
             skills: enabled_skills_config(),
-            recording: RecordingFeaturesConfig {
-                auto_mute: false,
-            },
+            recording: RecordingFeaturesConfig { auto_mute: false },
         },
     }
 }
@@ -82,11 +80,7 @@ pub struct MockLlmClientIntegration {
     send_text_handler:
         Option<Box<dyn Fn(&str, &str, &str, &str) -> Result<String, String> + Send + Sync>>,
     send_audio_handler: Option<
-        Box<
-            dyn Fn(&[u8], &str, &str, &str, &str, &str) -> Result<String, String>
-                + Send
-                + Sync,
-        >,
+        Box<dyn Fn(&[u8], &str, &str, &str, &str, &str) -> Result<String, String> + Send + Sync>,
     >,
     send_text_call_count: AtomicUsize,
     send_audio_call_count: AtomicUsize,
@@ -155,9 +149,14 @@ impl LlmClient for MockLlmClientIntegration {
     ) -> Result<String, String> {
         self.send_audio_call_count.fetch_add(1, Ordering::SeqCst);
         match &self.send_audio_handler {
-            Some(handler) => {
-                handler(audio_bytes, media_type, text_prompt, model_name, provider_id, endpoint)
-            }
+            Some(handler) => handler(
+                audio_bytes,
+                media_type,
+                text_prompt,
+                model_name,
+                provider_id,
+                endpoint,
+            ),
             None => Ok("default mock audio response".to_string()),
         }
     }

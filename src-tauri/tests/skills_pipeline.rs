@@ -1,8 +1,8 @@
 mod common;
 
 use common::*;
-use talkshow_lib::{assemble_skills_prompt, process_with_skills_client};
 use talkshow_lib::{Skill, SkillsConfig, TranscriptionConfig};
+use talkshow_lib::{assemble_skills_prompt, process_with_skills_client};
 
 #[tokio::test]
 async fn test_skills_disabled_returns_original() {
@@ -16,7 +16,13 @@ async fn test_skills_disabled_returns_original() {
     let mut mock = MockLlmClientIntegration::new();
 
     let result = process_with_skills_client(
-        &logger, &config, &tc, &providers, "原始文本", &mut mock, None,
+        &logger,
+        &config,
+        &tc,
+        &providers,
+        "原始文本",
+        &mut mock,
+        None,
     )
     .await;
 
@@ -32,10 +38,8 @@ async fn test_skills_empty_transcription_returns_original() {
     let providers = test_providers();
     let mut mock = MockLlmClientIntegration::new();
 
-    let result = process_with_skills_client(
-        &logger, &config, &tc, &providers, "", &mut mock, None,
-    )
-    .await;
+    let result =
+        process_with_skills_client(&logger, &config, &tc, &providers, "", &mut mock, None).await;
 
     assert_eq!(result.unwrap(), "");
     assert_eq!(mock.send_text_call_count(), 0);
@@ -61,7 +65,13 @@ async fn test_skills_no_enabled_skills_returns_original() {
     let mut mock = MockLlmClientIntegration::new();
 
     let result = process_with_skills_client(
-        &logger, &config, &tc, &providers, "原始文本", &mut mock, None,
+        &logger,
+        &config,
+        &tc,
+        &providers,
+        "原始文本",
+        &mut mock,
+        None,
     )
     .await;
 
@@ -84,7 +94,13 @@ async fn test_skills_no_polish_provider_returns_original() {
     let mut mock = MockLlmClientIntegration::new();
 
     let result = process_with_skills_client(
-        &logger, &config, &tc, &providers, "原始文本", &mut mock, None,
+        &logger,
+        &config,
+        &tc,
+        &providers,
+        "原始文本",
+        &mut mock,
+        None,
     )
     .await;
 
@@ -107,7 +123,13 @@ async fn test_skills_empty_polish_model_returns_original() {
     let mut mock = MockLlmClientIntegration::new();
 
     let result = process_with_skills_client(
-        &logger, &config, &tc, &providers, "原始文本", &mut mock, None,
+        &logger,
+        &config,
+        &tc,
+        &providers,
+        "原始文本",
+        &mut mock,
+        None,
     )
     .await;
 
@@ -130,7 +152,13 @@ async fn test_skills_provider_not_found_returns_original() {
     let mut mock = MockLlmClientIntegration::new();
 
     let result = process_with_skills_client(
-        &logger, &config, &tc, &providers, "原始文本", &mut mock, None,
+        &logger,
+        &config,
+        &tc,
+        &providers,
+        "原始文本",
+        &mut mock,
+        None,
     )
     .await;
 
@@ -153,7 +181,13 @@ async fn test_skills_calls_llm_and_returns_result() {
     });
 
     let result = process_with_skills_client(
-        &logger, &config, &tc, &providers, "嗯那个你好世界啊", &mut mock, None,
+        &logger,
+        &config,
+        &tc,
+        &providers,
+        "嗯那个你好世界啊",
+        &mut mock,
+        None,
     )
     .await;
 
@@ -172,7 +206,13 @@ async fn test_skills_falls_back_on_llm_error() {
     mock.expect_send_text(|_, _, _, _| Err("LLM error".to_string()));
 
     let result = process_with_skills_client(
-        &logger, &config, &tc, &providers, "原始文本", &mut mock, None,
+        &logger,
+        &config,
+        &tc,
+        &providers,
+        "原始文本",
+        &mut mock,
+        None,
     )
     .await;
 
@@ -194,7 +234,13 @@ async fn test_skills_with_selected_text() {
     });
 
     let result = process_with_skills_client(
-        &logger, &config, &tc, &providers, "转录文本", &mut mock, Some("选中的文本"),
+        &logger,
+        &config,
+        &tc,
+        &providers,
+        "转录文本",
+        &mut mock,
+        Some("选中的文本"),
     )
     .await;
 
@@ -240,7 +286,13 @@ async fn test_skills_multiple_skills_in_prompt() {
     });
 
     let result = process_with_skills_client(
-        &logger, &config, &tc, &providers, "测试文本", &mut mock, None,
+        &logger,
+        &config,
+        &tc,
+        &providers,
+        "测试文本",
+        &mut mock,
+        None,
     )
     .await;
 
@@ -278,13 +330,7 @@ fn test_assemble_skills_prompt_with_app_context() {
 #[test]
 fn test_assemble_skills_prompt_without_selected_text() {
     let skills: Vec<Skill> = vec![];
-    let (system, user) = assemble_skills_prompt(
-        &skills,
-        "你好",
-        "App",
-        "com.app",
-        None,
-    );
+    let (system, user) = assemble_skills_prompt(&skills, "你好", "App", "com.app", None);
 
     assert!(!system.contains("选中文本"));
     assert_eq!(user, "你好");
