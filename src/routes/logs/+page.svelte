@@ -269,13 +269,15 @@
       <div class="border border-border rounded-xl overflow-hidden">
         <div class="max-h-[calc(100vh-200px)] overflow-y-auto font-mono text-body">
           {#each filteredEntries as entry, i}
-            <div class="flex gap-3 px-5 py-2 border-b border-border last:border-b-0 hover:bg-muted/30 {selectMode && selectedIds.has(i) ? 'bg-muted/50' : ''}">
+            <div
+              class="flex gap-3 px-5 py-2 border-b border-border last:border-b-0 hover:bg-muted/30 {selectMode && selectedIds.has(i) ? 'bg-muted/50' : ''} {selectMode ? 'cursor-pointer' : ''}"
+              onclick={(e) => selectMode && toggleEntrySelection(i, e)}
+            >
               {#if selectMode}
                 <input
                   type="checkbox"
                   checked={selectedIds.has(i)}
-                  onchange={(e) => toggleEntrySelection(i, e)}
-                  class="mt-0.5 cursor-pointer"
+                  class="mt-0.5 pointer-events-none"
                 />
               {/if}
               <span class="text-muted-foreground whitespace-nowrap shrink-0">{formatTimestamp(entry.ts)}</span>
