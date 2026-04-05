@@ -271,7 +271,7 @@
           {#each filteredEntries as entry, i}
             <div
               class="flex gap-3 px-5 py-2 border-b border-border last:border-b-0 hover:bg-muted/30 {selectMode && selectedIds.has(i) ? 'bg-muted/50' : ''} {selectMode ? 'cursor-pointer' : ''}"
-              onclick={(e) => selectMode && toggleEntrySelection(i, e)}
+              onclick={(e) => { if (selectMode) { toggleEntrySelection(i, e); } }}
             >
               {#if selectMode}
                 <input
