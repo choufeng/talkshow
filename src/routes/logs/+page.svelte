@@ -36,6 +36,9 @@
   let selectedSession = $state<string | null>(null);
   let loading = $state(false);
   let copied = $state(false);
+  let selectMode = $state(false);
+  let selectedIds = $state<number[]>([]);
+  let lastClickedIndex = $state<number>(-1);
 
   let filteredEntries = $derived(
     selectedModule === 'all'
@@ -124,6 +127,44 @@
     copied = true;
     setTimeout(() => { copied = false; }, 2000);
   }
+
+  function toggleSelectMode() {
+    selectMode = !selectMode;
+    if (!selectMode) {
+      selectedIds = [];
+      lastClickedIndex = -1;
+    }
+  }
+
+  function toggleEntrySelection(index: number, event: Event) {
+    if ((event as MouseEvent).shiftKey && lastClickedIndex >= 0) {
+      const start = Math.min(lastClickedIndex, index);
+      const end = Math.max(lastClickedIndex, index);
+      const newIds = new Set(selectedIds);
+      for (let i = start; i <= end; i++) {
+        newIds.add(i);
+      }
+      selectedIds = [...newIds];
+    } else {
+      if (selectedIds.includes(index)) {
+        selectedIds = selectedIds.filter((id) => id !== index);
+      } else {
+        selectedIds = [...selectedIds, index];
+      }
+      lastClickedIndex = index;
+    }
+  }
+
+  async function copySelected() {
+    const indices = selectedIds.filter((i) => i < filteredEntries.length).sort((a, b) => a - b);
+    const text = indices.map((i) => formatEntryForCopy(filteredEntries[i])).join('\n');
+    await navigator.clipboard.writeText(text);
+    copied = true;
+    selectMode = false;
+    selectedIds = [];
+    lastClickedIndex = -1;
+    setTimeout(() => { copied = false; }, 2000);
+  }
 </script>
 
 <div class="max-w-[960px]">
@@ -159,14 +200,39 @@
     {#if currentSession && activeTab === 'current'}
       <span class="ml-auto text-caption text-muted-foreground">
         {filteredEntries.length} 条日志
+        {#if selectMode && selectedIds.length > 0}
+          · 已选 {selectedIds.length} 条
+        {/if}
       </span>
-      <button
-        class="px-3 py-1 rounded text-caption border border-btn-secondary-border bg-gradient-to-b from-btn-secondary-from to-btn-secondary-to text-accent-foreground hover:opacity-90 transition-colors shadow-btn-secondary"
-        onclick={copyAll}
-        disabled={copied}
-      >
-        {copied ? '已拷贝' : '拷贝全部'}
-      </button>
+      {#if selectMode}
+        <button
+          class="px-3 py-1 rounded text-caption border border-btn-secondary-border bg-gradient-to-b from-btn-secondary-from to-btn-secondary-to text-accent-foreground hover:opacity-90 transition-colors shadow-btn-secondary disabled:opacity-50"
+          onclick={copySelected}
+          disabled={selectedIds.length === 0 || copied}
+        >
+          {copied ? '已复制' : `复制选中 (${selectedIds.length})`}
+        </button>
+        <button
+          class="px-3 py-1 rounded text-caption border border-border text-muted-foreground hover:text-foreground transition-colors"
+          onclick={toggleSelectMode}
+        >
+          取消
+        </button>
+      {:else}
+        <button
+          class="px-3 py-1 rounded text-caption border border-border text-muted-foreground hover:text-foreground transition-colors"
+          onclick={toggleSelectMode}
+        >
+          选择
+        </button>
+        <button
+          class="px-3 py-1 rounded text-caption border border-btn-secondary-border bg-gradient-to-b from-btn-secondary-from to-btn-secondary-to text-accent-foreground hover:opacity-90 transition-colors shadow-btn-secondary"
+          onclick={copyAll}
+          disabled={copied}
+        >
+          {copied ? '已复制' : '复制'}
+        </button>
+      {/if}
     {/if}
   </div>
 
@@ -205,7 +271,17 @@
       <div class="border border-border rounded-xl overflow-hidden">
         <div class="max-h-[calc(100vh-200px)] overflow-y-auto font-mono text-body">
           {#each filteredEntries as entry, i}
-            <div class="flex gap-3 px-5 py-2 border-b border-border last:border-b-0 hover:bg-muted/30">
+            <div
+              class="flex gap-3 px-5 py-2 border-b border-border last:border-b-0 hover:bg-muted/30               {selectMode && selectedIds.includes(i) ? 'bg-muted/50' : ''} {selectMode ? 'cursor-pointer' : ''}"
+              onclick={(e) => { if (selectMode) { toggleEntrySelection(i, e); } }}
+            >
+              {#if selectMode}
+                <input
+                  type="checkbox"
+                  checked={selectedIds.includes(i)}
+                  class="mt-0.5 pointer-events-none"
+                />
+              {/if}
               <span class="text-muted-foreground whitespace-nowrap shrink-0">{formatTimestamp(entry.ts)}</span>
               <span class="{levelColor(entry.level)} shrink-0 w-4 text-center">
                 {entry.level === 'error' ? '✕' : entry.level === 'warn' ? '!' : '·'}
