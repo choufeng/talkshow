@@ -37,7 +37,7 @@
   let loading = $state(false);
   let copied = $state(false);
   let selectMode = $state(false);
-  let selectedIds = $state<Set<number>>(new Set());
+  let selectedIds = $state<number[]>([]);
   let lastClickedIndex = $state<number>(-1);
 
   let filteredEntries = $derived(
@@ -131,7 +131,7 @@
   function toggleSelectMode() {
     selectMode = !selectMode;
     if (!selectMode) {
-      selectedIds.clear();
+      selectedIds = [];
       lastClickedIndex = -1;
     }
   }
@@ -140,26 +140,28 @@
     if ((event as MouseEvent).shiftKey && lastClickedIndex >= 0) {
       const start = Math.min(lastClickedIndex, index);
       const end = Math.max(lastClickedIndex, index);
+      const newIds = new Set(selectedIds);
       for (let i = start; i <= end; i++) {
-        selectedIds.add(i);
+        newIds.add(i);
       }
+      selectedIds = [...newIds];
     } else {
-      if (selectedIds.has(index)) {
-        selectedIds.delete(index);
+      if (selectedIds.includes(index)) {
+        selectedIds = selectedIds.filter((id) => id !== index);
       } else {
-        selectedIds.add(index);
+        selectedIds = [...selectedIds, index];
       }
       lastClickedIndex = index;
     }
   }
 
   async function copySelected() {
-    const indices = Array.from(selectedIds).sort((a, b) => a - b).filter((i) => i < filteredEntries.length);
+    const indices = selectedIds.filter((i) => i < filteredEntries.length).sort((a, b) => a - b);
     const text = indices.map((i) => formatEntryForCopy(filteredEntries[i])).join('\n');
     await navigator.clipboard.writeText(text);
     copied = true;
     selectMode = false;
-    selectedIds.clear();
+    selectedIds = [];
     lastClickedIndex = -1;
     setTimeout(() => { copied = false; }, 2000);
   }
@@ -198,17 +200,17 @@
     {#if currentSession && activeTab === 'current'}
       <span class="ml-auto text-caption text-muted-foreground">
         {filteredEntries.length} 条日志
-        {#if selectMode && selectedIds.size > 0}
-          · 已选 {selectedIds.size} 条
+        {#if selectMode && selectedIds.length > 0}
+          · 已选 {selectedIds.length} 条
         {/if}
       </span>
       {#if selectMode}
         <button
           class="px-3 py-1 rounded text-caption border border-btn-secondary-border bg-gradient-to-b from-btn-secondary-from to-btn-secondary-to text-accent-foreground hover:opacity-90 transition-colors shadow-btn-secondary disabled:opacity-50"
           onclick={copySelected}
-          disabled={selectedIds.size === 0 || copied}
+          disabled={selectedIds.length === 0 || copied}
         >
-          {copied ? '已复制' : `复制选中 (${selectedIds.size})`}
+          {copied ? '已复制' : `复制选中 (${selectedIds.length})`}
         </button>
         <button
           class="px-3 py-1 rounded text-caption border border-border text-muted-foreground hover:text-foreground transition-colors"
@@ -270,13 +272,13 @@
         <div class="max-h-[calc(100vh-200px)] overflow-y-auto font-mono text-body">
           {#each filteredEntries as entry, i}
             <div
-              class="flex gap-3 px-5 py-2 border-b border-border last:border-b-0 hover:bg-muted/30 {selectMode && selectedIds.has(i) ? 'bg-muted/50' : ''} {selectMode ? 'cursor-pointer' : ''}"
+              class="flex gap-3 px-5 py-2 border-b border-border last:border-b-0 hover:bg-muted/30               {selectMode && selectedIds.includes(i) ? 'bg-muted/50' : ''} {selectMode ? 'cursor-pointer' : ''}"
               onclick={(e) => { if (selectMode) { toggleEntrySelection(i, e); } }}
             >
               {#if selectMode}
                 <input
                   type="checkbox"
-                  checked={selectedIds.has(i)}
+                  checked={selectedIds.includes(i)}
                   class="mt-0.5 pointer-events-none"
                 />
               {/if}
