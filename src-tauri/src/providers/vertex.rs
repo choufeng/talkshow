@@ -31,10 +31,10 @@ impl VertexAIProvider {
     async fn get_access_token(&self) -> Result<String, ProviderError> {
         {
             let guard = self.token_cache.lock().unwrap_or_else(|e| e.into_inner());
-            if let Some((token, expires_at)) = guard.as_ref() {
-                if expires_at > &std::time::Instant::now() {
-                    return Ok(token.clone());
-                }
+            if let Some((token, expires_at)) = guard.as_ref()
+                && expires_at > &std::time::Instant::now()
+            {
+                return Ok(token.clone());
             }
         }
 
