@@ -329,11 +329,12 @@ fn stop_recording(
                                     });
                                     let skills_elapsed = skills_start.elapsed().as_millis();
 
-                                    let original_text = if recording_mode == RECORDING_MODE_TRANSLATION {
-                                        Some(final_text.clone())
-                                    } else {
-                                        None
-                                    };
+                                    let original_text =
+                                        if recording_mode == RECORDING_MODE_TRANSLATION {
+                                            Some(final_text.clone())
+                                        } else {
+                                            None
+                                        };
 
                                     if recording_mode == RECORDING_MODE_TRANSLATION {
                                         if transcription.polish_enabled
