@@ -29,6 +29,7 @@ impl LlmClient for RealLlmClient<'_> {
             id: provider_id.to_string(),
             name: provider_id.to_string(),
             api_key: None,
+            endpoint: None,
             models: vec![],
         };
         send_text_prompt(
@@ -55,6 +56,7 @@ impl LlmClient for RealLlmClient<'_> {
             id: provider_id.to_string(),
             name: provider_id.to_string(),
             api_key: None,
+            endpoint: None,
             models: vec![],
         };
         send_audio_prompt_from_bytes(

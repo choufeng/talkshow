@@ -373,6 +373,7 @@ mod tests {
             id: "test-provider".to_string(),
             name: "Test".to_string(),
             api_key: Some("sk-test".to_string()),
+            endpoint: None,
             models: vec![],
         }]
     }

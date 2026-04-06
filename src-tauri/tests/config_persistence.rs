@@ -109,6 +109,7 @@ fn test_save_and_load_multiple_providers() {
         id: "second-provider".to_string(),
         name: "Second Provider".to_string(),
         api_key: None,
+        endpoint: None,
         models: vec![],
     });
 
