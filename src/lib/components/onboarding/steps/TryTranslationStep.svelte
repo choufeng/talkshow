@@ -8,12 +8,13 @@
 
   let stepState = $state<StepState>('waiting');
   let resultText = $state('');
+  let originalText = $state('');
   let errorMsg = $state('');
   let timedOut = $state(false);
   let unlisteners: UnlistenFn[] = [];
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
-  let previousText = $derived($onboarding.lastTranscriptionText || '这是一段示例文本，用于测试翻译功能。');
+  let referenceText = $state('这是一段示例文本，用于测试翻译功能。');
 
   const TIMEOUT_MS = 30_000;
 
@@ -38,6 +39,7 @@
   function reset() {
     stepState = 'waiting';
     resultText = '';
+    originalText = '';
     errorMsg = '';
     timedOut = false;
     onboarding.setStepValid(6, false);
@@ -64,10 +66,11 @@
       );
 
       unlisteners.push(
-        await listen<{ text: string; mode: number }>('pipeline:complete', (event) => {
+        await listen<{ text: string; mode: number; original_text?: string }>('pipeline:complete', (event) => {
           if (event.payload.mode === 2) {
             stepState = 'done';
             resultText = event.payload.text;
+            originalText = event.payload.original_text || '';
             onboarding.setStepValid(6, true);
             clearTimeout_();
           }
@@ -139,8 +142,8 @@
 
   {#if stepState === 'waiting' || stepState === 'processing'}
     <div class="mt-3 p-3 rounded-lg bg-muted/50 text-left">
-      <div class="text-caption text-muted-foreground mb-1">参考文本（上一步转写结果）</div>
-      <p class="text-body text-foreground">{previousText}</p>
+      <div class="text-caption text-muted-foreground mb-1">参考文本</div>
+      <p class="text-body text-foreground">{referenceText}</p>
     </div>
   {/if}
 
@@ -165,7 +168,7 @@
     <div class="mt-4 space-y-3">
       <div class="p-3 rounded-lg bg-muted/50 text-left">
         <div class="text-caption text-muted-foreground mb-1">原文</div>
-        <p class="text-body text-foreground">{previousText}</p>
+        <p class="text-body text-foreground">{originalText || referenceText}</p>
       </div>
       <div class="p-3 rounded-lg bg-accent/10 border border-accent/20 text-left">
         <div class="text-caption text-accent-foreground mb-1">译文</div>

@@ -20,7 +20,6 @@ function createOnboardingStore() {
     currentStep: 1,
     completed: false,
     stepValid: (() => { const a = new Array<boolean>(TOTAL_STEPS + 1).fill(false); a[1] = true; return a; })(),
-    lastTranscriptionText: '',
   });
 
   return {
@@ -76,15 +75,11 @@ function createOnboardingStore() {
         console.error('Failed to complete onboarding:', error);
       }
     },
-    setTranscriptionText: (text: string) => {
-      update((s) => ({ ...s, lastTranscriptionText: text }));
-    },
     reset: () => {
       set({
         currentStep: 1,
         completed: false,
         stepValid: (() => { const a = new Array<boolean>(TOTAL_STEPS + 1).fill(false); a[1] = true; return a; })(),
-        lastTranscriptionText: '',
       });
     },
   };

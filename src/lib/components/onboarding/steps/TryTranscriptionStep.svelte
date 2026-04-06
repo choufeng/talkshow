@@ -66,7 +66,6 @@
           if (event.payload.mode === 1) {
             stepState = 'done';
             resultText = event.payload.text;
-            onboarding.setTranscriptionText(event.payload.text);
             onboarding.setStepValid(5, true);
             clearTimeout_();
           }

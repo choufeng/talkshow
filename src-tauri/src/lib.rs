@@ -51,7 +51,7 @@ struct SenseVoiceState {
 }
 
 struct VertexClientState {
-    client: Arc<Mutex<Option<rig_vertexai::Client>>>,
+    client: Arc<Mutex<Option<crate::ai::VertexClient>>>,
 }
 
 struct ShortcutIds {
@@ -329,6 +329,12 @@ fn stop_recording(
                                     });
                                     let skills_elapsed = skills_start.elapsed().as_millis();
 
+                                    let original_text = if recording_mode == RECORDING_MODE_TRANSLATION {
+                                        Some(final_text.clone())
+                                    } else {
+                                        None
+                                    };
+
                                     if recording_mode == RECORDING_MODE_TRANSLATION {
                                         if transcription.polish_enabled
                                             && !transcription.polish_provider_id.is_empty()
@@ -396,6 +402,15 @@ fn stop_recording(
                                         logger.info("ai", "录音已重新开始，丢弃当前 AI 结果", None);
                                         return;
                                     }
+
+                                    let _ = h.emit(
+                                        "pipeline:complete",
+                                        serde_json::json!({
+                                            "text": &final_text,
+                                            "mode": recording_mode,
+                                            "original_text": original_text,
+                                        }),
+                                    );
 
                                     let clipboard_start = Instant::now();
                                     let final_text_clone = final_text.clone();
@@ -672,6 +687,21 @@ fn destroy_indicator(app_handle: &tauri::AppHandle) {
 fn get_config(app_handle: tauri::AppHandle) -> config::AppConfig {
     let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
     config::load_config(&app_data_dir)
+}
+
+#[tauri::command]
+fn get_onboarding_status(app_handle: tauri::AppHandle) -> bool {
+    let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
+    let config = config::load_config(&app_data_dir);
+    config.onboarding_completed
+}
+
+#[tauri::command]
+fn set_onboarding_completed(app_handle: tauri::AppHandle, completed: bool) -> Result<(), String> {
+    let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
+    let mut config = config::load_config(&app_data_dir);
+    config.onboarding_completed = completed;
+    config::save_config(&app_data_dir, &config)
 }
 
 #[tauri::command]
@@ -1027,6 +1057,8 @@ pub fn run() {
         }))
         .invoke_handler(tauri::generate_handler![
             get_config,
+            get_onboarding_status,
+            set_onboarding_completed,
             update_shortcut,
             save_config_cmd,
             test_model_connectivity,
@@ -1316,12 +1348,6 @@ pub fn run() {
                                                         );
                                                     }
 
-                                                    // Hide main window
-                                                    if let Some(mw) = app_handle_bg.get_webview_window("main")
-                                                        && mw.is_visible().unwrap_or(false) {
-                                                            let _ = mw.hide();
-                                                        }
-
                                                     // Register ESC shortcut
                                                     let h = app_handle_bg.clone();
                                                     let _ = h.global_shortcut().register(esc_bg);
@@ -1435,12 +1461,6 @@ pub fn run() {
                                                             app_handle_bg.try_state::<Logger>().as_deref(),
                                                         );
                                                     }
-
-                                                    // Hide main window
-                                                    if let Some(mw) = app_handle_bg.get_webview_window("main")
-                                                        && mw.is_visible().unwrap_or(false) {
-                                                            let _ = mw.hide();
-                                                        }
 
                                                     // Register ESC shortcut
                                                     let h = app_handle_bg.clone();
