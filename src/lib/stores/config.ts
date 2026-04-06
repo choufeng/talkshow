@@ -18,6 +18,7 @@ export interface ProviderConfig {
   id: string;
   name: string;
   api_key?: string;
+  endpoint?: string;
   models: ModelConfig[];
 }
 
@@ -93,6 +94,13 @@ export const MODEL_CAPABILITIES = [
 
 export const BUILTIN_PROVIDERS: ProviderConfig[] = [
   {
+    id: 'openai',
+    name: 'OpenAI',
+    api_key: '',
+    endpoint: 'https://api.openai.com/v1',
+    models: [{ name: 'gpt-4o-transcribe', capabilities: ['transcription', 'chat'] }]
+  },
+  {
     id: 'vertex',
     name: 'Vertex AI',
     models: [{ name: 'gemini-2.0-flash', capabilities: ['transcription', 'chat'] }]
@@ -114,7 +122,9 @@ export function isBuiltinProvider(id: string): boolean {
   return BUILTIN_PROVIDERS.some((p) => p.id === id);
 }
 
-export const PROVIDERS_REQUIRING_KEY = ['dashscope'];
+export const PROVIDERS_REQUIRING_KEY = ['dashscope', 'openai'];
+
+export const PROVIDERS_WITH_ENDPOINT = ['openai'];
 export function needsApiKey(providerId: string): boolean {
   return PROVIDERS_REQUIRING_KEY.includes(providerId);
 }
