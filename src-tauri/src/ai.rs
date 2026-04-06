@@ -29,7 +29,7 @@ pub enum ThinkingMode {
     Disabled,
 }
 
-type VertexClientCache = Arc<Mutex<Option<rig_vertexai::Client>>>;
+pub(crate) type VertexClientCache = Arc<Mutex<Option<rig_vertexai::Client>>>;
 
 fn get_or_create_vertex_client(
     logger: &Logger,

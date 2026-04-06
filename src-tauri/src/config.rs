@@ -226,6 +226,7 @@ pub struct AppConfig {
     pub translate_shortcut: String,
     pub ai: AiConfig,
     pub features: FeaturesConfig,
+    pub onboarding_completed: bool,
 }
 
 impl Default for AppConfig {
@@ -251,6 +252,7 @@ impl Default for AppConfig {
                 skills: SkillsConfig::default(),
                 recording: RecordingFeaturesConfig::default(),
             },
+            onboarding_completed: false,
         }
     }
 }

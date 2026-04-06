@@ -51,7 +51,7 @@ struct SenseVoiceState {
 }
 
 struct VertexClientState {
-    client: Arc<Mutex<Option<crate::ai::VertexClient>>>,
+    client: crate::ai::VertexClientCache,
 }
 
 struct ShortcutIds {
