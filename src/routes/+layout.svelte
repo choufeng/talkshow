@@ -1,11 +1,22 @@
 <script lang="ts">
   import '../app.css';
+  import { onMount } from 'svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import type { Snippet } from 'svelte';
   import { House, Settings, Bot, ScrollText, Sparkles } from 'lucide-svelte';
+  import { onboarding } from '$lib/stores/onboarding';
+  import OnboardingWizard from '$lib/components/onboarding/OnboardingWizard.svelte';
 
   let { children }: { children: Snippet } = $props();
+
+  let isLoading = $state(true);
+
+  onMount(() => {
+    onboarding.load().then(() => {
+      isLoading = false;
+    });
+  });
 
   let isFloatingIndicator = $derived($page.url.pathname === '/recording');
 
@@ -21,7 +32,13 @@
   }
 </script>
 
-{#if isFloatingIndicator}
+{#if isLoading}
+  <div class="flex h-screen w-screen items-center justify-center bg-background">
+    <div class="text-muted-foreground text-body">加载中...</div>
+  </div>
+{:else if !$onboarding.completed}
+  <OnboardingWizard />
+{:else if isFloatingIndicator}
   {@render children()}
 {:else}
 <div class="flex h-screen w-screen overflow-hidden">
