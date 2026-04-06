@@ -40,25 +40,29 @@ pub trait Provider: Send + Sync {
 #### 1.2 Provider 注册工厂
 
 ```rust
-pub fn create_provider(config: &ProviderConfig) -> Result<Box<dyn Provider>, AiError> {
+pub struct ProviderContext {
+    pub sensevoice_engine: Arc<Mutex<Option<SenseVoiceEngine>>>,
+}
+
+pub fn create_provider(config: &ProviderConfig, ctx: &ProviderContext) -> Result<Box<dyn Provider>, AiError> {
     match config.id.as_str() {
         "dashscope" => Ok(Box::new(DashScopeProvider::new(config.api_key.clone()))),
         "vertex" => Ok(Box::new(VertexAIProvider::new())),
-        "sensevoice" => Ok(Box::new(SenseVoiceProvider::new())),
+        "sensevoice" => Ok(Box::new(SenseVoiceProvider::new(ctx.sensevoice_engine.clone()))),
         _ => Err(AiError::ProviderNotFound(config.id.clone())),
     }
 }
 ```
 
-新增服务商只需：添加新 struct + impl Provider，在 `create_provider` 中注册一行。
+新增服务商只需：添加新 struct + impl Provider，在 `create_provider` 中注册一行。`ProviderContext` 用于传递各 Provider 需要的共享状态。
 
 #### 1.3 三个实现
 
-| Provider | 文件 | HTTP 方式 | 需要 API Key |
-|----------|------|-----------|-------------|
-| DashScopeProvider | `providers/dashscope.rs` | reqwest 直调 DashScope OpenAI 兼容 API | 是 |
-| VertexAIProvider | `providers/vertex.rs` | reqwest 直调 Vertex AI REST API（ADC 认证） | 否 |
-| SenseVoiceProvider | `providers/sensevoice.rs` | 本地 ONNX 推理（从 ai.rs 迁移） | 否 |
+| Provider | 文件 | HTTP 方式 | 需要 API Key | 特殊依赖 |
+|----------|------|-----------|-------------|---------|
+| DashScopeProvider | `providers/dashscope.rs` | reqwest 直调 DashScope OpenAI 兼容 API | 是 | 无 |
+| VertexAIProvider | `providers/vertex.rs` | reqwest 直调 Vertex AI REST API（ADC 认证） | 否 | ADC token 获取 |
+| SenseVoiceProvider | `providers/sensevoice.rs` | 本地 ONNX 推理（包装 SenseVoiceEngine） | 否 | 共享引擎实例 |
 
 #### 1.4 DashScope 实现
 
@@ -79,7 +83,9 @@ pub fn create_provider(config: &ProviderConfig) -> Result<Box<dyn Provider>, AiE
 
 #### 1.6 SenseVoice 实现
 
-从 `ai.rs` 迁移本地 ONNX 推理逻辑到 `SenseVoiceProvider` struct。逻辑不变，只是包装到 trait 实现中。
+SenseVoice 推理引擎（`SenseVoiceEngine`）已存在于独立模块 `sensevoice.rs` 中，通过 Tauri 状态管理（`Arc<Mutex<Option<SenseVoiceEngine>>>`）。
+
+`SenseVoiceProvider` 持有该 Arc 引用，`transcribe()` 调用时获取引擎实例执行推理。逻辑不变，只是包装到 trait 实现中。`complete_text()` 返回错误（本地模型不支持文本对话）。
 
 #### 1.7 依赖变更
 

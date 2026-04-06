@@ -11,22 +11,8 @@ const CONFIG_FILE_NAME: &str = "config.json";
 fn builtin_providers() -> Vec<ProviderConfig> {
     vec![
         ProviderConfig {
-            id: "vertex".to_string(),
-            provider_type: "vertex".to_string(),
-            name: "Vertex AI".to_string(),
-            endpoint: String::new(),
-            api_key: None,
-            models: vec![ModelConfig {
-                name: "gemini-2.0-flash".to_string(),
-                capabilities: vec!["transcription".to_string()],
-                verified: None,
-            }],
-        },
-        ProviderConfig {
             id: "dashscope".to_string(),
-            provider_type: "openai-compatible".to_string(),
             name: "阿里云".to_string(),
-            endpoint: "https://dashscope.aliyuncs.com/compatible-mode/v1".to_string(),
             api_key: Some(String::new()),
             models: vec![ModelConfig {
                 name: "qwen2-audio-instruct".to_string(),
@@ -35,10 +21,18 @@ fn builtin_providers() -> Vec<ProviderConfig> {
             }],
         },
         ProviderConfig {
+            id: "vertex".to_string(),
+            name: "Vertex AI".to_string(),
+            api_key: None,
+            models: vec![ModelConfig {
+                name: "gemini-2.0-flash".to_string(),
+                capabilities: vec!["transcription".to_string()],
+                verified: None,
+            }],
+        },
+        ProviderConfig {
             id: "sensevoice".to_string(),
-            provider_type: "sensevoice".to_string(),
             name: "SenseVoice (本地)".to_string(),
-            endpoint: String::new(),
             api_key: None,
             models: vec![ModelConfig {
                 name: "SenseVoice-Small".to_string(),
@@ -53,7 +47,6 @@ fn merge_builtin_providers(mut providers: Vec<ProviderConfig>) -> Vec<ProviderCo
     let builtins = builtin_providers();
     let builtin_map: std::collections::HashMap<String, ProviderConfig> =
         builtins.into_iter().map(|p| (p.id.clone(), p)).collect();
-
     let builtin_ids: std::collections::HashSet<String> = builtin_map.keys().cloned().collect();
     let user_ids: std::collections::HashSet<String> =
         providers.iter().map(|p| p.id.clone()).collect();
@@ -68,8 +61,7 @@ fn merge_builtin_providers(mut providers: Vec<ProviderConfig>) -> Vec<ProviderCo
         if let Some(builtin) = builtin_map.get(&provider.id)
             && builtin_ids.contains(&provider.id)
         {
-            provider.provider_type = builtin.provider_type.clone();
-            provider.endpoint = builtin.endpoint.clone();
+            provider.name = builtin.name.clone();
         }
     }
 
@@ -99,10 +91,7 @@ pub struct ModelConfig {
 #[serde(default)]
 pub struct ProviderConfig {
     pub id: String,
-    #[serde(rename = "type")]
-    pub provider_type: String,
     pub name: String,
-    pub endpoint: String,
     pub api_key: Option<String>,
     pub models: Vec<ModelConfig>,
 }
@@ -431,27 +420,6 @@ pub fn save_config(app_data_dir: &std::path::Path, config: &AppConfig) -> Result
 
 pub fn validate_config(config: &AppConfig) -> Result<(), String> {
     for provider in &config.ai.providers {
-        match provider.provider_type.as_str() {
-            "vertex" | "openai-compatible" | "sensevoice" => {}
-            _ => {
-                return Err(format!(
-                    "Invalid provider type '{}' for provider '{}'",
-                    provider.provider_type, provider.id
-                ));
-            }
-        }
-
-        if provider.provider_type == "openai-compatible"
-            && !provider.endpoint.is_empty()
-            && !provider.endpoint.starts_with("https://")
-            && !provider.endpoint.starts_with("http://")
-        {
-            return Err(format!(
-                "Endpoint must start with http:// or https:// for provider '{}'",
-                provider.id
-            ));
-        }
-
         if provider.id.trim().is_empty() {
             return Err("Provider ID cannot be empty".to_string());
         }
@@ -668,9 +636,7 @@ mod tests {
     fn test_merge_builtin_providers_adds_missing() {
         let providers = vec![ProviderConfig {
             id: "custom".to_string(),
-            provider_type: "openai-compatible".to_string(),
             name: "Custom".to_string(),
-            endpoint: "https://example.com".to_string(),
             api_key: Some("key".to_string()),
             models: vec![],
         }];
@@ -686,18 +652,13 @@ mod tests {
     fn test_merge_builtin_providers_corrects_existing() {
         let providers = vec![ProviderConfig {
             id: "dashscope".to_string(),
-            provider_type: "openai-compatible".to_string(),
             name: "阿里云".to_string(),
-            endpoint: "https://wrong-url.com".to_string(),
             api_key: Some("key".to_string()),
             models: vec![],
         }];
         let result = merge_builtin_providers(providers);
         let dashscope = result.iter().find(|p| p.id == "dashscope").unwrap();
-        assert_eq!(
-            dashscope.endpoint,
-            "https://dashscope.aliyuncs.com/compatible-mode/v1"
-        );
+        assert_eq!(dashscope.name, "阿里云");
     }
 
     #[test]
@@ -709,11 +670,12 @@ mod tests {
         assert_eq!(config.shortcut, DEFAULT_SHORTCUT);
         assert!(config.ai.providers.len() >= 3);
 
-        config.ai.providers[0].name = "Modified".to_string();
+        config.ai.providers[0].api_key = Some("sk-roundtrip-test".to_string());
         save_config(&app_data_dir, &config).unwrap();
 
         let loaded = load_config(&app_data_dir);
-        assert_eq!(loaded.ai.providers[0].name, "Modified");
+        let p0 = loaded.ai.providers.iter().find(|p| p.id == config.ai.providers[0].id).unwrap();
+        assert_eq!(p0.api_key, Some("sk-roundtrip-test".to_string()));
     }
 
     #[test]
@@ -735,41 +697,11 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_config_rejects_invalid_provider_type() {
-        let mut config = AppConfig::default();
-        config.ai.providers = vec![ProviderConfig {
-            id: "bad".to_string(),
-            provider_type: "malicious-type".to_string(),
-            name: "Bad".to_string(),
-            endpoint: "https://evil.com".to_string(),
-            api_key: None,
-            models: vec![],
-        }];
-        assert!(validate_config(&config).is_err());
-    }
-
-    #[test]
-    fn test_validate_config_rejects_non_https_endpoint() {
-        let mut config = AppConfig::default();
-        config.ai.providers = vec![ProviderConfig {
-            id: "bad".to_string(),
-            provider_type: "openai-compatible".to_string(),
-            name: "Bad".to_string(),
-            endpoint: "ftp://evil.com".to_string(),
-            api_key: None,
-            models: vec![],
-        }];
-        assert!(validate_config(&config).is_err());
-    }
-
-    #[test]
-    fn test_validate_config_allows_empty_endpoint_for_vertex() {
+    fn test_validate_config_allows_valid_provider() {
         let mut config = AppConfig::default();
         config.ai.providers = vec![ProviderConfig {
             id: "vertex".to_string(),
-            provider_type: "vertex".to_string(),
             name: "Vertex AI".to_string(),
-            endpoint: "".to_string(),
             api_key: None,
             models: vec![],
         }];
@@ -781,9 +713,7 @@ mod tests {
         let mut config = AppConfig::default();
         config.ai.providers = vec![ProviderConfig {
             id: "".to_string(),
-            provider_type: "openai-compatible".to_string(),
             name: "Test".to_string(),
-            endpoint: "https://api.example.com".to_string(),
             api_key: None,
             models: vec![],
         }];

@@ -6,6 +6,7 @@ mod llm_client;
 mod logger;
 #[cfg(target_os = "macos")]
 mod macos;
+mod providers;
 mod real_llm_client;
 mod recording;
 mod sensevoice;
@@ -23,6 +24,7 @@ pub use logger::Logger;
 pub use skills::{assemble_skills_prompt, process_with_skills_client};
 pub use translation::translate_text_client;
 
+use providers::ProviderContext;
 use recording::AudioRecorder;
 use sensevoice::SenseVoiceEngine;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
@@ -48,10 +50,6 @@ static LAST_REC_PRESS: Mutex<Option<Instant>> = Mutex::new(None);
 struct SenseVoiceState {
     engine: Arc<Mutex<Option<SenseVoiceEngine>>>,
     language: Arc<Mutex<i32>>,
-}
-
-struct VertexClientState {
-    client: crate::ai::VertexClientCache,
 }
 
 struct ShortcutIds {
@@ -236,7 +234,6 @@ fn stop_recording(
                                     "开始发送 AI 转写请求",
                                     Some(serde_json::json!({
                                         "provider_id": provider.id,
-                                        "provider_type": provider.provider_type,
                                         "model": model_name,
                                         "audio_path": audio_path.display().to_string(),
                                     })),
@@ -245,7 +242,7 @@ fn stop_recording(
 
                             let logger = h.state::<Logger>();
                             let transcribe_start = Instant::now();
-                            let text_result = if provider.provider_type == "sensevoice" {
+                            let text_result = if provider.id == "sensevoice" {
                                 let sv_state = h.state::<SenseVoiceState>();
                                 let lang =
                                     *sv_state.language.lock().unwrap_or_else(|e| e.into_inner());
@@ -292,7 +289,7 @@ fn stop_recording(
                                     prompt,
                                     &model_name,
                                     &provider,
-                                    &h.state::<VertexClientState>().client,
+                                    &h.state::<ProviderContext>(),
                                 )
                                 .await
                                 .map_err(|e| e.to_string())
@@ -315,7 +312,7 @@ fn stop_recording(
                                         &app_config.features.transcription,
                                         &skills_providers,
                                         &text,
-                                        &h.state::<VertexClientState>().client,
+                                        &h.state::<ProviderContext>(),
                                         selected_text_ref,
                                     )
                                     .await
@@ -351,7 +348,7 @@ fn stop_recording(
                                                 &transcription.polish_provider_id,
                                                 &transcription.polish_model,
                                                 &skills_providers,
-                                                &h.state::<VertexClientState>().client,
+                                                &h.state::<ProviderContext>(),
                                             )
                                             .await
                                             {
@@ -821,7 +818,7 @@ async fn test_model_connectivity(
         })),
     );
 
-    if provider.provider_type == "sensevoice" {
+    if provider.id == "sensevoice" {
         return Ok(TestResult {
             status: "ok".to_string(),
             latency_ms: Some(0),
@@ -830,14 +827,14 @@ async fn test_model_connectivity(
     }
 
     let start = Instant::now();
-    let vertex_cache = app_handle.state::<VertexClientState>().client.clone();
-    let result = if provider.provider_type == "vertex" {
+    let provider_ctx = app_handle.state::<ProviderContext>();
+    let result = if provider.id == "vertex" {
         ai::send_text_prompt(
             &logger,
             "Hi",
             &model_name,
             &provider,
-            &vertex_cache,
+            &provider_ctx,
             ai::ThinkingMode::Disabled,
         )
         .await
@@ -850,7 +847,7 @@ async fn test_model_connectivity(
             "请将这段音频转录为文字",
             &model_name,
             &provider,
-            &vertex_cache,
+            &provider_ctx,
         )
         .await
     } else {
@@ -859,7 +856,7 @@ async fn test_model_connectivity(
             "Hi",
             &model_name,
             &provider,
-            &vertex_cache,
+            &provider_ctx,
             ai::ThinkingMode::Disabled,
         )
         .await
@@ -1553,10 +1550,8 @@ pub fn run() {
             };
             app.manage(sensevoice_state);
 
-            let vertex_state = VertexClientState {
-                client: Arc::new(Mutex::new(None)),
-            };
-            app.manage(vertex_state);
+            let provider_ctx = ProviderContext::new();
+            app.manage(provider_ctx);
 
             app.manage(logger);
 

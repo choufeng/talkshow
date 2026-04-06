@@ -1,32 +1,19 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { config, isBuiltinProvider, BUILTIN_PROVIDERS, MODEL_CAPABILITIES, TRANSLATE_LANGUAGES } from '$lib/stores/config';
+  import { config, isBuiltinProvider, BUILTIN_PROVIDERS, MODEL_CAPABILITIES, TRANSLATE_LANGUAGES, PROVIDERS_REQUIRING_KEY } from '$lib/stores/config';
   import GroupedSelect from '$lib/components/ui/select/index.svelte';
   import EditableField from '$lib/components/ui/editable-field/index.svelte';
   import Dialog from '$lib/components/ui/dialog/index.svelte';
   import Toggle from '$lib/components/ui/toggle/index.svelte';
   import DialogFooter from '$lib/components/ui/dialog-footer/index.svelte';
   import { listen } from '@tauri-apps/api/event';
-  import { Plus, RotateCcw, Mic, Languages } from 'lucide-svelte';
+  import { RotateCcw, Mic, Languages } from 'lucide-svelte';
   import type { ProviderConfig, AppConfig, ModelConfig, ModelVerified, TranscriptionConfig, TranslationConfig } from '$lib/stores/config';
   import { SENSEVOICE_LANGUAGES } from '$lib/stores/config';
   import { updateFeature, updateNestedPath, invokeWithError } from '$lib/ai/shared';
-  import { formatDate, generateSlug } from '$lib/utils';
+  import { formatDate } from '$lib/utils';
   import { createDialogState } from '$lib/hooks';
 
-  const addProviderDialog = createDialogState({
-    onReset: () => {
-      newProvider = { name: '', type: '', id: '', endpoint: '' };
-      formErrors = {};
-    }
-  });
-  let newProvider = $state({
-    name: '',
-    type: '',
-    id: '',
-    endpoint: ''
-  });
-  let formErrors = $state<Record<string, string>>({});
   const deleteConfirmDialog = createDialogState({
     onReset: () => { pendingActionProviderId = ''; }
   });
@@ -71,11 +58,6 @@
     await invokeWithError('delete_sensevoice_model');
     await loadSenseVoiceStatus();
   }
-
-  const PROVIDER_TYPES = [
-    { value: 'openai-compatible', label: 'OpenAI Compatible' },
-    { value: 'anthropic-compatible', label: 'Anthropic Compatible' }
-  ];
 
   onMount(async () => {
     config.load();
@@ -158,18 +140,6 @@
       ...(t as TranslationConfig),
       target_lang: lang
     })));
-  }
-
-  function handleProviderFieldChange(
-    providerId: string,
-    field: string,
-    value: string
-  ) {
-    config.save(updateNestedPath($config, ['ai', 'providers'], (providers) =>
-      (providers as ProviderConfig[]).map((p) =>
-        p.id === providerId ? { ...p, [field]: value } : p
-      )
-    ));
   }
 
   async function handleApiKeyChange(providerId: string, value: string) {
@@ -266,77 +236,7 @@
   }
 
   function needsApiKey(provider: ProviderConfig): boolean {
-    return provider.type === 'openai-compatible';
-  }
-
-  function handleNameInput(value: string) {
-    newProvider.name = value;
-    if (!formErrors.id) {
-      newProvider.id = generateSlug(value);
-    }
-  }
-
-  function handleTypeChange(value: string) {
-    newProvider.type = value;
-    if (formErrors.type) {
-      formErrors = { ...formErrors, type: '' };
-    }
-  }
-
-  function validateEndpointUrl(url: string): string | null {
-    if (!url.trim()) return null;
-    try {
-      const parsed = new URL(url);
-      if (!['http:', 'https:'].includes(parsed.protocol)) {
-        return 'Endpoint 必须以 http:// 或 https:// 开头';
-      }
-    } catch {
-      return 'Endpoint 格式无效';
-    }
-    return null;
-  }
-
-  function validateForm(): boolean {
-    const errors: Record<string, string> = {};
-    if (!newProvider.name.trim()) errors.name = '请输入名称';
-    if (!newProvider.type) errors.type = '请选择类型';
-    if (!newProvider.id.trim()) errors.id = '请输入 ID';
-
-    const needsEndpoint = newProvider.type === 'openai-compatible' || newProvider.type === 'anthropic-compatible';
-    if (needsEndpoint && !newProvider.endpoint.trim()) errors.endpoint = '请输入端点';
-
-    const urlError = validateEndpointUrl(newProvider.endpoint);
-    if (urlError) errors.endpoint = urlError;
-
-    const idRegex = /^[a-z0-9-]+$/;
-    if (newProvider.id && !idRegex.test(newProvider.id)) {
-      errors.id = 'ID 仅允许小写字母、数字和连字符';
-    }
-    if (
-      newProvider.id &&
-      ($config.ai.providers || []).some((p: ProviderConfig) => p.id === newProvider.id)
-    ) {
-      errors.id = '该 ID 已存在';
-    }
-
-    formErrors = errors;
-    return Object.keys(errors).length === 0;
-  }
-
-  async function handleAddProvider() {
-    if (!validateForm()) return;
-
-    const provider: ProviderConfig = {
-      id: newProvider.id.trim(),
-      type: newProvider.type,
-      name: newProvider.name.trim(),
-      endpoint: newProvider.endpoint.trim(),
-      models: []
-    };
-
-    const newProviders = [...($config.ai.providers || []), provider];
-    config.save(updateNestedPath($config, ['ai', 'providers'], () => newProviders));
-    addProviderDialog.close();
+    return PROVIDERS_REQUIRING_KEY.includes(provider.id);
   }
 
   function getTestKey(providerId: string, modelName: string): string {
@@ -488,17 +388,10 @@
               >
                 <RotateCcw class="h-3.5 w-3.5" />
               </button>
-            {:else}
-              <button
-                class="text-caption text-muted-foreground hover:text-destructive transition-colors p-0.5"
-                onclick={() => handleRemoveProvider(provider.id)}
-              >
-                ✕
-              </button>
             {/if}
           </div>
 
-          {#if provider.type === 'sensevoice'}
+          {#if provider.id === 'sensevoice'}
             <div class="mb-3">
               <div aria-label="模型状态" class="block text-body text-foreground-alt mb-1">模型状态</div>
               <div class="text-[11px] bg-background rounded-md border border-border p-2 space-y-1">
@@ -558,7 +451,7 @@ class="text-caption text-accent-foreground hover:underline"
             </div>
           {/if}
 
-          {#if provider.type === 'vertex'}
+          {#if provider.id === 'vertex'}
             <div class="mb-3">
               <div aria-label="Vertex AI 配置" class="block text-body text-foreground-alt mb-1">Vertex AI 配置</div>
               <div class="text-[11px] text-muted-foreground space-y-0.5 bg-background rounded-md border border-border p-2">
@@ -566,17 +459,6 @@ class="text-caption text-accent-foreground hover:underline"
                 <div>GOOGLE_CLOUD_LOCATION: <span class="text-foreground">{vertexEnvInfo?.location || 'global'}</span></div>
                 <div class="text-muted-foreground/70 mt-1">认证: <code class="text-[10px] bg-background px-1 py-0.5 rounded border border-border">gcloud auth application-default login</code></div>
               </div>
-            </div>
-          {:else if provider.type !== 'sensevoice'}
-            <div class="mb-3">
-              <span class="block text-body text-foreground-alt mb-1">Endpoint</span>
-              <EditableField
-                value={provider.endpoint}
-                aria-label="Endpoint"
-                placeholder="https://api.example.com/v1"
-                mode="text"
-                onChange={(val: string) => handleProviderFieldChange(provider.id, 'endpoint', val)}
-              />
             </div>
           {/if}
 
@@ -590,14 +472,14 @@ class="text-caption text-accent-foreground hover:underline"
                   <div
                     role="button"
                     tabindex="0"
-                    class="inline-flex items-center gap-1 rounded px-2.5 py-1 text-[11px] text-accent-foreground {provider.type !== 'sensevoice' ? 'cursor-pointer' : 'cursor-default'} select-none
+                    class="inline-flex items-center gap-1 rounded px-2.5 py-1 text-[11px] text-accent-foreground {provider.id !== 'sensevoice' ? 'cursor-pointer' : 'cursor-default'} select-none
                       {verified?.status === 'ok' ? 'bg-green-500/15 border border-green-500/30' : ''}
                       {verified?.status === 'error' ? 'bg-red-500/15 border border-red-500/30' : ''}
                       {!verified && !testing ? 'bg-accent' : ''}
                       {testing ? 'bg-accent animate-pulse' : ''}"
-                    title={provider.type === 'sensevoice' ? '' : verified ? `${verified.status === 'ok' ? '验证通过' : '验证失败'}${verified.latency_ms ? ' · ' + verified.latency_ms + 'ms' : ''}${verified.message ? ' · ' + verified.message : ''}` : '点击测试'}
-                    onclick={() => { if (provider.type !== 'sensevoice') testModel(provider.id, model.name); }}
-                    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (provider.type !== 'sensevoice') testModel(provider.id, model.name); } }}
+                    title={provider.id === 'sensevoice' ? '' : verified ? `${verified.status === 'ok' ? '验证通过' : '验证失败'}${verified.latency_ms ? ' · ' + verified.latency_ms + 'ms' : ''}${verified.message ? ' · ' + verified.message : ''}` : '点击测试'}
+                    onclick={() => { if (provider.id !== 'sensevoice') testModel(provider.id, model.name); }}
+                    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (provider.id !== 'sensevoice') testModel(provider.id, model.name); } }}
                   >
                     {model.name}
                     {#if model.capabilities?.includes('transcription')}
@@ -612,7 +494,7 @@ class="text-caption text-accent-foreground hover:underline"
                       <span class="text-red-500 text-[10px]">✕</span>
                       <span class="text-[9px] text-red-500/70">{formatDate(verified.tested_at)}</span>
                     {/if}
-                    {#if provider.type !== 'sensevoice'}
+                    {#if provider.id !== 'sensevoice'}
                     <button
                       type="button"
                       class="opacity-60 hover:opacity-100 transition-opacity"
@@ -624,7 +506,7 @@ class="text-caption text-accent-foreground hover:underline"
                   </div>
                 {/each}
               </div>
-              {#if provider.type !== 'sensevoice'}
+              {#if provider.id !== 'sensevoice'}
               <div class="flex items-center gap-1.5">
                 <button
                   class="text-caption text-accent-foreground hover:underline"
@@ -646,90 +528,8 @@ class="text-caption text-accent-foreground hover:underline"
           </div>
         </div>
       {/each}
-      <button
-        class="rounded-xl border-2 border-dashed border-border bg-background-alt/50 hover:bg-background-alt transition-colors flex flex-col items-center justify-center gap-1.5 cursor-pointer p-5 min-h-[160px]"
-        onclick={() => addProviderDialog.open()}
-      >
-        <Plus class="h-6 w-6 text-muted-foreground" />
-        <span class="text-body text-muted-foreground">添加 Provider</span>
-      </button>
     </div>
   </section>
-  <Dialog
-    open={addProviderDialog.isOpen}
-    onOpenChange={addProviderDialog.onOpenChange}
-    title="添加 Provider"
-    description="配置新的 AI 服务提供商"
-  >
-    {#snippet children()}
-      <div>
-        <label for="provider-name" class="block text-body text-foreground-alt mb-1">Name</label>
-        <input
-          id="provider-name"
-          class="flex h-10 w-full rounded-md border border-border-input bg-background px-3 py-2 text-body ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-1"
-          type="text"
-          placeholder="如：阿里云"
-          value={newProvider.name}
-          oninput={(e) => handleNameInput((e.target as HTMLInputElement).value)}
-        />
-        {#if formErrors.name}
-          <p class="text-caption text-destructive mt-0.5">{formErrors.name}</p>
-        {/if}
-      </div>
-
-      <div>
-        <span class="block text-body text-foreground-alt mb-1">Type</span>
-        <GroupedSelect
-          value={newProvider.type}
-          groups={[{ label: '', items: PROVIDER_TYPES }]}
-          placeholder="选择类型"
-          onChange={handleTypeChange}
-        />
-        {#if formErrors.type}
-          <p class="text-caption text-destructive mt-0.5">{formErrors.type}</p>
-        {/if}
-      </div>
-
-      <div>
-        <label for="provider-id" class="block text-body text-foreground-alt mb-1">ID</label>
-        <input
-          id="provider-id"
-          class="flex h-10 w-full rounded-md border border-border-input bg-background px-3 py-2 text-body ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-1"
-          type="text"
-          placeholder="如：ali-yun"
-          value={newProvider.id}
-          oninput={(e) => { newProvider.id = (e.target as HTMLInputElement).value; formErrors = { ...formErrors, id: '' }; }}
-        />
-        {#if formErrors.id}
-          <p class="text-caption text-destructive mt-0.5">{formErrors.id}</p>
-        {/if}
-      </div>
-
-      <div>
-        <label for="provider-endpoint" class="block text-body text-foreground-alt mb-1">Endpoint</label>
-        <input
-          id="provider-endpoint"
-          class="flex h-10 w-full rounded-md border border-border-input bg-background px-3 py-2 text-body ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-1"
-          type="text"
-          placeholder="https://api.example.com/v1"
-          value={newProvider.endpoint}
-          oninput={(e) => { newProvider.endpoint = (e.target as HTMLInputElement).value; formErrors = { ...formErrors, endpoint: '' }; }}
-        />
-        {#if formErrors.endpoint}
-          <p class="text-caption text-destructive mt-0.5">{formErrors.endpoint}</p>
-        {/if}
-      </div>
-    {/snippet}
-
-    {#snippet footer()}
-      <DialogFooter
-        onCancel={() => addProviderDialog.close()}
-        onConfirm={handleAddProvider}
-        confirmText="添加"
-      />
-    {/snippet}
-  </Dialog>
-
   <Dialog
     open={deleteConfirmDialog.isOpen}
     onOpenChange={deleteConfirmDialog.onOpenChange}
@@ -750,7 +550,7 @@ class="text-caption text-accent-foreground hover:underline"
     open={resetConfirmDialog.isOpen}
     onOpenChange={resetConfirmDialog.onOpenChange}
     title="重置 Provider"
-    description="确定要重置为默认设置吗？自定义的 Endpoint、API Key 和 Models 将被覆盖。"
+    description="确定要重置为默认设置吗？API Key 和自定义模型将被覆盖。"
   >
     {#snippet footer()}
       <DialogFooter
