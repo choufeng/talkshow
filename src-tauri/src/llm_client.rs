@@ -9,7 +9,6 @@ pub trait LlmClient: Send + Sync {
         prompt: &str,
         model_name: &str,
         provider_id: &str,
-        endpoint: &str,
     ) -> Result<String, String>;
 
     async fn send_audio(
@@ -19,6 +18,5 @@ pub trait LlmClient: Send + Sync {
         text_prompt: &str,
         model_name: &str,
         provider_id: &str,
-        endpoint: &str,
     ) -> Result<String, String>;
 }

@@ -1,9 +1,7 @@
 use crate::config::{ProviderConfig, Skill, SkillsConfig};
 use crate::llm_client::LlmClient;
 use crate::logger::Logger;
-use std::sync::{Arc, Mutex};
-
-type VertexClientCache = Arc<Mutex<Option<rig_vertexai::Client>>>;
+use crate::providers::ProviderContext;
 
 const SKILLS_BASE_TIMEOUT_SECS: u64 = 15;
 const SKILLS_PER_SKILL_TIMEOUT_SECS: u64 = 5;
@@ -93,7 +91,7 @@ pub async fn process_with_skills(
     transcription_config: &crate::config::TranscriptionConfig,
     providers: &[ProviderConfig],
     transcription: &str,
-    vertex_cache: &VertexClientCache,
+    vertex_cache: &ProviderContext,
     selected_text: Option<&str>,
 ) -> Result<String, String> {
     if !skills_config.enabled {
@@ -297,7 +295,6 @@ pub async fn process_with_skills_client(
             &full_prompt,
             &transcription_config.polish_model,
             &provider.id,
-            &provider.endpoint,
         ),
     )
     .await;
@@ -374,9 +371,7 @@ mod tests {
     fn test_providers() -> Vec<ProviderConfig> {
         vec![ProviderConfig {
             id: "test-provider".to_string(),
-            provider_type: "openai-compatible".to_string(),
             name: "Test".to_string(),
-            endpoint: "https://example.com/v1".to_string(),
             api_key: Some("sk-test".to_string()),
             models: vec![],
         }]
@@ -510,7 +505,7 @@ mod tests {
 
         let mut mock = MockLlmClient::new();
         mock.expect_send_text()
-            .returning(|_, _, _, _| Ok("处理后的文本".to_string()));
+            .returning(|_, _, _| Ok("处理后的文本".to_string()));
 
         let result = process_with_skills_client(
             &logger,
@@ -534,7 +529,7 @@ mod tests {
 
         let mut mock = MockLlmClient::new();
         mock.expect_send_text()
-            .returning(|_, _, _, _| Err("LLM error".to_string()));
+            .returning(|_, _, _| Err("LLM error".to_string()));
 
         let result = process_with_skills_client(
             &logger,

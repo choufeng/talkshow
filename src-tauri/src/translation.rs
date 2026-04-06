@@ -1,9 +1,7 @@
 use crate::config::{ProviderConfig, SkillsConfig};
 use crate::llm_client::LlmClient;
 use crate::logger::Logger;
-use std::sync::{Arc, Mutex};
-
-type VertexClientCache = Arc<Mutex<Option<rig_vertexai::Client>>>;
+use crate::providers::ProviderContext;
 
 const TRANSLATION_TIMEOUT_SECS: u64 = 15;
 
@@ -26,7 +24,7 @@ pub async fn translate_text(
     provider_id: &str,
     model_name: &str,
     providers: &[ProviderConfig],
-    vertex_cache: &VertexClientCache,
+    vertex_cache: &ProviderContext,
 ) -> Result<String, String> {
     let provider = providers
         .iter()
@@ -119,7 +117,6 @@ pub async fn translate_text_client(
     skills_config: &SkillsConfig,
     provider_id: &str,
     model_name: &str,
-    endpoint: &str,
     client: &mut dyn LlmClient,
 ) -> Result<String, String> {
     let mut system_prompt = TRANSLATION_BASE_PROMPT.replace("{target_lang}", target_lang);
@@ -146,7 +143,7 @@ pub async fn translate_text_client(
 
     let result = tokio::time::timeout(
         std::time::Duration::from_secs(TRANSLATION_TIMEOUT_SECS),
-        client.send_text(&full_prompt, model_name, provider_id, endpoint),
+        client.send_text(&full_prompt, model_name, provider_id),
     )
     .await;
 
@@ -217,7 +214,7 @@ mod tests {
 
         let mut mock = MockLlmClient::new();
         mock.expect_send_text()
-            .returning(|_, _, _, _| Ok("Hello World".to_string()));
+            .returning(|_, _, _| Ok("Hello World".to_string()));
 
         let result = translate_text_client(
             &logger,
@@ -226,7 +223,6 @@ mod tests {
             &skills,
             "test-provider",
             "test-model",
-            "https://example.com/v1",
             &mut mock,
         )
         .await;
@@ -243,7 +239,7 @@ mod tests {
 
         let mut mock = MockLlmClient::new();
         mock.expect_send_text()
-            .returning(|_, _, _, _| Err("API error".to_string()));
+            .returning(|_, _, _| Err("API error".to_string()));
 
         let result = translate_text_client(
             &logger,
@@ -252,7 +248,6 @@ mod tests {
             &skills,
             "test-provider",
             "test-model",
-            "https://example.com/v1",
             &mut mock,
         )
         .await;
@@ -271,7 +266,7 @@ mod tests {
 
         let mut mock = MockLlmClient::new();
         mock.expect_send_text()
-            .returning(|_, _, _, _| Err("timeout simulation".to_string()));
+            .returning(|_, _, _| Err("timeout simulation".to_string()));
 
         let result = translate_text_client(
             &logger,
@@ -280,7 +275,6 @@ mod tests {
             &skills,
             "test-provider",
             "test-model",
-            "https://example.com/v1",
             &mut mock,
         )
         .await;

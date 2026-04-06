@@ -1,15 +1,14 @@
 <script lang="ts">
   import { onboarding } from '$lib/stores/onboarding';
-  import { config, isBuiltinProvider, BUILTIN_PROVIDERS, MODEL_CAPABILITIES } from '$lib/stores/config';
+  import { config, isBuiltinProvider, BUILTIN_PROVIDERS, MODEL_CAPABILITIES, PROVIDERS_REQUIRING_KEY } from '$lib/stores/config';
   import type { ProviderConfig, ModelConfig } from '$lib/stores/config';
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { updateNestedPath, invokeWithError } from '$lib/ai/shared';
-  import { generateSlug } from '$lib/utils';
   import EditableField from '$lib/components/ui/editable-field/index.svelte';
   import Dialog from '$lib/components/ui/dialog/index.svelte';
   import DialogFooter from '$lib/components/ui/dialog-footer/index.svelte';
-  import { Server, CheckCircle2, AlertCircle, Loader2, Plus, Cloud, Zap, Info } from 'lucide-svelte';
+  import { Server, CheckCircle2, AlertCircle, Loader2, Cloud, Zap, Info } from 'lucide-svelte';
 
   type Scene = 'loading' | 'vertex-detected' | 'manual-config';
   let scene = $state<Scene>('loading');
@@ -20,19 +19,10 @@
   let testingModels = $state<Set<string>>(new Set());
   let testResults = $state<Map<string, { status: string; latency_ms?: number; message: string }>>(new Map());
 
-  let newProvider = $state({ name: '', type: '', id: '', endpoint: '' });
-  let formErrors = $state<Record<string, string>>({});
-  let addProviderDialogOpen = $state(false);
-
   let newModelName = $state('');
   let newModelCapabilities = $state<string[]>([]);
   let addModelProviderId = $state('');
   let addModelDialogOpen = $state(false);
-
-  const PROVIDER_TYPES = [
-    { value: 'openai-compatible', label: 'OpenAI Compatible' },
-    { value: 'anthropic-compatible', label: 'Anthropic Compatible' }
-  ];
 
   function classifyProviderError(msg: string): string {
     const lower = msg.toLowerCase();
@@ -69,10 +59,6 @@
 
   function checkStepValid() {
     onboarding.setStepValid(3, hasAnyVerifiedProvider);
-  }
-
-  function hasProviderWithApiKey(p: ProviderConfig): boolean {
-    return p.type === 'openai-compatible' && !!p.api_key?.trim();
   }
 
   async function detectEnvironment() {
@@ -149,84 +135,6 @@
       console.error('Failed to save API key:', e);
       await config.load();
     }
-  }
-
-  function handleProviderFieldChange(providerId: string, field: string, value: string) {
-    config.save(updateNestedPath($config, ['ai', 'providers'], (providers) =>
-      (providers as ProviderConfig[]).map((p) =>
-        p.id === providerId ? { ...p, [field]: value } : p
-      )
-    ));
-  }
-
-  function handleNameInput(value: string) {
-    newProvider.name = value;
-    if (!formErrors.id) {
-      newProvider.id = generateSlug(value);
-    }
-  }
-
-  function validateForm(): boolean {
-    const errors: Record<string, string> = {};
-    if (!newProvider.name.trim()) errors.name = '请输入名称';
-    if (!newProvider.type) errors.type = '请选择类型';
-    if (!newProvider.id.trim()) errors.id = '请输入 ID';
-
-    const needsEndpoint = newProvider.type === 'openai-compatible' || newProvider.type === 'anthropic-compatible';
-    if (needsEndpoint && !newProvider.endpoint.trim()) errors.endpoint = '请输入端点';
-
-    if (newProvider.endpoint.trim()) {
-      try {
-        const parsed = new URL(newProvider.endpoint);
-        if (!['http:', 'https:'].includes(parsed.protocol)) {
-          errors.endpoint = '必须以 http:// 或 https:// 开头';
-        }
-      } catch {
-        errors.endpoint = '格式无效';
-      }
-    }
-
-    const idRegex = /^[a-z0-9-]+$/;
-    if (newProvider.id && !idRegex.test(newProvider.id)) {
-      errors.id = '仅允许小写字母、数字和连字符';
-    }
-    if (
-      newProvider.id &&
-      ($config.ai.providers || []).some((p: ProviderConfig) => p.id === newProvider.id)
-    ) {
-      errors.id = '该 ID 已存在';
-    }
-
-    formErrors = errors;
-    return Object.keys(errors).length === 0;
-  }
-
-  function handleAddProvider() {
-    if (!validateForm()) return;
-
-    const provider: ProviderConfig = {
-      id: newProvider.id.trim(),
-      type: newProvider.type,
-      name: newProvider.name.trim(),
-      endpoint: newProvider.endpoint.trim(),
-      models: []
-    };
-
-    const newProviders = [...($config.ai.providers || []), provider];
-    config.save(updateNestedPath($config, ['ai', 'providers'], () => newProviders));
-    closeAddProviderDialog();
-  }
-
-  function openAddProviderDialog() {
-    newProvider = { name: '', type: '', id: '', endpoint: '' };
-    formErrors = {};
-    addProviderDialogOpen = true;
-  }
-
-  function closeAddProviderDialog() {
-    addProviderDialogOpen = false;
-    newProvider = { name: '', type: '', id: '', endpoint: '' };
-    formErrors = {};
   }
 
   function openAddModelDialog(providerId: string) {
@@ -357,7 +265,7 @@
         class="text-caption text-muted-foreground hover:text-foreground transition-colors underline"
         onclick={() => { scene = 'manual-config'; checkStepValid(); }}
       >
-        手动配置其他 Provider
+        手动配置 API Key
       </button>
     </div>
 
@@ -384,14 +292,14 @@
             {/if}
           </div>
 
-          {#if provider.type === 'vertex' && vertexEnvInfo}
+          {#if provider.id === 'vertex' && vertexEnvInfo}
             <div class="text-[11px] bg-background rounded-md border border-border p-2 mb-3 space-y-0.5">
               <div>GOOGLE_CLOUD_PROJECT: <span class="text-foreground">{vertexEnvInfo.project || '未设置'}</span></div>
               <div>GOOGLE_CLOUD_LOCATION: <span class="text-foreground">{vertexEnvInfo.location || 'global'}</span></div>
             </div>
           {/if}
 
-          {#if provider.type === 'openai-compatible'}
+          {#if PROVIDERS_REQUIRING_KEY.includes(provider.id)}
             <div class="mb-3">
               <span class="block text-caption text-foreground-alt mb-1">API Key</span>
               <EditableField
@@ -410,7 +318,7 @@
                 {@const key = `${provider.id}::${model.name}`}
                 {@const testing = testingModels.has(key)}
                 {@const result = testResults.get(key) || model.verified}
-                {@const isSensevoice = provider.type === 'sensevoice'}
+                {@const isSensevoice = provider.id === 'sensevoice'}
                 <div
                   role="button"
                   tabindex="0"
@@ -436,7 +344,7 @@
             </div>
           </div>
 
-          {#if provider.type !== 'sensevoice'}
+          {#if provider.id !== 'sensevoice'}
             <div class="flex items-center gap-1.5">
               <button
                 class="text-caption text-accent-foreground hover:underline"
@@ -454,14 +362,6 @@
           {/if}
         </div>
       {/each}
-
-      <button
-        class="w-full rounded-xl border-2 border-dashed border-border bg-background-alt/50 hover:bg-background-alt transition-colors flex items-center justify-center gap-2 cursor-pointer py-4"
-        onclick={openAddProviderDialog}
-      >
-        <Plus size={16} class="text-muted-foreground" />
-        <span class="text-body text-muted-foreground">添加自定义 Provider</span>
-      </button>
     </div>
 
     {#if vertexEnvInfo?.project}
@@ -476,89 +376,6 @@
     {/if}
   {/if}
 </div>
-
-<Dialog
-  open={addProviderDialogOpen}
-  onOpenChange={(open: boolean) => { if (!open) closeAddProviderDialog(); else addProviderDialogOpen = true; }}
-  title="添加 Provider"
-  description="配置新的 AI 服务提供商"
->
-  {#snippet children()}
-    <div>
-      <label for="onb-provider-name" class="block text-body text-foreground-alt mb-1">名称</label>
-      <input
-        id="onb-provider-name"
-        class="flex h-10 w-full rounded-md border border-border-input bg-background px-3 py-2 text-body ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-1"
-        type="text"
-        placeholder="如：阿里云"
-        value={newProvider.name}
-        oninput={(e) => handleNameInput((e.target as HTMLInputElement).value)}
-      />
-      {#if formErrors.name}
-        <p class="text-caption text-destructive mt-0.5">{formErrors.name}</p>
-      {/if}
-    </div>
-
-    <div>
-      <span class="block text-body text-foreground-alt mb-1">类型</span>
-      <select
-        class="flex h-10 w-full rounded-md border border-border-input bg-background px-3 py-2 text-body ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20"
-        value={newProvider.type}
-        onchange={(e) => {
-          const val = (e.target as HTMLSelectElement).value;
-          newProvider.type = val;
-          if (formErrors.type) formErrors = { ...formErrors, type: '' };
-        }}
-      >
-        <option value="" disabled>选择类型</option>
-        {#each PROVIDER_TYPES as pt}
-          <option value={pt.value}>{pt.label}</option>
-        {/each}
-      </select>
-      {#if formErrors.type}
-        <p class="text-caption text-destructive mt-0.5">{formErrors.type}</p>
-      {/if}
-    </div>
-
-    <div>
-      <label for="onb-provider-id" class="block text-body text-foreground-alt mb-1">ID</label>
-      <input
-        id="onb-provider-id"
-        class="flex h-10 w-full rounded-md border border-border-input bg-background px-3 py-2 text-body ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-1"
-        type="text"
-        placeholder="如：ali-yun"
-        value={newProvider.id}
-        oninput={(e) => { newProvider.id = (e.target as HTMLInputElement).value; formErrors = { ...formErrors, id: '' }; }}
-      />
-      {#if formErrors.id}
-        <p class="text-caption text-destructive mt-0.5">{formErrors.id}</p>
-      {/if}
-    </div>
-
-    <div>
-      <label for="onb-provider-endpoint" class="block text-body text-foreground-alt mb-1">Endpoint</label>
-      <input
-        id="onb-provider-endpoint"
-        class="flex h-10 w-full rounded-md border border-border-input bg-background px-3 py-2 text-body ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-1"
-        type="text"
-        placeholder="https://api.example.com/v1"
-        value={newProvider.endpoint}
-        oninput={(e) => { newProvider.endpoint = (e.target as HTMLInputElement).value; formErrors = { ...formErrors, endpoint: '' }; }}
-      />
-      {#if formErrors.endpoint}
-        <p class="text-caption text-destructive mt-0.5">{formErrors.endpoint}</p>
-      {/if}
-    </div>
-  {/snippet}
-
-  {#snippet footer()}
-    <DialogFooter
-      onCancel={closeAddProviderDialog}
-      onConfirm={handleAddProvider}
-      confirmText="添加"
-    />
-  {/snippet}
-</Dialog>
 
 <Dialog
   open={addModelDialogOpen}

@@ -2,24 +2,18 @@ use crate::ai::{ThinkingMode, send_audio_prompt_from_bytes, send_text_prompt};
 use crate::config::ProviderConfig;
 use crate::llm_client::LlmClient;
 use crate::logger::Logger;
-use std::sync::{Arc, Mutex};
-
-#[allow(dead_code)]
-type VertexClientCache = Arc<Mutex<Option<rig_vertexai::Client>>>;
+use crate::providers::ProviderContext;
 
 #[allow(dead_code)]
 pub struct RealLlmClient<'a> {
     logger: &'a Logger,
-    vertex_cache: &'a VertexClientCache,
+    ctx: &'a ProviderContext,
 }
 
 impl<'a> RealLlmClient<'a> {
     #[allow(dead_code)]
-    pub fn new(logger: &'a Logger, vertex_cache: &'a VertexClientCache) -> Self {
-        Self {
-            logger,
-            vertex_cache,
-        }
+    pub fn new(logger: &'a Logger, ctx: &'a ProviderContext) -> Self {
+        Self { logger, ctx }
     }
 }
 
@@ -30,13 +24,10 @@ impl LlmClient for RealLlmClient<'_> {
         prompt: &str,
         model_name: &str,
         provider_id: &str,
-        endpoint: &str,
     ) -> Result<String, String> {
         let provider = ProviderConfig {
             id: provider_id.to_string(),
-            provider_type: provider_id.to_string(),
             name: provider_id.to_string(),
-            endpoint: endpoint.to_string(),
             api_key: None,
             models: vec![],
         };
@@ -45,7 +36,7 @@ impl LlmClient for RealLlmClient<'_> {
             prompt,
             model_name,
             &provider,
-            self.vertex_cache,
+            self.ctx,
             ThinkingMode::Disabled,
         )
         .await
@@ -59,13 +50,10 @@ impl LlmClient for RealLlmClient<'_> {
         text_prompt: &str,
         model_name: &str,
         provider_id: &str,
-        endpoint: &str,
     ) -> Result<String, String> {
         let provider = ProviderConfig {
             id: provider_id.to_string(),
-            provider_type: provider_id.to_string(),
             name: provider_id.to_string(),
-            endpoint: endpoint.to_string(),
             api_key: None,
             models: vec![],
         };
@@ -76,7 +64,7 @@ impl LlmClient for RealLlmClient<'_> {
             text_prompt,
             model_name,
             &provider,
-            self.vertex_cache,
+            self.ctx,
         )
         .await
         .map_err(|e| e.to_string())

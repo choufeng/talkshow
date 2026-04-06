@@ -174,7 +174,7 @@ async fn test_skills_calls_llm_and_returns_result() {
     let providers = test_providers();
     let mut mock = MockLlmClientIntegration::new();
 
-    mock.expect_send_text(|prompt, _model, _provider, _endpoint| {
+    mock.expect_send_text(|prompt, _model, _provider| {
         assert!(prompt.contains("测试技能"));
         assert!(prompt.contains("测试 prompt"));
         Ok("处理后的文本".to_string())
@@ -203,7 +203,7 @@ async fn test_skills_falls_back_on_llm_error() {
     let providers = test_providers();
     let mut mock = MockLlmClientIntegration::new();
 
-    mock.expect_send_text(|_, _, _, _| Err("LLM error".to_string()));
+    mock.expect_send_text(|_, _, _| Err("LLM error".to_string()));
 
     let result = process_with_skills_client(
         &logger,
@@ -228,7 +228,7 @@ async fn test_skills_with_selected_text() {
     let providers = test_providers();
     let mut mock = MockLlmClientIntegration::new();
 
-    mock.expect_send_text(|prompt, _, _, _| {
+    mock.expect_send_text(|prompt, _, _| {
         assert!(prompt.contains("选中的文本"));
         Ok("处理结果".to_string())
     });
@@ -277,7 +277,7 @@ async fn test_skills_multiple_skills_in_prompt() {
     let providers = test_providers();
     let mut mock = MockLlmClientIntegration::new();
 
-    mock.expect_send_text(|prompt, _, _, _| {
+    mock.expect_send_text(|prompt, _, _| {
         assert!(prompt.contains("技能一"));
         assert!(prompt.contains("prompt 一"));
         assert!(prompt.contains("技能二"));

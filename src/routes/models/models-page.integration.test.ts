@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
+import { render, screen, waitFor } from '@testing-library/svelte';
 import { mockTauriInvoke, resetTauriMocks } from '../../test/mocks/tauri';
 import ModelsPage from './+page.svelte';
 
@@ -38,21 +38,6 @@ function defaultConfig() {
       },
       translation: { target_lang: 'English' },
       skills: { enabled: true, skills: [] },
-      recording: { auto_mute: false },
-    },
-  };
-}
-
-function emptyConfig() {
-  return {
-    shortcut: 'Control+Shift+Quote',
-    recording_shortcut: 'Control+Backslash',
-    translate_shortcut: 'Control+Shift+T',
-    ai: { providers: [] },
-    features: {
-      transcription: { provider_id: '', model: '', polish_enabled: false, polish_provider_id: '', polish_model: '' },
-      translation: { target_lang: 'English' },
-      skills: { enabled: false, skills: [] },
       recording: { auto_mute: false },
     },
   };
@@ -110,21 +95,6 @@ describe('Models Page Integration', () => {
     });
   });
 
-  it('should display add provider button', async () => {
-    mockTauriInvoke(async (command) => {
-      if (command === 'get_config') return defaultConfig();
-      if (command === 'get_vertex_env_info') return { project: '', location: '' };
-      if (command === 'get_sensevoice_status') return { status: 'not_downloaded' };
-      return null;
-    });
-
-    render(ModelsPage);
-
-    await waitFor(() => {
-      expect(screen.getByText('添加 Provider')).toBeInTheDocument();
-    });
-  });
-
   it('should display model badges with capabilities', async () => {
     mockTauriInvoke(async (command) => {
       if (command === 'get_config') return defaultConfig();
@@ -165,18 +135,5 @@ describe('Models Page Integration', () => {
     expect(() => render(ModelsPage)).not.toThrow();
   });
 
-  it('should display empty state when no providers', async () => {
-    mockTauriInvoke(async (command) => {
-      if (command === 'get_config') return emptyConfig();
-      if (command === 'get_vertex_env_info') return { project: '', location: '' };
-      if (command === 'get_sensevoice_status') return { status: 'not_downloaded' };
-      return null;
-    });
 
-    render(ModelsPage);
-
-    await waitFor(() => {
-      expect(screen.getByText('添加 Provider')).toBeInTheDocument();
-    });
-  });
 });

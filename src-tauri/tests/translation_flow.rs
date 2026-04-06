@@ -13,12 +13,11 @@ async fn test_translate_success() {
     };
     let mut mock = MockLlmClientIntegration::new();
 
-    mock.expect_send_text(|prompt, model, provider, endpoint| {
+    mock.expect_send_text(|prompt, model, provider| {
         assert!(prompt.contains("professional translator"));
         assert!(prompt.contains("English"));
         assert_eq!(model, "gpt-4");
         assert_eq!(provider, "test-provider");
-        assert_eq!(endpoint, "https://api.example.com/v1");
         Ok("Hello World".to_string())
     });
 
@@ -29,7 +28,6 @@ async fn test_translate_success() {
         &skills,
         "test-provider",
         "gpt-4",
-        "https://api.example.com/v1",
         &mut mock,
     )
     .await;
@@ -55,7 +53,7 @@ async fn test_translate_with_skill_prompt() {
     };
     let mut mock = MockLlmClientIntegration::new();
 
-    mock.expect_send_text(|prompt, _, _, _| {
+    mock.expect_send_text(|prompt, _, _| {
         assert!(prompt.contains("保持原文语气和风格"));
         Ok("Translated with style".to_string())
     });
@@ -67,7 +65,6 @@ async fn test_translate_with_skill_prompt() {
         &skills,
         "test-provider",
         "gpt-4",
-        "https://api.example.com/v1",
         &mut mock,
     )
     .await;
@@ -84,7 +81,7 @@ async fn test_translate_llm_error() {
     };
     let mut mock = MockLlmClientIntegration::new();
 
-    mock.expect_send_text(|_, _, _, _| Err("API error".to_string()));
+    mock.expect_send_text(|_, _, _| Err("API error".to_string()));
 
     let result = translate_text_client(
         &logger,
@@ -93,7 +90,6 @@ async fn test_translate_llm_error() {
         &skills,
         "test-provider",
         "gpt-4",
-        "https://api.example.com/v1",
         &mut mock,
     )
     .await;
@@ -111,7 +107,7 @@ async fn test_translate_empty_text() {
     };
     let mut mock = MockLlmClientIntegration::new();
 
-    mock.expect_send_text(|prompt, _, _, _| {
+    mock.expect_send_text(|prompt, _, _| {
         assert!(!prompt.is_empty());
         Ok("".to_string())
     });
@@ -123,7 +119,6 @@ async fn test_translate_empty_text() {
         &skills,
         "test-provider",
         "gpt-4",
-        "https://api.example.com/v1",
         &mut mock,
     )
     .await;
@@ -140,7 +135,7 @@ async fn test_translate_chinese_to_japanese() {
     };
     let mut mock = MockLlmClientIntegration::new();
 
-    mock.expect_send_text(|prompt, _, _, _| {
+    mock.expect_send_text(|prompt, _, _| {
         assert!(prompt.contains("Japanese"));
         Ok("こんにちは世界".to_string())
     });
@@ -152,7 +147,6 @@ async fn test_translate_chinese_to_japanese() {
         &skills,
         "test-provider",
         "gpt-4",
-        "https://api.example.com/v1",
         &mut mock,
     )
     .await;
@@ -169,7 +163,7 @@ async fn test_translate_chinese_to_english() {
     };
     let mut mock = MockLlmClientIntegration::new();
 
-    mock.expect_send_text(|prompt, _, _, _| {
+    mock.expect_send_text(|prompt, _, _| {
         assert!(prompt.contains("English"));
         Ok("Hello, how are you?".to_string())
     });
@@ -181,7 +175,6 @@ async fn test_translate_chinese_to_english() {
         &skills,
         "test-provider",
         "gpt-4",
-        "https://api.example.com/v1",
         &mut mock,
     )
     .await;

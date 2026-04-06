@@ -16,9 +16,7 @@ export interface ModelConfig {
 
 export interface ProviderConfig {
   id: string;
-  type: string;
   name: string;
-  endpoint: string;
   api_key?: string;
   models: ModelConfig[];
 }
@@ -96,30 +94,29 @@ export const MODEL_CAPABILITIES = [
 export const BUILTIN_PROVIDERS: ProviderConfig[] = [
   {
     id: 'vertex',
-    type: 'vertex',
     name: 'Vertex AI',
-    endpoint: '',
     models: [{ name: 'gemini-2.0-flash', capabilities: ['transcription', 'chat'] }]
   },
   {
     id: 'dashscope',
-    type: 'openai-compatible',
     name: '阿里云',
-    endpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
     api_key: '',
     models: [{ name: 'qwen2-audio-instruct', capabilities: ['transcription'] }]
   },
   {
     id: 'sensevoice',
-    type: 'sensevoice',
     name: 'SenseVoice (本地)',
-    endpoint: '',
     models: [{ name: 'SenseVoice-Small', capabilities: ['transcription'] }]
   }
 ];
 
 export function isBuiltinProvider(id: string): boolean {
   return BUILTIN_PROVIDERS.some((p) => p.id === id);
+}
+
+export const PROVIDERS_REQUIRING_KEY = ['dashscope'];
+export function needsApiKey(providerId: string): boolean {
+  return PROVIDERS_REQUIRING_KEY.includes(providerId);
 }
 
 function getBuiltinProvider(id: string): ProviderConfig | undefined {
@@ -141,7 +138,7 @@ function mergeBuiltinProviders(providers: ProviderConfig[]): ProviderConfig[] {
   const corrected = providers.map((p) => {
     const builtin = BUILTIN_PROVIDERS.find((b) => b.id === p.id);
     if (builtin) {
-      return { ...p, type: builtin.type, endpoint: builtin.endpoint };
+      return { ...p, name: builtin.name };
     }
     return p;
   });

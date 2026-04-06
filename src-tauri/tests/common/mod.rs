@@ -45,9 +45,7 @@ pub fn test_app_config() -> AppConfig {
 pub fn test_providers() -> Vec<ProviderConfig> {
     vec![ProviderConfig {
         id: "test-provider".to_string(),
-        provider_type: "openai-compatible".to_string(),
         name: "Test Provider".to_string(),
-        endpoint: "https://api.example.com/v1".to_string(),
         api_key: Some("sk-test-key".to_string()),
         models: vec![],
     }]
@@ -86,10 +84,9 @@ pub fn test_transcription_config() -> TranscriptionConfig {
 /// tests/ 目录是独立 crate，无法访问 MockLlmClient，因此需要手动实现。
 pub struct MockLlmClientIntegration {
     send_text_handler:
-        Option<Box<dyn Fn(&str, &str, &str, &str) -> Result<String, String> + Send + Sync>>,
-    send_audio_handler: Option<
-        Box<dyn Fn(&[u8], &str, &str, &str, &str, &str) -> Result<String, String> + Send + Sync>,
-    >,
+        Option<Box<dyn Fn(&str, &str, &str) -> Result<String, String> + Send + Sync>>,
+    send_audio_handler:
+        Option<Box<dyn Fn(&[u8], &str, &str, &str, &str) -> Result<String, String> + Send + Sync>>,
     send_text_call_count: AtomicUsize,
     send_audio_call_count: AtomicUsize,
 }
@@ -106,17 +103,14 @@ impl MockLlmClientIntegration {
 
     pub fn expect_send_text<F>(&mut self, handler: F)
     where
-        F: Fn(&str, &str, &str, &str) -> Result<String, String> + Send + Sync + 'static,
+        F: Fn(&str, &str, &str) -> Result<String, String> + Send + Sync + 'static,
     {
         self.send_text_handler = Some(Box::new(handler));
     }
 
     pub fn expect_send_audio<F>(&mut self, handler: F)
     where
-        F: Fn(&[u8], &str, &str, &str, &str, &str) -> Result<String, String>
-            + Send
-            + Sync
-            + 'static,
+        F: Fn(&[u8], &str, &str, &str, &str) -> Result<String, String> + Send + Sync + 'static,
     {
         self.send_audio_handler = Some(Box::new(handler));
     }
@@ -137,11 +131,10 @@ impl LlmClient for MockLlmClientIntegration {
         prompt: &str,
         model_name: &str,
         provider_id: &str,
-        endpoint: &str,
     ) -> Result<String, String> {
         self.send_text_call_count.fetch_add(1, Ordering::SeqCst);
         match &self.send_text_handler {
-            Some(handler) => handler(prompt, model_name, provider_id, endpoint),
+            Some(handler) => handler(prompt, model_name, provider_id),
             None => Ok("default mock response".to_string()),
         }
     }
@@ -153,7 +146,6 @@ impl LlmClient for MockLlmClientIntegration {
         text_prompt: &str,
         model_name: &str,
         provider_id: &str,
-        endpoint: &str,
     ) -> Result<String, String> {
         self.send_audio_call_count.fetch_add(1, Ordering::SeqCst);
         match &self.send_audio_handler {
@@ -163,7 +155,6 @@ impl LlmClient for MockLlmClientIntegration {
                 text_prompt,
                 model_name,
                 provider_id,
-                endpoint,
             ),
             None => Ok("default mock audio response".to_string()),
         }

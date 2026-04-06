@@ -107,9 +107,7 @@ fn test_save_and_load_multiple_providers() {
     let mut config = test_app_config();
     config.ai.providers.push(ProviderConfig {
         id: "second-provider".to_string(),
-        provider_type: "vertex".to_string(),
         name: "Second Provider".to_string(),
-        endpoint: "https://vertex.example.com".to_string(),
         api_key: None,
         models: vec![],
     });
@@ -117,10 +115,8 @@ fn test_save_and_load_multiple_providers() {
     save_config(dir.path(), &config).unwrap();
     let loaded = load_config(dir.path());
 
-    // load_config merges builtin providers, so count may be higher
     let second = find_provider(&loaded.ai.providers, "second-provider");
     assert_eq!(second.name, "Second Provider");
-    assert_eq!(second.provider_type, "vertex");
 }
 
 #[test]
