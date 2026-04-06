@@ -85,9 +85,8 @@ pub fn test_transcription_config() -> TranscriptionConfig {
 pub struct MockLlmClientIntegration {
     send_text_handler:
         Option<Box<dyn Fn(&str, &str, &str) -> Result<String, String> + Send + Sync>>,
-    send_audio_handler: Option<
-        Box<dyn Fn(&[u8], &str, &str, &str, &str) -> Result<String, String> + Send + Sync>,
-    >,
+    send_audio_handler:
+        Option<Box<dyn Fn(&[u8], &str, &str, &str, &str) -> Result<String, String> + Send + Sync>>,
     send_text_call_count: AtomicUsize,
     send_audio_call_count: AtomicUsize,
 }
@@ -111,10 +110,7 @@ impl MockLlmClientIntegration {
 
     pub fn expect_send_audio<F>(&mut self, handler: F)
     where
-        F: Fn(&[u8], &str, &str, &str, &str) -> Result<String, String>
-            + Send
-            + Sync
-            + 'static,
+        F: Fn(&[u8], &str, &str, &str, &str) -> Result<String, String> + Send + Sync + 'static,
     {
         self.send_audio_handler = Some(Box::new(handler));
     }

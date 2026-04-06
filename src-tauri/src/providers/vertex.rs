@@ -21,9 +21,8 @@ impl VertexAIProvider {
     }
 
     fn get_project_and_location() -> Result<(String, String), ProviderError> {
-        let project = std::env::var("GOOGLE_CLOUD_PROJECT").map_err(|_| {
-            ProviderError::RequestError("GOOGLE_CLOUD_PROJECT not set".to_string())
-        })?;
+        let project = std::env::var("GOOGLE_CLOUD_PROJECT")
+            .map_err(|_| ProviderError::RequestError("GOOGLE_CLOUD_PROJECT not set".to_string()))?;
         let location =
             std::env::var("GOOGLE_CLOUD_LOCATION").unwrap_or_else(|_| "global".to_string());
         Ok((project, location))
@@ -137,9 +136,10 @@ impl Provider for VertexAIProvider {
             return Err(ProviderError::RequestError(err));
         }
 
-        let resp: serde_json::Value = response.json().await.map_err(|e| {
-            ProviderError::RequestError(format!("Failed to parse response: {}", e))
-        })?;
+        let resp: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| ProviderError::RequestError(format!("Failed to parse response: {}", e)))?;
 
         let text = extract_text_from_vertex_response(&resp);
 
@@ -206,9 +206,10 @@ impl Provider for VertexAIProvider {
             return Err(ProviderError::RequestError(err));
         }
 
-        let resp: serde_json::Value = response.json().await.map_err(|e| {
-            ProviderError::RequestError(format!("Failed to parse response: {}", e))
-        })?;
+        let resp: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| ProviderError::RequestError(format!("Failed to parse response: {}", e)))?;
 
         let text = extract_text_from_vertex_response(&resp);
 

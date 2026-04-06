@@ -674,7 +674,12 @@ mod tests {
         save_config(&app_data_dir, &config).unwrap();
 
         let loaded = load_config(&app_data_dir);
-        let p0 = loaded.ai.providers.iter().find(|p| p.id == config.ai.providers[0].id).unwrap();
+        let p0 = loaded
+            .ai
+            .providers
+            .iter()
+            .find(|p| p.id == config.ai.providers[0].id)
+            .unwrap();
         assert_eq!(p0.api_key, Some("sk-roundtrip-test".to_string()));
     }
 

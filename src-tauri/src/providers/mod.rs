@@ -65,7 +65,9 @@ pub trait Provider: Send + Sync {
     #[allow(dead_code)]
     fn needs_api_key(&self) -> bool;
     #[allow(dead_code)]
-    fn default_models() -> Vec<ModelConfig> where Self: Sized;
+    fn default_models() -> Vec<ModelConfig>
+    where
+        Self: Sized;
 }
 
 pub struct ProviderContext {
@@ -95,4 +97,3 @@ pub fn create_provider(
         _ => Err(ProviderError::ProviderNotFound(config.id.clone())),
     }
 }
-

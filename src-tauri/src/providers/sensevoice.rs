@@ -17,7 +17,6 @@ impl SenseVoiceProvider {
             language: Arc::new(Mutex::new(0)),
         }
     }
-
 }
 
 #[async_trait]

@@ -1,4 +1,4 @@
-use crate::ai::{send_audio_prompt_from_bytes, send_text_prompt, ThinkingMode};
+use crate::ai::{ThinkingMode, send_audio_prompt_from_bytes, send_text_prompt};
 use crate::config::ProviderConfig;
 use crate::llm_client::LlmClient;
 use crate::logger::Logger;

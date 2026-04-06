@@ -90,9 +90,10 @@ impl Provider for DashScopeProvider {
             text: String,
         }
 
-        let resp: TranscriptionResponse = response.json().await.map_err(|e| {
-            ProviderError::RequestError(format!("Failed to parse response: {}", e))
-        })?;
+        let resp: TranscriptionResponse = response
+            .json()
+            .await
+            .map_err(|e| ProviderError::RequestError(format!("Failed to parse response: {}", e)))?;
 
         logger.info(
             "dashscope",
@@ -175,9 +176,10 @@ impl Provider for DashScopeProvider {
             content: String,
         }
 
-        let resp: ChatResponse = response.json().await.map_err(|e| {
-            ProviderError::RequestError(format!("Failed to parse response: {}", e))
-        })?;
+        let resp: ChatResponse = response
+            .json()
+            .await
+            .map_err(|e| ProviderError::RequestError(format!("Failed to parse response: {}", e)))?;
 
         let text = resp
             .choices
