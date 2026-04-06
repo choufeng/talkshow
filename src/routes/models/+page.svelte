@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { config, isBuiltinProvider, BUILTIN_PROVIDERS, MODEL_CAPABILITIES, TRANSLATE_LANGUAGES, PROVIDERS_REQUIRING_KEY } from '$lib/stores/config';
+  import { config, isBuiltinProvider, BUILTIN_PROVIDERS, MODEL_CAPABILITIES, TRANSLATE_LANGUAGES, PROVIDERS_REQUIRING_KEY, PROVIDERS_WITH_ENDPOINT } from '$lib/stores/config';
   import GroupedSelect from '$lib/components/ui/select/index.svelte';
   import EditableField from '$lib/components/ui/editable-field/index.svelte';
   import Dialog from '$lib/components/ui/dialog/index.svelte';
@@ -151,6 +151,19 @@
       ));
     } catch (e) {
       console.error('Failed to save API key:', e);
+      await config.load();
+    }
+  }
+
+  async function handleEndpointChange(providerId: string, value: string) {
+    try {
+      await config.save(updateNestedPath($config, ['ai', 'providers'], (providers) =>
+        (providers as ProviderConfig[]).map((p) =>
+          p.id === providerId ? { ...p, endpoint: value } : p
+        )
+      ));
+    } catch (e) {
+      console.error('Failed to save endpoint:', e);
       await config.load();
     }
   }
@@ -447,6 +460,19 @@ class="text-caption text-accent-foreground hover:underline"
                 placeholder="sk-..."
                 mode="password"
                 onChange={(val: string) => handleApiKeyChange(provider.id, val)}
+              />
+            </div>
+          {/if}
+
+          {#if PROVIDERS_WITH_ENDPOINT.includes(provider.id)}
+            <div class="mb-3">
+              <span class="block text-body text-foreground-alt mb-1">Endpoint</span>
+              <EditableField
+                value={provider.endpoint || ''}
+                aria-label="Endpoint"
+                placeholder="https://api.openai.com/v1"
+                mode="text"
+                onChange={(val: string) => handleEndpointChange(provider.id, val)}
               />
             </div>
           {/if}
