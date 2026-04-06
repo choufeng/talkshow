@@ -1,17 +1,20 @@
 <script lang="ts">
   import { onboarding } from '$lib/stores/onboarding';
+  import { config } from '$lib/stores/config';
   import { onMount } from 'svelte';
   import { Keyboard } from 'lucide-svelte';
+  import KeyBadge from '$lib/components/ui/key-badge/index.svelte';
+  import { parseKeys } from '$lib/utils/shortcut';
 
   onMount(() => {
     onboarding.setStepValid(4, true);
   });
 
-  const shortcuts = [
-    { label: '窗口切换', desc: '显示或隐藏主窗口', default: 'Ctrl + Shift + \'' },
-    { label: '录音控制', desc: '开始或结束录音', default: 'Ctrl + \\' },
-    { label: 'AI 翻译', desc: '录音并翻译为目标语言', default: 'Ctrl + Shift + T' },
-  ];
+  const shortcuts = $derived([
+    { label: '窗口切换', desc: '显示或隐藏主窗口', keys: parseKeys($config.shortcut) },
+    { label: '录音控制', desc: '开始或结束录音', keys: parseKeys($config.recording_shortcut) },
+    { label: 'AI 翻译', desc: '录音并翻译为目标语言', keys: parseKeys($config.translate_shortcut) },
+  ]);
 </script>
 
 <div>
@@ -32,9 +35,11 @@
           <div class="text-body font-medium text-foreground">{s.label}</div>
           <div class="text-caption text-foreground-alt">{s.desc}</div>
         </div>
-        <kbd class="px-3 py-1.5 rounded-md text-caption font-mono bg-gradient-to-b from-key-bg-from to-key-bg-to border border-key-border text-key-text">
-          {s.default}
-        </kbd>
+        <div class="flex items-center gap-1">
+          {#each s.keys as key}
+            <KeyBadge label={key} />
+          {/each}
+        </div>
       </div>
     {/each}
   </div>

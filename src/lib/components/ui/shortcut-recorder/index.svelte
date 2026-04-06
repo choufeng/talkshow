@@ -1,5 +1,6 @@
 <script lang="ts">
   import KeyBadge from '$lib/components/ui/key-badge/index.svelte';
+  import { parseKeys } from '$lib/utils/shortcut';
 
   interface Props {
     label: string;
@@ -17,26 +18,6 @@
   $effect(() => {
     currentValue = value;
   });
-
-  const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent);
-
-  const MODIFIER_DISPLAY: Record<string, string> = isMac
-    ? { Control: '⌃', Shift: '⇧', Alt: '⌥', Command: '⌘', Super: '⌘' }
-    : { Control: 'Ctrl', Shift: 'Shift', Alt: 'Alt', Command: 'Cmd', Super: 'Cmd' };
-
-  const KEY_DISPLAY: Record<string, string> = {
-    Quote: "'",
-    Backslash: '\\',
-    Space: 'Space',
-  };
-
-  function parseKeys(shortcut: string): string[] {
-    return shortcut.split('+').map((key) => {
-      if (MODIFIER_DISPLAY[key]) return MODIFIER_DISPLAY[key];
-      if (KEY_DISPLAY[key]) return KEY_DISPLAY[key];
-      return key.replace('Key', '').replace('Digit', '');
-    });
-  }
 
   function handleKeydown(event: KeyboardEvent) {
     if (!isRecording) return;

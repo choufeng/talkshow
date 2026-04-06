@@ -1,6 +1,9 @@
 <script lang="ts">
   import { onboarding } from '$lib/stores/onboarding';
+  import { config } from '$lib/stores/config';
   import { onMount } from 'svelte';
+  import KeyBadge from '$lib/components/ui/key-badge/index.svelte';
+  import { parseKeys } from '$lib/utils/shortcut';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import { Languages, Loader2, CheckCircle2, AlertCircle, RotateCcw } from 'lucide-svelte';
 
@@ -51,6 +54,8 @@
     resultText = '';
     onboarding.setStepValid(6, true);
   }
+
+  let translateKeys = $derived(parseKeys($config.translate_shortcut));
 
   onMount(() => {
     (async () => {
@@ -150,9 +155,11 @@
   {#if stepState === 'waiting'}
     <div class="flex items-center justify-center gap-2 mt-4">
       <span class="text-caption text-foreground-alt">按下</span>
-      <kbd class="px-3 py-1.5 rounded-md text-caption font-mono bg-gradient-to-b from-key-bg-from to-key-bg-to border border-key-border text-key-text">
-        Ctrl + Shift + T
-      </kbd>
+      <div class="flex items-center gap-1">
+        {#each translateKeys as key}
+          <KeyBadge label={key} />
+        {/each}
+      </div>
       <span class="text-caption text-foreground-alt">开始录音并翻译</span>
     </div>
   {/if}

@@ -1,6 +1,9 @@
 <script lang="ts">
   import { onboarding } from '$lib/stores/onboarding';
+  import { config } from '$lib/stores/config';
   import { onMount } from 'svelte';
+  import KeyBadge from '$lib/components/ui/key-badge/index.svelte';
+  import { parseKeys } from '$lib/utils/shortcut';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import { Mic, Loader2, CheckCircle2, AlertCircle, RotateCcw } from 'lucide-svelte';
 
@@ -47,6 +50,8 @@
     resultText = '';
     onboarding.setStepValid(5, true);
   }
+
+  let recordingKeys = $derived(parseKeys($config.recording_shortcut));
 
   onMount(() => {
     (async () => {
@@ -138,9 +143,11 @@
   {#if stepState === 'waiting'}
     <div class="flex items-center justify-center gap-2 mt-4">
       <span class="text-caption text-foreground-alt">按下</span>
-      <kbd class="px-3 py-1.5 rounded-md text-caption font-mono bg-gradient-to-b from-key-bg-from to-key-bg-to border border-key-border text-key-text">
-        Ctrl + \
-      </kbd>
+      <div class="flex items-center gap-1">
+        {#each recordingKeys as key}
+          <KeyBadge label={key} />
+        {/each}
+      </div>
       <span class="text-caption text-foreground-alt">开始录音，再次按下停止</span>
     </div>
   {/if}
