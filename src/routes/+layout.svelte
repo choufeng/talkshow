@@ -32,14 +32,14 @@
   }
 </script>
 
-{#if isLoading}
+{#if isFloatingIndicator}
+  {@render children()}
+{:else if isLoading}
   <div class="flex h-screen w-screen items-center justify-center bg-background">
     <div class="text-muted-foreground text-body">加载中...</div>
   </div>
 {:else if !$onboarding.completed}
   <OnboardingWizard />
-{:else if isFloatingIndicator}
-  {@render children()}
 {:else}
 <div class="flex h-screen w-screen overflow-hidden">
   <aside class="w-52 bg-background-alt border-r border-border flex flex-col">
