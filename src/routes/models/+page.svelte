@@ -172,12 +172,17 @@
     ));
   }
 
-  function handleApiKeyChange(providerId: string, value: string) {
-    config.save(updateNestedPath($config, ['ai', 'providers'], (providers) =>
-      (providers as ProviderConfig[]).map((p) =>
-        p.id === providerId ? { ...p, api_key: value } : p
-      )
-    ));
+  async function handleApiKeyChange(providerId: string, value: string) {
+    try {
+      await config.save(updateNestedPath($config, ['ai', 'providers'], (providers) =>
+        (providers as ProviderConfig[]).map((p) =>
+          p.id === providerId ? { ...p, api_key: value } : p
+        )
+      ));
+    } catch (e) {
+      console.error('Failed to save API key:', e);
+      await config.load();
+    }
   }
 
   function handleAddModel(providerId: string, model: ModelConfig) {

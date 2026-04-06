@@ -5,7 +5,7 @@
     value: string;
     placeholder?: string;
     mode?: 'password' | 'text';
-    onChange: (value: string) => void;
+    onChange: (value: string) => void | Promise<void>;
     'aria-labelledby'?: string;
     'aria-label'?: string;
   }
@@ -32,8 +32,8 @@
     editing = true;
   }
 
-  function confirm() {
-    onChange(editValue);
+  async function confirm() {
+    await onChange(editValue);
     editing = false;
   }
 

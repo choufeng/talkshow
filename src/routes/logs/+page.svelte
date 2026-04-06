@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
-  import { ScrollText } from 'lucide-svelte';
+  import { ScrollText, RefreshCw, ToggleLeft, ToggleRight } from 'lucide-svelte';
   import { formatTimestamp } from '$lib/utils';
   import { invokeWithError } from '$lib/ai/shared';
 
@@ -29,16 +29,23 @@
     system: 'text-muted-foreground',
   };
 
+  const AUTO_REFRESH_INTERVAL = 3000;
+
   let activeTab = $state<'current' | 'history'>('current');
   let selectedModule = $state<string>('all');
   let sessions = $state<LogSession[]>([]);
   let entries = $state<LogEntry[]>([]);
   let selectedSession = $state<string | null>(null);
   let loading = $state(false);
+  let refreshing = $state(false);
   let copied = $state(false);
   let selectMode = $state(false);
   let selectedIds = $state<number[]>([]);
   let lastClickedIndex = $state<number>(-1);
+  let autoRefresh = $state(false);
+  let autoRefreshTimer: ReturnType<typeof setInterval> | null = null;
+  let logContainer: HTMLDivElement | undefined = $state();
+  let isUserScrolledUp = $state(false);
 
   let filteredEntries = $derived(
     selectedModule === 'all'
@@ -52,6 +59,61 @@
     await loadSessions();
     await loadCurrentLog();
   });
+
+  onDestroy(() => {
+    stopAutoRefresh();
+  });
+
+  function startAutoRefresh() {
+    stopAutoRefresh();
+    autoRefreshTimer = setInterval(pollCurrentLog, AUTO_REFRESH_INTERVAL);
+  }
+
+  function stopAutoRefresh() {
+    if (autoRefreshTimer !== null) {
+      clearInterval(autoRefreshTimer);
+      autoRefreshTimer = null;
+    }
+  }
+
+  function toggleAutoRefresh() {
+    autoRefresh = !autoRefresh;
+    if (autoRefresh) {
+      startAutoRefresh();
+    } else {
+      stopAutoRefresh();
+    }
+  }
+
+  async function pollCurrentLog() {
+    const newEntries = await invokeWithError<LogEntry[]>('get_log_content', { sessionFile: null }) ?? [];
+    if (newEntries.length !== entries.length) {
+      entries = newEntries;
+      if (!isUserScrolledUp && logContainer) {
+        requestAnimationFrame(() => {
+          logContainer!.scrollTop = logContainer!.scrollHeight;
+        });
+      }
+    }
+  }
+
+  async function manualRefresh() {
+    refreshing = true;
+    if (activeTab === 'current' && !selectedSession) {
+      await loadCurrentLog();
+    } else if (selectedSession) {
+      await loadSessionLog(selectedSession);
+    } else {
+      await loadSessions();
+    }
+    refreshing = false;
+  }
+
+  function onLogScroll() {
+    if (!logContainer) return;
+    const { scrollTop, scrollHeight, clientHeight } = logContainer;
+    isUserScrolledUp = scrollHeight - scrollTop - clientHeight > 40;
+  }
 
   async function loadSessions() {
     sessions = await invokeWithError<LogSession[]>('get_log_sessions') ?? [];
@@ -75,7 +137,9 @@
     if (tab === 'current') {
       selectedSession = null;
       await loadCurrentLog();
+      if (autoRefresh) startAutoRefresh();
     } else {
+      stopAutoRefresh();
       entries = [];
       selectedSession = null;
     }
@@ -197,6 +261,30 @@
       {/each}
     </div>
 
+    <button
+      class="p-1.5 rounded text-caption border border-border text-muted-foreground hover:text-foreground transition-colors {refreshing ? 'animate-spin' : ''}"
+      onclick={manualRefresh}
+      title="刷新"
+      disabled={refreshing}
+    >
+      <RefreshCw size={14} />
+    </button>
+
+    {#if activeTab === 'current' && !selectedSession}
+      <button
+        class="flex items-center gap-1 px-2 py-1 rounded text-caption transition-colors {autoRefresh ? 'text-green-400 hover:text-green-300' : 'text-muted-foreground hover:text-foreground'}"
+        onclick={toggleAutoRefresh}
+        title="{autoRefresh ? '关闭自动刷新' : '开启自动刷新（3秒）'}"
+      >
+        {#if autoRefresh}
+          <ToggleRight size={16} />
+        {:else}
+          <ToggleLeft size={16} />
+        {/if}
+        自动
+      </button>
+    {/if}
+
     {#if currentSession && activeTab === 'current'}
       <span class="ml-auto text-caption text-muted-foreground">
         {filteredEntries.length} 条日志
@@ -269,7 +357,7 @@
       <div class="text-base text-muted-foreground py-12 text-center">暂无日志</div>
     {:else}
       <div class="border border-border rounded-xl overflow-hidden">
-        <div class="max-h-[calc(100vh-200px)] overflow-y-auto font-mono text-body">
+        <div class="max-h-[calc(100vh-200px)] overflow-y-auto font-mono text-body" bind:this={logContainer} onscroll={onLogScroll}>
           {#each filteredEntries as entry, i}
             <div
               class="flex gap-3 px-5 py-2 border-b border-border last:border-b-0 hover:bg-muted/30               {selectMode && selectedIds.includes(i) ? 'bg-muted/50' : ''} {selectMode ? 'cursor-pointer' : ''}"

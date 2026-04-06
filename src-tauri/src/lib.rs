@@ -2,7 +2,6 @@ mod ai;
 mod audio_control;
 mod clipboard;
 mod config;
-mod keyring_store;
 mod llm_client;
 mod logger;
 #[cfg(target_os = "macos")]
@@ -52,7 +51,7 @@ struct SenseVoiceState {
 }
 
 struct VertexClientState {
-    client: Arc<Mutex<Option<rig_vertexai::Client>>>,
+    client: crate::ai::VertexClientCache,
 }
 
 struct ShortcutIds {
@@ -171,13 +170,7 @@ fn stop_recording(
 
                         let config_start = Instant::now();
                         let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
-                        let app_config = {
-                            let base = config::load_config(&app_data_dir);
-                            let provider_ids: Vec<String> =
-                                base.ai.providers.iter().map(|p| p.id.clone()).collect();
-                            let keyring_keys = keyring_store::load_all_api_keys(&provider_ids);
-                            config::merge_api_keys_into_config(base, &keyring_keys)
-                        };
+                        let app_config = config::load_config(&app_data_dir);
                         let config_elapsed = config_start.elapsed().as_millis();
                         let transcription = app_config.features.transcription.clone();
                         let provider = app_config
@@ -336,6 +329,13 @@ fn stop_recording(
                                     });
                                     let skills_elapsed = skills_start.elapsed().as_millis();
 
+                                    let original_text =
+                                        if recording_mode == RECORDING_MODE_TRANSLATION {
+                                            Some(final_text.clone())
+                                        } else {
+                                            None
+                                        };
+
                                     if recording_mode == RECORDING_MODE_TRANSLATION {
                                         if transcription.polish_enabled
                                             && !transcription.polish_provider_id.is_empty()
@@ -403,6 +403,15 @@ fn stop_recording(
                                         logger.info("ai", "录音已重新开始，丢弃当前 AI 结果", None);
                                         return;
                                     }
+
+                                    let _ = h.emit(
+                                        "pipeline:complete",
+                                        serde_json::json!({
+                                            "text": &final_text,
+                                            "mode": recording_mode,
+                                            "original_text": original_text,
+                                        }),
+                                    );
 
                                     let clipboard_start = Instant::now();
                                     let final_text_clone = final_text.clone();
@@ -678,11 +687,22 @@ fn destroy_indicator(app_handle: &tauri::AppHandle) {
 #[tauri::command]
 fn get_config(app_handle: tauri::AppHandle) -> config::AppConfig {
     let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
+    config::load_config(&app_data_dir)
+}
+
+#[tauri::command]
+fn get_onboarding_status(app_handle: tauri::AppHandle) -> bool {
+    let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
     let config = config::load_config(&app_data_dir);
-    let provider_ids: Vec<String> = config.ai.providers.iter().map(|p| p.id.clone()).collect();
-    let keyring_keys = keyring_store::load_all_api_keys(&provider_ids);
-    let config = config::merge_api_keys_into_config(config, &keyring_keys);
-    config::mask_api_keys(config)
+    config.onboarding_completed
+}
+
+#[tauri::command]
+fn set_onboarding_completed(app_handle: tauri::AppHandle, completed: bool) -> Result<(), String> {
+    let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
+    let mut config = config::load_config(&app_data_dir);
+    config.onboarding_completed = completed;
+    config::save_config(&app_data_dir, &config)
 }
 
 #[tauri::command]
@@ -753,31 +773,8 @@ fn update_shortcut(
 #[tauri::command]
 fn save_config_cmd(app_handle: tauri::AppHandle, config: config::AppConfig) -> Result<(), String> {
     config::validate_config(&config)?;
-
     let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
-
-    // 首次保存时迁移旧密钥到 keyring
-    let existing_config = config::load_config(&app_data_dir);
-    for provider in &existing_config.ai.providers {
-        if let Some(ref key) = provider.api_key
-            && !key.is_empty()
-        {
-            let _ = keyring_store::store_api_key(&provider.id, key);
-        }
-    }
-
-    // 保存 api_key 到 keyring，从 JSON 中剥离
-    let (clean_config, keys) = config::strip_api_keys(config);
-    for (provider_id, api_key) in keys {
-        if let Some(key) = api_key
-            && !key.is_empty()
-            && !key.contains("...")
-        {
-            keyring_store::store_api_key(&provider_id, &key)?;
-        }
-    }
-
-    config::save_config(&app_data_dir, &clean_config)
+    config::save_config(&app_data_dir, &config)
 }
 
 #[derive(serde::Serialize, Clone)]
@@ -920,6 +917,7 @@ async fn test_model_connectivity(
     {
         m.verified = Some(verified);
     }
+
     config::save_config(&app_data_dir, &app_config)?;
 
     Ok(TestResult {
@@ -1060,6 +1058,8 @@ pub fn run() {
         }))
         .invoke_handler(tauri::generate_handler![
             get_config,
+            get_onboarding_status,
+            set_onboarding_completed,
             update_shortcut,
             save_config_cmd,
             test_model_connectivity,
@@ -1349,12 +1349,6 @@ pub fn run() {
                                                         );
                                                     }
 
-                                                    // Hide main window
-                                                    if let Some(mw) = app_handle_bg.get_webview_window("main")
-                                                        && mw.is_visible().unwrap_or(false) {
-                                                            let _ = mw.hide();
-                                                        }
-
                                                     // Register ESC shortcut
                                                     let h = app_handle_bg.clone();
                                                     let _ = h.global_shortcut().register(esc_bg);
@@ -1468,12 +1462,6 @@ pub fn run() {
                                                             app_handle_bg.try_state::<Logger>().as_deref(),
                                                         );
                                                     }
-
-                                                    // Hide main window
-                                                    if let Some(mw) = app_handle_bg.get_webview_window("main")
-                                                        && mw.is_visible().unwrap_or(false) {
-                                                            let _ = mw.hide();
-                                                        }
 
                                                     // Register ESC shortcut
                                                     let h = app_handle_bg.clone();
