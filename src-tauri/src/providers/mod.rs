@@ -1,4 +1,5 @@
 pub mod dashscope;
+pub mod openai;
 pub mod sensevoice;
 pub mod vertex;
 
@@ -89,6 +90,10 @@ pub fn create_provider(
     match config.id.as_str() {
         "dashscope" => Ok(Box::new(dashscope::DashScopeProvider::new(
             config.api_key.clone(),
+        ))),
+        "openai" => Ok(Box::new(openai::OpenAIProvider::new(
+            config.api_key.clone(),
+            config.endpoint.clone(),
         ))),
         "vertex" => Ok(Box::new(vertex::VertexAIProvider::new())),
         "sensevoice" => Ok(Box::new(sensevoice::SenseVoiceProvider::new(
