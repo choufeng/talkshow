@@ -47,6 +47,7 @@ pub fn test_providers() -> Vec<ProviderConfig> {
         id: "test-provider".to_string(),
         name: "Test Provider".to_string(),
         api_key: Some("sk-test-key".to_string()),
+        endpoint: None,
         models: vec![],
     }]
 }

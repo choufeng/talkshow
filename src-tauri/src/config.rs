@@ -11,9 +11,21 @@ const CONFIG_FILE_NAME: &str = "config.json";
 fn builtin_providers() -> Vec<ProviderConfig> {
     vec![
         ProviderConfig {
+            id: "openai".to_string(),
+            name: "OpenAI".to_string(),
+            api_key: Some(String::new()),
+            endpoint: Some("https://api.openai.com/v1".to_string()),
+            models: vec![ModelConfig {
+                name: "gpt-4o-transcribe".to_string(),
+                capabilities: vec!["transcription".to_string(), "chat".to_string()],
+                verified: None,
+            }],
+        },
+        ProviderConfig {
             id: "dashscope".to_string(),
             name: "阿里云".to_string(),
             api_key: Some(String::new()),
+            endpoint: None,
             models: vec![ModelConfig {
                 name: "qwen2-audio-instruct".to_string(),
                 capabilities: vec!["transcription".to_string()],
@@ -24,6 +36,7 @@ fn builtin_providers() -> Vec<ProviderConfig> {
             id: "vertex".to_string(),
             name: "Vertex AI".to_string(),
             api_key: None,
+            endpoint: None,
             models: vec![ModelConfig {
                 name: "gemini-2.0-flash".to_string(),
                 capabilities: vec!["transcription".to_string()],
@@ -34,11 +47,35 @@ fn builtin_providers() -> Vec<ProviderConfig> {
             id: "sensevoice".to_string(),
             name: "SenseVoice (本地)".to_string(),
             api_key: None,
+            endpoint: None,
             models: vec![ModelConfig {
                 name: "SenseVoice-Small".to_string(),
                 capabilities: vec!["transcription".to_string()],
                 verified: None,
             }],
+        },
+        ProviderConfig {
+            id: "zhipu".to_string(),
+            name: "智谱 AI".to_string(),
+            api_key: Some(String::new()),
+            endpoint: Some("https://open.bigmodel.cn/api/paas/v4".to_string()),
+            models: vec![
+                ModelConfig {
+                    name: "glm-4.7-flash".to_string(),
+                    capabilities: vec!["chat".to_string()],
+                    verified: None,
+                },
+                ModelConfig {
+                    name: "glm-4.7".to_string(),
+                    capabilities: vec!["chat".to_string()],
+                    verified: None,
+                },
+                ModelConfig {
+                    name: "glm-5".to_string(),
+                    capabilities: vec!["chat".to_string()],
+                    verified: None,
+                },
+            ],
         },
     ]
 }
@@ -93,6 +130,7 @@ pub struct ProviderConfig {
     pub id: String,
     pub name: String,
     pub api_key: Option<String>,
+    pub endpoint: Option<String>,
     pub models: Vec<ModelConfig>,
 }
 
@@ -639,6 +677,7 @@ mod tests {
             name: "Custom".to_string(),
             api_key: Some("key".to_string()),
             models: vec![],
+            endpoint: None,
         }];
         let result = merge_builtin_providers(providers);
         let ids: Vec<&str> = result.iter().map(|p| p.id.as_str()).collect();
@@ -655,6 +694,7 @@ mod tests {
             name: "阿里云".to_string(),
             api_key: Some("key".to_string()),
             models: vec![],
+            endpoint: None,
         }];
         let result = merge_builtin_providers(providers);
         let dashscope = result.iter().find(|p| p.id == "dashscope").unwrap();
@@ -709,6 +749,7 @@ mod tests {
             name: "Vertex AI".to_string(),
             api_key: None,
             models: vec![],
+            endpoint: None,
         }];
         assert!(validate_config(&config).is_ok());
     }
@@ -721,6 +762,7 @@ mod tests {
             name: "Test".to_string(),
             api_key: None,
             models: vec![],
+            endpoint: None,
         }];
         assert!(validate_config(&config).is_err());
     }

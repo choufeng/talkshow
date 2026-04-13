@@ -1,6 +1,8 @@
 pub mod dashscope;
+pub mod openai;
 pub mod sensevoice;
 pub mod vertex;
+pub mod zhipu;
 
 use crate::config::{ModelConfig, ProviderConfig};
 use crate::logger::Logger;
@@ -90,9 +92,17 @@ pub fn create_provider(
         "dashscope" => Ok(Box::new(dashscope::DashScopeProvider::new(
             config.api_key.clone(),
         ))),
+        "openai" => Ok(Box::new(openai::OpenAIProvider::new(
+            config.api_key.clone(),
+            config.endpoint.clone(),
+        ))),
         "vertex" => Ok(Box::new(vertex::VertexAIProvider::new())),
         "sensevoice" => Ok(Box::new(sensevoice::SenseVoiceProvider::new(
             ctx.sensevoice_engine.clone(),
+        ))),
+        "zhipu" => Ok(Box::new(zhipu::ZhipuProvider::new(
+            config.api_key.clone(),
+            config.endpoint.clone(),
         ))),
         _ => Err(ProviderError::ProviderNotFound(config.id.clone())),
     }
