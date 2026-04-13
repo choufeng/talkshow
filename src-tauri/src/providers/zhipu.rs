@@ -118,9 +118,10 @@ impl Provider for ZhipuProvider {
             content: String,
         }
 
-        let resp: ChatResponse = response.json().await.map_err(|e| {
-            ProviderError::RequestError(format!("Failed to parse response: {}", e))
-        })?;
+        let resp: ChatResponse = response
+            .json()
+            .await
+            .map_err(|e| ProviderError::RequestError(format!("Failed to parse response: {}", e)))?;
 
         let text = resp
             .choices

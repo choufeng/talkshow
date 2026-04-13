@@ -99,9 +99,10 @@ impl Provider for OpenAIProvider {
             text: String,
         }
 
-        let resp: TranscriptionResponse = response.json().await.map_err(|e| {
-            ProviderError::RequestError(format!("Failed to parse response: {}", e))
-        })?;
+        let resp: TranscriptionResponse = response
+            .json()
+            .await
+            .map_err(|e| ProviderError::RequestError(format!("Failed to parse response: {}", e)))?;
 
         logger.info(
             "openai",
@@ -184,9 +185,10 @@ impl Provider for OpenAIProvider {
             content: String,
         }
 
-        let resp: ChatResponse = response.json().await.map_err(|e| {
-            ProviderError::RequestError(format!("Failed to parse response: {}", e))
-        })?;
+        let resp: ChatResponse = response
+            .json()
+            .await
+            .map_err(|e| ProviderError::RequestError(format!("Failed to parse response: {}", e)))?;
 
         let text = resp
             .choices
