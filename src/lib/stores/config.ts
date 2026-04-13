@@ -115,6 +115,17 @@ export const BUILTIN_PROVIDERS: ProviderConfig[] = [
     id: 'sensevoice',
     name: 'SenseVoice (本地)',
     models: [{ name: 'SenseVoice-Small', capabilities: ['transcription'] }]
+  },
+  {
+    id: 'zhipu',
+    name: '智谱 AI',
+    api_key: '',
+    endpoint: 'https://open.bigmodel.cn/api/paas/v4',
+    models: [
+      { name: 'glm-4.7-flash', capabilities: ['chat'] },
+      { name: 'glm-4.7', capabilities: ['chat'] },
+      { name: 'glm-5', capabilities: ['chat'] }
+    ]
   }
 ];
 
@@ -122,9 +133,9 @@ export function isBuiltinProvider(id: string): boolean {
   return BUILTIN_PROVIDERS.some((p) => p.id === id);
 }
 
-export const PROVIDERS_REQUIRING_KEY = ['dashscope', 'openai'];
+export const PROVIDERS_REQUIRING_KEY = ['dashscope', 'openai', 'zhipu'];
 
-export const PROVIDERS_WITH_ENDPOINT = ['openai'];
+export const PROVIDERS_WITH_ENDPOINT = ['openai', 'zhipu'];
 export function needsApiKey(providerId: string): boolean {
   return PROVIDERS_REQUIRING_KEY.includes(providerId);
 }

@@ -54,6 +54,29 @@ fn builtin_providers() -> Vec<ProviderConfig> {
                 verified: None,
             }],
         },
+        ProviderConfig {
+            id: "zhipu".to_string(),
+            name: "智谱 AI".to_string(),
+            api_key: Some(String::new()),
+            endpoint: Some("https://open.bigmodel.cn/api/paas/v4".to_string()),
+            models: vec![
+                ModelConfig {
+                    name: "glm-4.7-flash".to_string(),
+                    capabilities: vec!["chat".to_string()],
+                    verified: None,
+                },
+                ModelConfig {
+                    name: "glm-4.7".to_string(),
+                    capabilities: vec!["chat".to_string()],
+                    verified: None,
+                },
+                ModelConfig {
+                    name: "glm-5".to_string(),
+                    capabilities: vec!["chat".to_string()],
+                    verified: None,
+                },
+            ],
+        },
     ]
 }
 
