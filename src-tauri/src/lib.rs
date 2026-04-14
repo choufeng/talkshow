@@ -12,7 +12,13 @@ mod recording;
 mod sensevoice;
 mod skills;
 mod translation;
+mod indicator;
 mod shortcuts;
+
+use indicator::{
+    INDICATOR_LABEL, TRAY_ID, destroy_indicator, emit_indicator, emit_indicator_paste_failed,
+    restore_default_tray, show_indicator,
+};
 
 // Re-export types and functions for integration tests
 pub use config::{
@@ -42,8 +48,6 @@ use shortcuts::{
     parse_shortcut, CANCELLED, LAST_REC_PRESS, RECORDING, RECORDING_MODE_NONE,
     RECORDING_MODE_TRANSCRIPTION, RECORDING_MODE_TRANSLATION, SHORTCUT_IDS,
 };
-
-const TRAY_ID: &str = "main";
 
 struct SenseVoiceState {
     engine: Arc<Mutex<Option<SenseVoiceEngine>>>,
@@ -542,138 +546,6 @@ fn stop_recording(
             destroy_indicator(app_handle);
         }
         _ => {}
-    }
-}
-
-fn restore_default_tray(app_handle: &tauri::AppHandle, default_icon: Image) {
-    if let Some(tray) = app_handle.tray_by_id("main") {
-        let _ = tray.set_icon(Some(default_icon));
-        let _ = tray.set_tooltip(Some("TalkShow"));
-    }
-}
-
-const INDICATOR_LABEL: &str = "recording-indicator";
-
-fn show_indicator(app_handle: &tauri::AppHandle) {
-    let payload = serde_json::json!({
-        "replaceMode": false,
-        "selectedPreview": ""
-    });
-
-    // Try to get the pre-created indicator window
-    if let Some(window) = app_handle.get_webview_window(INDICATOR_LABEL) {
-        // Dynamically adjust position based on current main window's monitor
-        if let Some(main_window) = app_handle.get_webview_window("main")
-            && let Ok(Some(monitor)) = main_window.primary_monitor()
-        {
-            let size = monitor.size();
-            let scale = monitor.scale_factor();
-            let screen_w = size.width as f64 / scale;
-            let screen_h = size.height as f64 / scale;
-            let win_w = 180.0;
-            let win_h = 48.0;
-            let bottom_margin = 24.0;
-            let _ = window.set_position(tauri::LogicalPosition::new(
-                (screen_w - win_w) / 2.0,
-                screen_h - win_h - bottom_margin,
-            ));
-        }
-
-        let _ = window.show();
-        let _ = app_handle.emit_to(INDICATOR_LABEL, "indicator:recording", &payload);
-        return;
-    }
-
-    // Fallback: create window if pre-created one doesn't exist
-    let main_window = app_handle.get_webview_window("main");
-    let monitor = main_window
-        .as_ref()
-        .and_then(|w| w.primary_monitor().ok().flatten());
-
-    let (x, y) = match &monitor {
-        Some(m) => {
-            let size = m.size();
-            let scale = m.scale_factor();
-            let screen_w = size.width as f64 / scale;
-            let screen_h = size.height as f64 / scale;
-            let win_w = 180.0;
-            let win_h = 48.0;
-            let bottom_margin = 24.0;
-            ((screen_w - win_w) / 2.0, screen_h - win_h - bottom_margin)
-        }
-        None => (620.0, 700.0),
-    };
-
-    let url = "/recording";
-
-    let window = WebviewWindowBuilder::new(
-        app_handle,
-        INDICATOR_LABEL,
-        tauri::WebviewUrl::App(url.into()),
-    )
-    .inner_size(180.0, 48.0)
-    .position(x, y)
-    .transparent(true)
-    .decorations(false)
-    .shadow(false)
-    .background_color(Color(0, 0, 0, 0))
-    .resizable(false)
-    .always_on_top(true)
-    .skip_taskbar(true)
-    .visible(false)
-    .focusable(false)
-    .accept_first_mouse(true)
-    .build();
-
-    match window {
-        Ok(w) => {
-            #[cfg(target_os = "macos")]
-            {
-                if let Err(e) = macos::floating_panel::make_window_nonactivating(&w) {
-                    eprintln!("Failed to make window nonactivating: {}", e);
-                }
-            }
-
-            let _ = w.show();
-            let _ = app_handle.emit_to(INDICATOR_LABEL, "indicator:recording", &payload);
-        }
-        Err(e) => {
-            eprintln!("Failed to create indicator window: {}", e);
-        }
-    }
-}
-
-fn emit_indicator(app_handle: &tauri::AppHandle, event: &str) {
-    let _ = app_handle.emit_to(INDICATOR_LABEL, event, ());
-}
-
-fn emit_indicator_paste_failed(app_handle: &tauri::AppHandle) {
-    if let Some(window) = app_handle.get_webview_window(INDICATOR_LABEL) {
-        // Resize window to accommodate the error message
-        let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize::new(280.0, 48.0)));
-        // Re-center horizontally based on new width
-        if let Some(main_window) = app_handle.get_webview_window("main")
-            && let Ok(Some(monitor)) = main_window.primary_monitor()
-        {
-            let size = monitor.size();
-            let scale = monitor.scale_factor();
-            let screen_w = size.width as f64 / scale;
-            let screen_h = size.height as f64 / scale;
-            let win_w = 280.0;
-            let win_h = 48.0;
-            let bottom_margin = 24.0;
-            let _ = window.set_position(tauri::LogicalPosition::new(
-                (screen_w - win_w) / 2.0,
-                screen_h - win_h - bottom_margin,
-            ));
-        }
-    }
-    let _ = app_handle.emit_to(INDICATOR_LABEL, "indicator:paste-failed", ());
-}
-
-fn destroy_indicator(app_handle: &tauri::AppHandle) {
-    if let Some(w) = app_handle.get_webview_window(INDICATOR_LABEL) {
-        let _ = w.close();
     }
 }
 
