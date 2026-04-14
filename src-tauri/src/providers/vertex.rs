@@ -3,8 +3,8 @@ use crate::logger::Logger;
 use crate::providers::{Provider, ProviderError, ThinkingMode};
 use async_trait::async_trait;
 use base64::Engine;
-use std::sync::{Arc, Mutex};
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 const VERTEX_BASE_URL: &str = "https://aiplatform.googleapis.com/v1";
 const GOOGLE_TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
@@ -59,12 +59,8 @@ fn read_adc_credentials() -> Result<AdcCredentials, ProviderError> {
         ))
     })?;
 
-    serde_json::from_str::<AdcCredentials>(&content).map_err(|e| {
-        ProviderError::RequestError(format!(
-            "Failed to parse ADC credentials: {}",
-            e
-        ))
-    })
+    serde_json::from_str::<AdcCredentials>(&content)
+        .map_err(|e| ProviderError::RequestError(format!("Failed to parse ADC credentials: {}", e)))
 }
 
 pub fn get_project_from_gcloud_config() -> Option<String> {
@@ -111,8 +107,8 @@ pub fn get_vertex_location() -> String {
 
 impl VertexAIProvider {
     pub fn new(token_cache: VertexTokenCache) -> Self {
-        let adc_credentials = read_adc_credentials()
-            .expect("Failed to load ADC credentials on startup");
+        let adc_credentials =
+            read_adc_credentials().expect("Failed to load ADC credentials on startup");
         Self {
             token_cache,
             adc_credentials,
@@ -143,10 +139,7 @@ impl VertexAIProvider {
             .send()
             .await
             .map_err(|e| {
-                ProviderError::RequestError(format!(
-                    "Failed to refresh ADC token: {}",
-                    e
-                ))
+                ProviderError::RequestError(format!("Failed to refresh ADC token: {}", e))
             })?;
 
         if !response.status().is_success() {
@@ -158,20 +151,15 @@ impl VertexAIProvider {
             )));
         }
 
-        let token_resp: serde_json::Value = response
-            .json()
-            .await
-            .map_err(|e| {
-                ProviderError::RequestError(format!("Failed to parse token response: {}", e))
-            })?;
+        let token_resp: serde_json::Value = response.json().await.map_err(|e| {
+            ProviderError::RequestError(format!("Failed to parse token response: {}", e))
+        })?;
 
         let token = token_resp
             .get("access_token")
             .and_then(|t| t.as_str())
             .ok_or_else(|| {
-                ProviderError::RequestError(
-                    "Token response missing access_token field".to_string(),
-                )
+                ProviderError::RequestError("Token response missing access_token field".to_string())
             })?
             .to_string();
 
