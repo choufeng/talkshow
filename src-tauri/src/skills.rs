@@ -56,7 +56,6 @@ pub fn assemble_skills_prompt(
     transcription: &str,
     app_name: &str,
     bundle_id: &str,
-    selected_text: Option<&str>,
 ) -> (String, String) {
     let mut system_prompt = String::from(
         "你是一个语音转文字的文本处理助手。请根据以下规则处理用户的输入文本。\n\n基础规则：\n1. 如果输入是短内容（如单词、短语、简短回答）或非完整句子，不要添加句尾标点符号。只有当输入明显构成完整句子时才添加标点。\n2. 当输入包含多种语言（如中英文混用）时，保留各语言的原文表达，不要尝试翻译或统一为某一种语言。\n",
@@ -66,12 +65,6 @@ pub fn assemble_skills_prompt(
         "当前用户正在使用的应用是：{} ({})\n",
         app_name, bundle_id
     ));
-    if let Some(selected) = selected_text {
-        system_prompt.push_str(&format!(
-            "用户选中了以下文字，准备用语音替换它。请在处理转写结果时考虑这个上下文，使替换后的文本自然衔接。\n选中的原文：「{}」\n",
-            selected
-        ));
-    }
     system_prompt.push_str("请仅应用与当前场景相关的规则，跳过不适用的规则。");
 
     for skill in skills {
@@ -92,7 +85,6 @@ pub async fn process_with_skills(
     providers: &[ProviderConfig],
     transcription: &str,
     vertex_cache: &ProviderContext,
-    selected_text: Option<&str>,
 ) -> Result<String, String> {
     if !skills_config.enabled {
         return Ok(transcription.to_string());
@@ -162,13 +154,8 @@ pub async fn process_with_skills(
     let start = std::time::Instant::now();
 
     let skills_owned: Vec<Skill> = enabled_skills.into_iter().cloned().collect();
-    let (system_prompt, user_message) = assemble_skills_prompt(
-        &skills_owned,
-        transcription,
-        &app_name,
-        &bundle_id,
-        selected_text,
-    );
+    let (system_prompt, user_message) =
+        assemble_skills_prompt(&skills_owned, transcription, &app_name, &bundle_id);
 
     let provider = match providers
         .iter()
@@ -249,7 +236,6 @@ pub async fn process_with_skills_client(
     providers: &[ProviderConfig],
     transcription: &str,
     client: &mut dyn LlmClient,
-    selected_text: Option<&str>,
 ) -> Result<String, String> {
     if !skills_config.enabled {
         return Ok(transcription.to_string());
@@ -294,13 +280,8 @@ pub async fn process_with_skills_client(
     let skills_owned: Vec<Skill> = enabled_skills.into_iter().cloned().collect();
     let (app_name, bundle_id) =
         get_frontmost_app().unwrap_or(("Unknown".to_string(), "unknown".to_string()));
-    let (system_prompt, user_message) = assemble_skills_prompt(
-        &skills_owned,
-        transcription,
-        &app_name,
-        &bundle_id,
-        selected_text,
-    );
+    let (system_prompt, user_message) =
+        assemble_skills_prompt(&skills_owned, transcription, &app_name, &bundle_id);
 
     let full_prompt = format!("{}\n\n输入文本：\n{}", system_prompt, user_message);
 
@@ -412,16 +393,9 @@ mod tests {
         let providers = test_providers();
 
         let mut mock = MockLlmClient::new();
-        let result = process_with_skills_client(
-            &logger,
-            &config,
-            &tc,
-            &providers,
-            "你好世界",
-            &mut mock,
-            None,
-        )
-        .await;
+        let result =
+            process_with_skills_client(&logger, &config, &tc, &providers, "你好世界", &mut mock)
+                .await;
         assert_eq!(result.unwrap(), "你好世界");
     }
 
@@ -434,8 +408,7 @@ mod tests {
 
         let mut mock = MockLlmClient::new();
         let result =
-            process_with_skills_client(&logger, &config, &tc, &providers, "", &mut mock, None)
-                .await;
+            process_with_skills_client(&logger, &config, &tc, &providers, "", &mut mock).await;
         assert_eq!(result.unwrap(), "");
     }
 
@@ -450,16 +423,9 @@ mod tests {
         let providers = test_providers();
 
         let mut mock = MockLlmClient::new();
-        let result = process_with_skills_client(
-            &logger,
-            &config,
-            &tc,
-            &providers,
-            "你好世界",
-            &mut mock,
-            None,
-        )
-        .await;
+        let result =
+            process_with_skills_client(&logger, &config, &tc, &providers, "你好世界", &mut mock)
+                .await;
         assert_eq!(result.unwrap(), "你好世界");
     }
 
@@ -477,16 +443,9 @@ mod tests {
         let providers = test_providers();
 
         let mut mock = MockLlmClient::new();
-        let result = process_with_skills_client(
-            &logger,
-            &config,
-            &tc,
-            &providers,
-            "你好世界",
-            &mut mock,
-            None,
-        )
-        .await;
+        let result =
+            process_with_skills_client(&logger, &config, &tc, &providers, "你好世界", &mut mock)
+                .await;
         assert_eq!(result.unwrap(), "你好世界");
     }
 
@@ -504,16 +463,9 @@ mod tests {
         let providers = test_providers();
 
         let mut mock = MockLlmClient::new();
-        let result = process_with_skills_client(
-            &logger,
-            &config,
-            &tc,
-            &providers,
-            "你好世界",
-            &mut mock,
-            None,
-        )
-        .await;
+        let result =
+            process_with_skills_client(&logger, &config, &tc, &providers, "你好世界", &mut mock)
+                .await;
         assert_eq!(result.unwrap(), "你好世界");
     }
 
@@ -535,7 +487,6 @@ mod tests {
             &providers,
             "嗯那个你好世界啊",
             &mut mock,
-            None,
         )
         .await;
         assert_eq!(result.unwrap(), "处理后的文本");
@@ -552,16 +503,9 @@ mod tests {
         mock.expect_send_text()
             .returning(|_, _, _| Err("LLM error".to_string()));
 
-        let result = process_with_skills_client(
-            &logger,
-            &config,
-            &tc,
-            &providers,
-            "你好世界",
-            &mut mock,
-            None,
-        )
-        .await;
+        let result =
+            process_with_skills_client(&logger, &config, &tc, &providers, "你好世界", &mut mock)
+                .await;
         assert_eq!(result.unwrap(), "你好世界");
     }
 
@@ -576,7 +520,7 @@ mod tests {
             editable: true,
             enabled: true,
         }];
-        let (system, user) = assemble_skills_prompt(&skills, "你好", "App", "com.app", None);
+        let (system, user) = assemble_skills_prompt(&skills, "你好", "App", "com.app");
         assert!(system.contains("测试技能"));
         assert!(system.contains("测试 prompt"));
         assert_eq!(user, "你好");
@@ -585,15 +529,8 @@ mod tests {
     #[test]
     fn test_assemble_skills_prompt_includes_app_context() {
         let skills = vec![];
-        let (system, _) = assemble_skills_prompt(
-            &skills,
-            "你好",
-            "Finder",
-            "com.apple.finder",
-            Some("选中文本"),
-        );
+        let (system, _) = assemble_skills_prompt(&skills, "你好", "Finder", "com.apple.finder");
         assert!(system.contains("Finder"));
         assert!(system.contains("com.apple.finder"));
-        assert!(system.contains("选中文本"));
     }
 }

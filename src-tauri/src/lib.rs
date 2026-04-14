@@ -321,8 +321,6 @@ fn stop_recording(
                                 })));
 
                                     let skills_start = Instant::now();
-                                    let selected_text = clipboard::get_saved_selected_text();
-                                    let selected_text_ref = selected_text.as_deref();
                                     let mut final_text = skills::process_with_skills(
                                         &logger,
                                         &skills_config,
@@ -330,7 +328,6 @@ fn stop_recording(
                                         &skills_providers,
                                         &text,
                                         &h.state::<ProviderContext>(),
-                                        selected_text_ref,
                                     )
                                     .await
                                     .unwrap_or_else(|e| {
@@ -613,10 +610,10 @@ fn restore_default_tray(app_handle: &tauri::AppHandle, default_icon: Image) {
 
 const INDICATOR_LABEL: &str = "recording-indicator";
 
-fn show_indicator(app_handle: &tauri::AppHandle, selected_text: Option<&str>) {
+fn show_indicator(app_handle: &tauri::AppHandle) {
     let payload = serde_json::json!({
-        "replaceMode": selected_text.is_some(),
-        "selectedPreview": selected_text.map(|t| t.chars().take(50).collect::<String>()).unwrap_or_default()
+        "replaceMode": false,
+        "selectedPreview": ""
     });
 
     // Try to get the pre-created indicator window
@@ -1102,8 +1099,7 @@ pub fn run() {
             sensevoice::download_sensevoice_model,
             sensevoice::delete_sensevoice_model,
             logger::get_log_sessions,
-            logger::get_log_content,
-            clipboard::get_replace_mode_state
+            logger::get_log_content
         ])
         .setup(|app| {
             let app_data_dir = app.path().app_data_dir().unwrap_or_default();
@@ -1326,8 +1322,8 @@ pub fn run() {
                                                         tray.set_icon(Some(recording_icon_owned.clone()));
                                                 }
 
-                                                // Show indicator immediately (without selected_text, will update later)
-                                                show_indicator(&app_handle, None);
+                                                // Show indicator immediately
+                                                show_indicator(&app_handle);
                                                 play_sound("Ping.aiff");
 
                                                 // === Phase 2: Background async operations (~300ms) ===
@@ -1344,27 +1340,9 @@ pub fn run() {
                                                         .filter(|o| o.status.success())
                                                         .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
 
-                                                    // Detect selected text
-                                                    let selected_text = clipboard::detect_selected_text(frontmost.as_deref().unwrap_or(""));
-
-                                                    // Save target app and selected text
+                                                    // Save target app for later paste
                                                     if let Some(ref app) = frontmost {
                                                         clipboard::save_target_app(app);
-                                                    }
-                                                    if let Some(ref text) = selected_text {
-                                                        clipboard::save_selected_text(text);
-                                                        if let Some(logger) = app_handle_bg.try_state::<Logger>() {
-                                                            logger.info("recording", "检测到选中文本，进入替换模式", Some(serde_json::json!({
-                                                                "selected_length": text.len(),
-                                                                "selected_preview": text.chars().take(100).collect::<String>()
-                                                            })));
-                                                        }
-                                                        // Update indicator with replaceMode
-                                                        let payload = serde_json::json!({
-                                                            "replaceMode": true,
-                                                            "selectedPreview": text.chars().take(50).collect::<String>()
-                                                        });
-                                                        let _ = app_handle_bg.emit_to(INDICATOR_LABEL, "indicator:recording", &payload);
                                                     }
 
                                                     // Auto mute
@@ -1473,7 +1451,7 @@ pub fn run() {
                                                 }
 
                                                 // Show indicator immediately
-                                                show_indicator(&app_handle, None);
+                                                show_indicator(&app_handle);
                                                 play_sound("Ping.aiff");
 
                                                 // === Phase 2: Background async operations ===
