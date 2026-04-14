@@ -370,7 +370,7 @@ pub fn stop_recording(
                                     let final_text_clone = final_text.clone();
                                     let target_app_for_paste = saved_target_app.clone();
                                     let clipboard_raw = tokio::time::timeout(
-                                        std::time::Duration::from_secs(2),
+                                        std::time::Duration::from_secs(5),
                                         tokio::task::spawn_blocking(move || {
                                             clipboard::write_and_paste(
                                                 &final_text_clone,
@@ -431,7 +431,7 @@ pub fn stop_recording(
                                         Err(_) => {
                                             logger.error(
                                                 "clipboard",
-                                                "剪贴板操作超时 (5s)",
+                                                "剪贴板操作超时",
                                                 Some(serde_json::json!({
                                                     "text_length": final_text.len(),
                                                 })),

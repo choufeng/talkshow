@@ -104,7 +104,11 @@ impl Provider for VertexAIProvider {
                     {"text": prompt}
                 ]
             }],
-            "generationConfig": {}
+            "generationConfig": {
+                "thinkingConfig": {
+                    "thinkingBudget": 0
+                }
+            }
         });
 
         let client = reqwest::Client::new();
@@ -157,7 +161,7 @@ impl Provider for VertexAIProvider {
         logger: &Logger,
         prompt: &str,
         model: &str,
-        _thinking: ThinkingMode,
+        thinking: ThinkingMode,
     ) -> Result<String, ProviderError> {
         let token = self.get_access_token().await?;
         let (project, location) = Self::get_project_and_location()?;
@@ -169,12 +173,25 @@ impl Provider for VertexAIProvider {
             Some(serde_json::json!({ "model": model })),
         );
 
+        let mut generation_config = serde_json::json!({});
+        match thinking {
+            ThinkingMode::Disabled => {
+                generation_config["thinkingConfig"] =
+                    serde_json::json!({"thinkingBudget": 0});
+            }
+            ThinkingMode::Enabled => {
+                generation_config["thinkingConfig"] =
+                    serde_json::json!({"thinkingBudget": 8192});
+            }
+            ThinkingMode::Default => {}
+        }
+
         let body = serde_json::json!({
             "contents": [{
                 "role": "user",
                 "parts": [{"text": prompt}]
             }],
-            "generationConfig": {}
+            "generationConfig": generation_config
         });
 
         let client = reqwest::Client::new();
