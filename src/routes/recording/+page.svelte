@@ -7,7 +7,7 @@
 
   const appWindow = getCurrentWindow();
 
-  type Phase = "recording" | "processing";
+  type Phase = "recording" | "processing" | "paste-failed";
 
   let phase = $state<Phase>("recording");
   let seconds = $state(0);
@@ -64,6 +64,12 @@
         await listen("indicator:done", scheduleClose),
       );
       unsubs.push(await listen("indicator:error", () => appWindow.close()));
+      unsubs.push(
+        await listen("indicator:paste-failed", () => {
+          phase = "paste-failed";
+          stopTimer();
+        }),
+      );
     })();
 
     return () => unsubs.forEach((fn) => fn());
@@ -75,6 +81,7 @@
   <div
     class="indicator"
     class:processing={phase === "processing"}
+    class:paste-failed={phase === "paste-failed"}
     class:fade-out={!visible}
     style="--accent-color: #ff0055; --accent-shadow: rgba(255, 0, 85, 0.6); --accent-text-shadow: rgba(255, 0, 85, 0.4)"
   >
@@ -89,6 +96,15 @@
       </svg>
       <span class="timer">{formatTime(seconds)}</span>
       <span class="rec-label">REC</span>
+    </div>
+  {:else if phase === "paste-failed"}
+    <div class="status">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" class="warn-icon">
+        <circle cx="8" cy="8" r="7" stroke="#ffb020" stroke-width="1.5" fill="none"/>
+        <line x1="8" y1="4.5" x2="8" y2="9" stroke="#ffb020" stroke-width="1.5" stroke-linecap="round"/>
+        <circle cx="8" cy="11.5" r="0.8" fill="#ffb020"/>
+      </svg>
+      <span class="warn-text">自动粘贴失败，请手动粘贴</span>
     </div>
   {:else}
     <div class="status">
@@ -150,7 +166,7 @@
     </div>
   {/if}
 
-  <button class="btn cancel" onclick={cancel} aria-label={phase === "recording" ? "取消录音" : "中止处理"}>
+  <button class="btn cancel" onclick={cancel} aria-label={phase === "recording" ? "取消录音" : phase === "paste-failed" ? "关闭" : "中止处理"}>
     <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
       <line x1="1" y1="1" x2="9" y2="9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
       <line x1="9" y1="1" x2="1" y2="9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
@@ -174,7 +190,7 @@
     align-items: center;
     justify-content: center;
     gap: 8px;
-    width: 160px;
+    min-width: 160px;
     height: 44px;
     padding: 0 8px;
     background: rgba(30, 30, 30, 0.92);
@@ -267,5 +283,23 @@
     background: linear-gradient(to bottom, rgba(255, 95, 87, 0.25), rgba(255, 95, 87, 0.15));
     color: #ff5f57;
     box-shadow: 0 1px 4px rgba(255, 95, 87, 0.2);
+  }
+
+  .indicator.paste-failed {
+    width: auto;
+    border: 0.5px solid rgba(255, 176, 32, 0.3);
+  }
+
+  .warn-icon {
+    flex-shrink: 0;
+    filter: drop-shadow(0 0 4px rgba(255, 176, 32, 0.4));
+  }
+
+  .warn-text {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Mono", "Menlo", "Consolas", monospace;
+    font-size: 12px;
+    color: #ffb020;
+    font-weight: 500;
+    white-space: nowrap;
   }
 </style>

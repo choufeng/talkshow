@@ -484,37 +484,17 @@ fn stop_recording(
                                                 "剪贴板写入/粘贴失败",
                                                 Some(serde_json::json!({ "error": e })),
                                             );
-                                            show_notification(&h, "剪贴板写入失败", &e);
-                                            destroy_indicator(&h);
-                                            if RECORDING.load(Ordering::SeqCst)
-                                                == RECORDING_MODE_NONE
-                                            {
-                                                let _ = h
-                                                    .global_shortcut()
-                                                    .unregister(Shortcut::new(None, Code::Escape));
-                                            }
+                                            emit_indicator_paste_failed(&h);
                                         }
                                         Err(_) => {
                                             logger.error(
                                                 "clipboard",
-                                                "剪贴板操作超时 (5s)，强制关闭浮窗",
+                                                "剪贴板操作超时 (5s)",
                                                 Some(serde_json::json!({
                                                     "text_length": final_text.len(),
                                                 })),
                                             );
-                                            show_notification(
-                                                &h,
-                                                "剪贴板操作超时",
-                                                "文字已保存到剪贴板，请手动粘贴",
-                                            );
-                                            destroy_indicator(&h);
-                                            if RECORDING.load(Ordering::SeqCst)
-                                                == RECORDING_MODE_NONE
-                                            {
-                                                let _ = h
-                                                    .global_shortcut()
-                                                    .unregister(Shortcut::new(None, Code::Escape));
-                                            }
+                                            emit_indicator_paste_failed(&h);
                                         }
                                     }
                                 }
@@ -701,6 +681,30 @@ fn show_indicator(app_handle: &tauri::AppHandle) {
 
 fn emit_indicator(app_handle: &tauri::AppHandle, event: &str) {
     let _ = app_handle.emit_to(INDICATOR_LABEL, event, ());
+}
+
+fn emit_indicator_paste_failed(app_handle: &tauri::AppHandle) {
+    if let Some(window) = app_handle.get_webview_window(INDICATOR_LABEL) {
+        // Resize window to accommodate the error message
+        let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize::new(280.0, 48.0)));
+        // Re-center horizontally based on new width
+        if let Some(main_window) = app_handle.get_webview_window("main")
+            && let Ok(Some(monitor)) = main_window.primary_monitor()
+        {
+            let size = monitor.size();
+            let scale = monitor.scale_factor();
+            let screen_w = size.width as f64 / scale;
+            let screen_h = size.height as f64 / scale;
+            let win_w = 280.0;
+            let win_h = 48.0;
+            let bottom_margin = 24.0;
+            let _ = window.set_position(tauri::LogicalPosition::new(
+                (screen_w - win_w) / 2.0,
+                screen_h - win_h - bottom_margin,
+            ));
+        }
+    }
+    let _ = app_handle.emit_to(INDICATOR_LABEL, "indicator:paste-failed", ());
 }
 
 fn destroy_indicator(app_handle: &tauri::AppHandle) {
