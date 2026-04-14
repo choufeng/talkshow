@@ -163,9 +163,13 @@ impl Provider for VertexAIProvider {
     ) -> Result<String, ProviderError> {
         let t = std::time::Instant::now();
         let token = self.get_access_token().await?;
-        logger.info("vertex", "get_access_token 完成", Some(serde_json::json!({
-            "elapsed_ms": t.elapsed().as_millis(),
-        })));
+        logger.info(
+            "vertex",
+            "get_access_token 完成",
+            Some(serde_json::json!({
+                "elapsed_ms": t.elapsed().as_millis(),
+            })),
+        );
         let (project, location) = Self::get_project_and_location()?;
         let url = Self::build_url(&project, &location, model);
 
@@ -178,12 +182,10 @@ impl Provider for VertexAIProvider {
         let mut generation_config = serde_json::json!({});
         match thinking {
             ThinkingMode::Disabled => {
-                generation_config["thinkingConfig"] =
-                    serde_json::json!({"thinkingBudget": 0});
+                generation_config["thinkingConfig"] = serde_json::json!({"thinkingBudget": 0});
             }
             ThinkingMode::Enabled => {
-                generation_config["thinkingConfig"] =
-                    serde_json::json!({"thinkingBudget": 8192});
+                generation_config["thinkingConfig"] = serde_json::json!({"thinkingBudget": 8192});
             }
             ThinkingMode::Default => {}
         }

@@ -157,9 +157,13 @@ pub async fn process_with_skills(
     let (system_prompt, user_message) =
         assemble_skills_prompt(&skills_owned, transcription, &app_name, &bundle_id);
 
-    logger.info("skills", "assemble_skills_prompt 完成", Some(serde_json::json!({
-        "elapsed_ms": start.elapsed().as_millis(),
-    })));
+    logger.info(
+        "skills",
+        "assemble_skills_prompt 完成",
+        Some(serde_json::json!({
+            "elapsed_ms": start.elapsed().as_millis(),
+        })),
+    );
 
     let provider = match providers
         .iter()

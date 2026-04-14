@@ -65,9 +65,13 @@ pub async fn send_text_prompt(
 ) -> Result<String, AiError> {
     let t = std::time::Instant::now();
     let p = providers::create_provider(provider, ctx)?;
-    logger.info("ai", "create_provider 完成", Some(serde_json::json!({
-        "elapsed_ms": t.elapsed().as_millis(),
-    })));
+    logger.info(
+        "ai",
+        "create_provider 完成",
+        Some(serde_json::json!({
+            "elapsed_ms": t.elapsed().as_millis(),
+        })),
+    );
     p.complete_text(logger, text_prompt, model_name, thinking)
         .await
 }
