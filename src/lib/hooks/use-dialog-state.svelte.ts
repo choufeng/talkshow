@@ -12,6 +12,9 @@ export function createDialogState(options: DialogStateOptions = {}) {
       return isOpen;
     },
     open() {
+      if (isOpen) {
+        isOpen = false;
+      }
       isOpen = true;
     },
     close() {

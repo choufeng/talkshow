@@ -67,4 +67,19 @@ describe('createDialogState', () => {
     state.open();
     expect(onReset).not.toHaveBeenCalled();
   });
+
+  it('re-opens when open() called while already open', () => {
+    const state = createDialogState({ initialOpen: true });
+    expect(state.isOpen).toBe(true);
+    state.open();
+    expect(state.isOpen).toBe(true);
+  });
+
+  it('toggles open-close-open when open() called twice', () => {
+    const state = createDialogState();
+    state.open();
+    expect(state.isOpen).toBe(true);
+    state.open();
+    expect(state.isOpen).toBe(true);
+  });
 });
