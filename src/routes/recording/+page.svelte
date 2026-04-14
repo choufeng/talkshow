@@ -3,7 +3,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
   import { formatTime } from '$lib/utils';
-  import { invokeWithError } from '$lib/ai/shared';
+
 
   const appWindow = getCurrentWindow();
 
@@ -13,19 +13,7 @@
   let seconds = $state(0);
   let intervalId: ReturnType<typeof setInterval> | null = null;
   let visible = $state(true);
-  let replaceMode = $state(false);
-  let selectedPreview = $state("");
   let closeTimeoutId: ReturnType<typeof setTimeout> | null = null;
-
-  async function fetchReplaceModeState() {
-    const state = await invokeWithError<{ replaceMode: boolean; selectedPreview: string }>("get_replace_mode_state");
-    if (state) {
-      replaceMode = state.replaceMode;
-      selectedPreview = state.selectedPreview;
-    }
-  }
-
-  fetchReplaceModeState();
 
   function startTimer() {
     if (intervalId) clearInterval(intervalId);
@@ -63,8 +51,6 @@
         await listen("indicator:recording", () => {
           phase = "recording";
           visible = true;
-          replaceMode = false;
-          selectedPreview = "";
           startTimer();
         }),
       );
@@ -90,7 +76,7 @@
     class="indicator"
     class:processing={phase === "processing"}
     class:fade-out={!visible}
-    style="--accent-color: {replaceMode ? '#f59e0b' : '#ff0055'}; --accent-shadow: {replaceMode ? 'rgba(245, 158, 11, 0.6)' : 'rgba(255, 0, 85, 0.6)'}; --accent-text-shadow: {replaceMode ? 'rgba(245, 158, 11, 0.4)' : 'rgba(255, 0, 85, 0.4)'}"
+    style="--accent-color: #ff0055; --accent-shadow: rgba(255, 0, 85, 0.6); --accent-text-shadow: rgba(255, 0, 85, 0.4)"
   >
   {#if phase === "recording"}
     <div class="status">
