@@ -3,25 +3,20 @@ mod audio_control;
 mod clipboard;
 mod commands;
 mod config;
+mod indicator;
 mod llm_client;
 mod logger;
 #[cfg(target_os = "macos")]
 mod macos;
+mod pipeline;
 mod providers;
 mod real_llm_client;
 mod recording;
 mod sensevoice;
+mod shortcuts;
 mod skills;
 mod translation;
-mod indicator;
-mod pipeline;
-mod shortcuts;
 
-use indicator::{INDICATOR_LABEL, TRAY_ID, destroy_indicator, restore_default_tray, show_indicator};
-
-use pipeline::{SenseVoiceState, play_sound, stop_recording};
-
-// Re-export types and functions for integration tests
 pub use config::{
     AiConfig, AppConfig, FeaturesConfig, ModelConfig, ModelVerified, ProviderConfig,
     RecordingFeaturesConfig, Skill, SkillsConfig, TranscriptionConfig, TranslationConfig,
@@ -32,8 +27,14 @@ pub use logger::Logger;
 pub use skills::{assemble_skills_prompt, process_with_skills_client};
 pub use translation::translate_text_client;
 
+use indicator::{INDICATOR_LABEL, TRAY_ID, destroy_indicator, restore_default_tray, show_indicator};
+use pipeline::{SenseVoiceState, play_sound, stop_recording};
 use providers::ProviderContext;
 use recording::AudioRecorder;
+use shortcuts::{
+    parse_shortcut, CANCELLED, LAST_REC_PRESS, RECORDING, RECORDING_MODE_NONE,
+    RECORDING_MODE_TRANSCRIPTION, RECORDING_MODE_TRANSLATION, SHORTCUT_IDS,
+};
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -43,11 +44,6 @@ use tauri::{
     Listener, Manager, WebviewWindow, WebviewWindowBuilder, image::Image, window::Color,
 };
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Shortcut, ShortcutState};
-
-use shortcuts::{
-    parse_shortcut, CANCELLED, LAST_REC_PRESS, RECORDING, RECORDING_MODE_NONE,
-    RECORDING_MODE_TRANSCRIPTION, RECORDING_MODE_TRANSLATION, SHORTCUT_IDS,
-};
 
 fn toggle_window(window: &WebviewWindow) {
     if window.is_visible().unwrap_or(false) {
