@@ -1,7 +1,7 @@
 #[cfg(target_os = "macos")]
 use crate::macos;
 
-use tauri::{Emitter, Manager, WebviewWindowBuilder, image::Image, window::Color};
+use tauri::{image::Image, window::Color, Emitter, Manager, WebviewWindowBuilder};
 
 pub const TRAY_ID: &str = "main";
 
@@ -21,9 +21,8 @@ pub fn show_indicator(app_handle: &tauri::AppHandle) {
     });
 
     if let Some(window) = app_handle.get_webview_window(INDICATOR_LABEL) {
-        if let Some(main_window) = app_handle.get_webview_window("main")
-            && let Ok(Some(monitor)) = main_window.primary_monitor()
-        {
+        let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize::new(180.0, 48.0)));
+        if let Ok(Some(monitor)) = window.primary_monitor() {
             let size = monitor.size();
             let scale = monitor.scale_factor();
             let screen_w = size.width as f64 / scale;
@@ -37,7 +36,14 @@ pub fn show_indicator(app_handle: &tauri::AppHandle) {
             ));
         }
 
-        let _ = window.show();
+        #[cfg(target_os = "macos")]
+        {
+            let _ = macos::floating_panel::show_without_activating(&window);
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = window.show();
+        }
         let _ = app_handle.emit_to(INDICATOR_LABEL, "indicator:recording", &payload);
         return;
     }
@@ -89,9 +95,14 @@ pub fn show_indicator(app_handle: &tauri::AppHandle) {
                 if let Err(e) = macos::floating_panel::make_window_nonactivating(&w) {
                     eprintln!("Failed to make window nonactivating: {}", e);
                 }
+                if let Err(e) = macos::floating_panel::show_without_activating(&w) {
+                    eprintln!("Failed to show indicator: {}", e);
+                }
             }
-
-            let _ = w.show();
+            #[cfg(not(target_os = "macos"))]
+            {
+                let _ = w.show();
+            }
             let _ = app_handle.emit_to(INDICATOR_LABEL, "indicator:recording", &payload);
         }
         Err(e) => {
@@ -107,9 +118,7 @@ pub fn emit_indicator(app_handle: &tauri::AppHandle, event: &str) {
 pub fn emit_indicator_paste_failed(app_handle: &tauri::AppHandle) {
     if let Some(window) = app_handle.get_webview_window(INDICATOR_LABEL) {
         let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize::new(280.0, 48.0)));
-        if let Some(main_window) = app_handle.get_webview_window("main")
-            && let Ok(Some(monitor)) = main_window.primary_monitor()
-        {
+        if let Ok(Some(monitor)) = window.primary_monitor() {
             let size = monitor.size();
             let scale = monitor.scale_factor();
             let screen_w = size.width as f64 / scale;
@@ -128,6 +137,6 @@ pub fn emit_indicator_paste_failed(app_handle: &tauri::AppHandle) {
 
 pub fn destroy_indicator(app_handle: &tauri::AppHandle) {
     if let Some(w) = app_handle.get_webview_window(INDICATOR_LABEL) {
-        let _ = w.close();
+        let _ = w.hide();
     }
 }

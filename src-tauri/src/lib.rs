@@ -578,9 +578,15 @@ pub fn run() {
                     let _ = macos::floating_panel::make_window_nonactivating(w);
                 }
             }
-            #[cfg(not(target_os = "macos"))]
-            {
-                let _ = indicator_window;
+
+            if let Ok(w) = indicator_window {
+                let indicator_close = w.clone();
+                w.on_window_event(move |event| {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        api.prevent_close();
+                        let _ = indicator_close.hide();
+                    }
+                });
             }
 
             Ok(())

@@ -40,7 +40,7 @@
 
   function scheduleClose() {
     visible = false;
-    closeTimeoutId = setTimeout(() => appWindow.close(), 200);
+    closeTimeoutId = setTimeout(() => appWindow.hide(), 200);
   }
 
   $effect(() => {
@@ -63,7 +63,7 @@
       unsubs.push(
         await listen("indicator:done", scheduleClose),
       );
-      unsubs.push(await listen("indicator:error", () => appWindow.close()));
+      unsubs.push(await listen("indicator:error", () => appWindow.hide()));
       unsubs.push(
         await listen("indicator:paste-failed", () => {
           phase = "paste-failed";
