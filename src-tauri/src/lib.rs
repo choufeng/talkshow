@@ -12,6 +12,7 @@ mod recording;
 mod sensevoice;
 mod skills;
 mod translation;
+mod shortcuts;
 
 // Re-export types and functions for integration tests
 pub use config::{
@@ -27,42 +28,27 @@ pub use translation::translate_text_client;
 use providers::ProviderContext;
 use recording::AudioRecorder;
 use sensevoice::SenseVoiceEngine;
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::atomic::Ordering;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{
     Emitter, Listener, Manager, WebviewWindow, WebviewWindowBuilder, image::Image, window::Color,
 };
-use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Shortcut, ShortcutState};
+
+use shortcuts::{
+    parse_shortcut, CANCELLED, LAST_REC_PRESS, RECORDING, RECORDING_MODE_NONE,
+    RECORDING_MODE_TRANSCRIPTION, RECORDING_MODE_TRANSLATION, SHORTCUT_IDS,
+};
 
 const TRAY_ID: &str = "main";
-
-const RECORDING_MODE_NONE: u8 = 0;
-const RECORDING_MODE_TRANSCRIPTION: u8 = 1;
-const RECORDING_MODE_TRANSLATION: u8 = 2;
-
-static RECORDING: AtomicU8 = AtomicU8::new(RECORDING_MODE_NONE);
-static CANCELLED: AtomicBool = AtomicBool::new(false);
-static LAST_REC_PRESS: Mutex<Option<Instant>> = Mutex::new(None);
 
 struct SenseVoiceState {
     engine: Arc<Mutex<Option<SenseVoiceEngine>>>,
     language: Arc<Mutex<i32>>,
 }
-
-struct ShortcutIds {
-    toggle: u32,
-    recording: u32,
-    translate: u32,
-}
-
-static SHORTCUT_IDS: RwLock<ShortcutIds> = RwLock::new(ShortcutIds {
-    toggle: 0,
-    recording: 0,
-    translate: 0,
-});
 
 fn toggle_window(window: &WebviewWindow) {
     if window.is_visible().unwrap_or(false) {
@@ -73,28 +59,6 @@ fn toggle_window(window: &WebviewWindow) {
         let _ = window.center();
         let _ = window.set_focus();
     }
-}
-
-fn parse_shortcut(shortcut_str: &str) -> Option<Shortcut> {
-    let parts: Vec<&str> = shortcut_str.split('+').collect();
-    let mut modifiers = Modifiers::empty();
-    let mut key_code: Option<Code> = None;
-
-    for part in &parts {
-        match *part {
-            "Control" => modifiers |= Modifiers::CONTROL,
-            "Shift" => modifiers |= Modifiers::SHIFT,
-            "Alt" => modifiers |= Modifiers::ALT,
-            "Command" | "Super" => modifiers |= Modifiers::SUPER,
-            s => {
-                if let Ok(code) = s.parse::<Code>() {
-                    key_code = Some(code);
-                }
-            }
-        }
-    }
-
-    key_code.map(|code| Shortcut::new(Some(modifiers), code))
 }
 
 fn format_elapsed(start: &Instant) -> String {
@@ -1607,52 +1571,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_shortcut_control_shift_quote() {
-        let result = parse_shortcut("Control+Shift+Quote");
-        assert!(result.is_some());
-    }
-
-    #[test]
-    fn test_parse_shortcut_control_backslash() {
-        let result = parse_shortcut("Control+Backslash");
-        assert!(result.is_some());
-    }
-
-    #[test]
-    fn test_parse_shortcut_single_key() {
-        let result = parse_shortcut("KeyA");
-        assert!(result.is_some());
-    }
-
-    #[test]
-    fn test_parse_shortcut_empty_string() {
-        let result = parse_shortcut("");
-        assert!(result.is_none());
-    }
-
-    #[test]
-    fn test_parse_shortcut_only_modifiers() {
-        let result = parse_shortcut("Control+Shift");
-        assert!(result.is_none());
-    }
-
-    #[test]
-    fn test_parse_shortcut_command_super_alias() {
-        let cmd_result = parse_shortcut("Command+KeyA");
-        let super_result = parse_shortcut("Super+KeyA");
-        assert_eq!(cmd_result.is_some(), super_result.is_some());
-    }
-
-    #[test]
     fn test_format_elapsed() {
         let start = Instant::now();
         assert!(format_elapsed(&start).contains("录音中"));
-    }
-
-    #[test]
-    fn test_recording_mode_constants() {
-        assert_eq!(RECORDING_MODE_NONE, 0);
-        assert_eq!(RECORDING_MODE_TRANSCRIPTION, 1);
-        assert_eq!(RECORDING_MODE_TRANSLATION, 2);
     }
 }
