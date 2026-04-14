@@ -264,8 +264,8 @@ pub struct VertexEnvInfo {
 
 #[tauri::command]
 pub fn get_vertex_env_info() -> VertexEnvInfo {
-    let project = std::env::var("GOOGLE_CLOUD_PROJECT").unwrap_or_default();
-    let location = std::env::var("GOOGLE_CLOUD_LOCATION").unwrap_or_else(|_| "global".to_string());
+    let project = crate::providers::vertex::get_vertex_project().unwrap_or_default();
+    let location = crate::providers::vertex::get_vertex_location();
     VertexEnvInfo { project, location }
 }
 

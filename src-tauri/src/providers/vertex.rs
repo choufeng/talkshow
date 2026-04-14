@@ -4,26 +4,119 @@ use crate::providers::{Provider, ProviderError, ThinkingMode};
 use async_trait::async_trait;
 use base64::Engine;
 use std::sync::{Arc, Mutex};
+use std::path::PathBuf;
 
 const VERTEX_BASE_URL: &str = "https://aiplatform.googleapis.com/v1";
+const GOOGLE_TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
 
 pub type VertexTokenCache = Arc<Mutex<Option<(String, std::time::Instant)>>>;
 
 pub struct VertexAIProvider {
     token_cache: VertexTokenCache,
+    adc_credentials: AdcCredentials,
+}
+
+#[derive(serde::Deserialize)]
+struct AdcCredentials {
+    client_id: String,
+    client_secret: String,
+    refresh_token: String,
+    #[allow(dead_code)]
+    quota_project_id: Option<String>,
+}
+
+fn adc_credentials_path() -> Option<PathBuf> {
+    let home = home::home_dir()?;
+    Some(
+        home.join(".config")
+            .join("gcloud")
+            .join("application_default_credentials.json"),
+    )
+}
+
+fn gcloud_config_path() -> Option<PathBuf> {
+    let home = home::home_dir()?;
+    Some(
+        home.join(".config")
+            .join("gcloud")
+            .join("configurations")
+            .join("config_default"),
+    )
+}
+
+fn read_adc_credentials() -> Result<AdcCredentials, ProviderError> {
+    let path = adc_credentials_path().ok_or_else(|| {
+        ProviderError::RequestError(
+            "Cannot determine home directory for ADC credentials".to_string(),
+        )
+    })?;
+
+    let content = std::fs::read_to_string(&path).map_err(|e| {
+        ProviderError::RequestError(format!(
+            "Failed to read ADC credentials at {}: {}",
+            path.display(),
+            e
+        ))
+    })?;
+
+    serde_json::from_str::<AdcCredentials>(&content).map_err(|e| {
+        ProviderError::RequestError(format!(
+            "Failed to parse ADC credentials: {}",
+            e
+        ))
+    })
+}
+
+pub fn get_project_from_gcloud_config() -> Option<String> {
+    let path = gcloud_config_path()?;
+
+    let content = std::fs::read_to_string(&path).ok()?;
+
+    let mut in_core = false;
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed == "[core]" {
+            in_core = true;
+            continue;
+        }
+        if trimmed.starts_with('[') {
+            in_core = false;
+            continue;
+        }
+        if in_core {
+            if let Some(project) = trimmed.strip_prefix("project = ") {
+                return Some(project.trim().to_string());
+            }
+        }
+    }
+    None
+}
+
+pub fn get_vertex_project() -> Result<String, ProviderError> {
+    if let Ok(project) = std::env::var("GOOGLE_CLOUD_PROJECT") {
+        if !project.is_empty() {
+            return Ok(project);
+        }
+    }
+    get_project_from_gcloud_config().ok_or_else(|| {
+        ProviderError::RequestError(
+            "GOOGLE_CLOUD_PROJECT not set and could not read from gcloud config".to_string(),
+        )
+    })
+}
+
+pub fn get_vertex_location() -> String {
+    std::env::var("GOOGLE_CLOUD_LOCATION").unwrap_or_else(|_| "global".to_string())
 }
 
 impl VertexAIProvider {
     pub fn new(token_cache: VertexTokenCache) -> Self {
-        Self { token_cache }
-    }
-
-    fn get_project_and_location() -> Result<(String, String), ProviderError> {
-        let project = std::env::var("GOOGLE_CLOUD_PROJECT")
-            .map_err(|_| ProviderError::RequestError("GOOGLE_CLOUD_PROJECT not set".to_string()))?;
-        let location =
-            std::env::var("GOOGLE_CLOUD_LOCATION").unwrap_or_else(|_| "global".to_string());
-        Ok((project, location))
+        let adc_credentials = read_adc_credentials()
+            .expect("Failed to load ADC credentials on startup");
+        Self {
+            token_cache,
+            adc_credentials,
+        }
     }
 
     async fn get_access_token(&self) -> Result<String, ProviderError> {
@@ -36,21 +129,59 @@ impl VertexAIProvider {
             }
         }
 
-        let output = std::process::Command::new("gcloud")
-            .args(["auth", "application-default", "print-access-token"])
-            .output()
-            .map_err(|e| ProviderError::RequestError(format!("Failed to run gcloud: {}", e)))?;
+        let client = reqwest::Client::new();
+        let params = [
+            ("client_id", self.adc_credentials.client_id.as_str()),
+            ("client_secret", self.adc_credentials.client_secret.as_str()),
+            ("refresh_token", self.adc_credentials.refresh_token.as_str()),
+            ("grant_type", "refresh_token"),
+        ];
 
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
+        let response = client
+            .post(GOOGLE_TOKEN_URL)
+            .form(&params)
+            .send()
+            .await
+            .map_err(|e| {
+                ProviderError::RequestError(format!(
+                    "Failed to refresh ADC token: {}",
+                    e
+                ))
+            })?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
             return Err(ProviderError::RequestError(format!(
-                "gcloud auth failed: {}",
-                stderr
+                "Token refresh failed (HTTP {}): {}",
+                status, body
             )));
         }
 
-        let token = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        let expires_at = std::time::Instant::now() + std::time::Duration::from_secs(3500);
+        let token_resp: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| {
+                ProviderError::RequestError(format!("Failed to parse token response: {}", e))
+            })?;
+
+        let token = token_resp
+            .get("access_token")
+            .and_then(|t| t.as_str())
+            .ok_or_else(|| {
+                ProviderError::RequestError(
+                    "Token response missing access_token field".to_string(),
+                )
+            })?
+            .to_string();
+
+        let expires_in = token_resp
+            .get("expires_in")
+            .and_then(|t| t.as_u64())
+            .unwrap_or(3600);
+
+        let expires_at =
+            std::time::Instant::now() + std::time::Duration::from_secs(expires_in - 100);
 
         {
             let mut guard = self.token_cache.lock().unwrap_or_else(|e| e.into_inner());
@@ -79,7 +210,8 @@ impl Provider for VertexAIProvider {
         model: &str,
     ) -> Result<String, ProviderError> {
         let token = self.get_access_token().await?;
-        let (project, location) = Self::get_project_and_location()?;
+        let project = get_vertex_project()?;
+        let location = get_vertex_location();
         let url = Self::build_url(&project, &location, model);
 
         let audio_b64 = base64::engine::general_purpose::STANDARD.encode(audio_bytes);
@@ -170,7 +302,8 @@ impl Provider for VertexAIProvider {
                 "elapsed_ms": t.elapsed().as_millis(),
             })),
         );
-        let (project, location) = Self::get_project_and_location()?;
+        let project = get_vertex_project()?;
+        let location = get_vertex_location();
         let url = Self::build_url(&project, &location, model);
 
         logger.info(
@@ -249,8 +382,8 @@ impl Provider for VertexAIProvider {
 
     fn default_models() -> Vec<ModelConfig> {
         vec![ModelConfig {
-            name: "gemini-2.0-flash".to_string(),
-            capabilities: vec!["transcription".to_string(), "chat".to_string()],
+            name: "gemini-2.5-flash".to_string(),
+            capabilities: vec!["chat".to_string()],
             verified: None,
         }]
     }

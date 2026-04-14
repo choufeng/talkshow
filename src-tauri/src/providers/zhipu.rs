@@ -144,22 +144,10 @@ impl Provider for ZhipuProvider {
     }
 
     fn default_models() -> Vec<ModelConfig> {
-        vec![
-            ModelConfig {
-                name: "glm-4.7-flash".to_string(),
-                capabilities: vec!["chat".to_string()],
-                verified: None,
-            },
-            ModelConfig {
-                name: "glm-4.7".to_string(),
-                capabilities: vec!["chat".to_string()],
-                verified: None,
-            },
-            ModelConfig {
-                name: "glm-5".to_string(),
-                capabilities: vec!["chat".to_string()],
-                verified: None,
-            },
-        ]
+        vec![ModelConfig {
+            name: "glm-4.7-flash".to_string(),
+            capabilities: vec!["chat".to_string()],
+            verified: None,
+        }]
     }
 }

@@ -203,8 +203,8 @@ impl Provider for DashScopeProvider {
 
     fn default_models() -> Vec<ModelConfig> {
         vec![ModelConfig {
-            name: "qwen2-audio-instruct".to_string(),
-            capabilities: vec!["transcription".to_string()],
+            name: "qwen3.5-flash".to_string(),
+            capabilities: vec!["chat".to_string()],
             verified: None,
         }]
     }

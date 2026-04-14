@@ -40,8 +40,8 @@ fn builtin_providers() -> Vec<ProviderConfig> {
             api_key: None,
             endpoint: None,
             models: vec![ModelConfig {
-                name: "gemini-2.0-flash".to_string(),
-                capabilities: vec!["transcription".to_string()],
+                name: "gemini-2.5-flash".to_string(),
+                capabilities: vec!["chat".to_string()],
                 verified: None,
             }],
         },
@@ -270,7 +270,7 @@ impl Default for AppConfig {
             features: FeaturesConfig {
                 transcription: TranscriptionConfig {
                     provider_id: "vertex".to_string(),
-                    model: "gemini-2.0-flash".to_string(),
+                    model: "gemini-2.5-flash".to_string(),
                     polish_enabled: true,
                     polish_provider_id: String::new(),
                     polish_model: String::new(),
