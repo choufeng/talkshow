@@ -74,12 +74,14 @@ pub trait Provider: Send + Sync {
 
 pub struct ProviderContext {
     pub sensevoice_engine: Arc<Mutex<Option<SenseVoiceEngine>>>,
+    pub vertex_token_cache: Arc<Mutex<Option<(String, std::time::Instant)>>>,
 }
 
 impl ProviderContext {
     pub fn new() -> Self {
         ProviderContext {
             sensevoice_engine: Arc::new(Mutex::new(None)),
+            vertex_token_cache: Arc::new(Mutex::new(None)),
         }
     }
 }
@@ -96,7 +98,9 @@ pub fn create_provider(
             config.api_key.clone(),
             config.endpoint.clone(),
         ))),
-        "vertex" => Ok(Box::new(vertex::VertexAIProvider::new())),
+        "vertex" => Ok(Box::new(vertex::VertexAIProvider::new(
+            ctx.vertex_token_cache.clone(),
+        ))),
         "sensevoice" => Ok(Box::new(sensevoice::SenseVoiceProvider::new(
             ctx.sensevoice_engine.clone(),
         ))),

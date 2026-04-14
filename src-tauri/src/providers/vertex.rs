@@ -7,17 +7,15 @@ use std::sync::{Arc, Mutex};
 
 const VERTEX_BASE_URL: &str = "https://aiplatform.googleapis.com/v1";
 
-type TokenCache = Arc<Mutex<Option<(String, std::time::Instant)>>>;
+pub type VertexTokenCache = Arc<Mutex<Option<(String, std::time::Instant)>>>;
 
 pub struct VertexAIProvider {
-    token_cache: TokenCache,
+    token_cache: VertexTokenCache,
 }
 
 impl VertexAIProvider {
-    pub fn new() -> Self {
-        Self {
-            token_cache: Arc::new(Mutex::new(None)),
-        }
+    pub fn new(token_cache: VertexTokenCache) -> Self {
+        Self { token_cache }
     }
 
     fn get_project_and_location() -> Result<(String, String), ProviderError> {
@@ -163,7 +161,11 @@ impl Provider for VertexAIProvider {
         model: &str,
         thinking: ThinkingMode,
     ) -> Result<String, ProviderError> {
+        let t = std::time::Instant::now();
         let token = self.get_access_token().await?;
+        logger.info("vertex", "get_access_token 完成", Some(serde_json::json!({
+            "elapsed_ms": t.elapsed().as_millis(),
+        })));
         let (project, location) = Self::get_project_and_location()?;
         let url = Self::build_url(&project, &location, model);
 
