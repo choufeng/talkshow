@@ -183,6 +183,7 @@ fn stop_recording(
                         let skills_config = app_config.features.skills.clone();
                         let skills_providers = app_config.ai.providers.clone();
                         let h = app_handle.clone();
+                        let saved_target_app = clipboard::get_target_app();
                         CANCELLED.store(false, Ordering::SeqCst);
                         tauri::async_runtime::spawn(async move {
                             let pipeline_start = Instant::now();
@@ -244,41 +245,57 @@ fn stop_recording(
                             let transcribe_start = Instant::now();
                             let text_result = if provider.id == "sensevoice" {
                                 let sv_state = h.state::<SenseVoiceState>();
-                                let lang =
+                                let engine_arc = sv_state.engine.clone();
+                                let lang_val =
                                     *sv_state.language.lock().unwrap_or_else(|e| e.into_inner());
-                                let app_data_dir = h.path().app_data_dir().unwrap_or_default();
-                                let mdl_dir = app_data_dir.join("models").join("sensevoice");
-                                {
-                                    let guard =
-                                        sv_state.engine.lock().unwrap_or_else(|e| e.into_inner());
-                                    if guard.is_none() {
-                                        drop(guard);
-                                        match SenseVoiceEngine::new(&mdl_dir) {
-                                            Ok(e) => {
-                                                let mut g = sv_state
-                                                    .engine
-                                                    .lock()
-                                                    .unwrap_or_else(|e| e.into_inner());
-                                                *g = Some(e);
-                                                logger.info(
-                                                    "sensevoice",
-                                                    "SenseVoice 引擎加载完成",
-                                                    None,
-                                                );
-                                            }
-                                            Err(e) => {
-                                                logger.error("sensevoice", "SenseVoice 引擎加载失败", Some(serde_json::json!({ "error": e.to_string() })));
+                                let mdl_dir_sb = h
+                                    .path()
+                                    .app_data_dir()
+                                    .unwrap_or_default()
+                                    .join("models")
+                                    .join("sensevoice");
+                                let audio_path_sb = audio_path.clone();
+
+                                let sb_result = tokio::task::spawn_blocking(move || {
+                                    {
+                                        let guard =
+                                            engine_arc.lock().unwrap_or_else(|e| e.into_inner());
+                                        if guard.is_none() {
+                                            drop(guard);
+                                            match SenseVoiceEngine::new(&mdl_dir_sb) {
+                                                Ok(eng) => {
+                                                    let mut g = engine_arc
+                                                        .lock()
+                                                        .unwrap_or_else(|e| e.into_inner());
+                                                    *g = Some(eng);
+                                                }
+                                                Err(e) => {
+                                                    return Err(format!(
+                                                        "SenseVoice 引擎加载失败: {}",
+                                                        e
+                                                    ));
+                                                }
                                             }
                                         }
                                     }
-                                }
-                                let mut guard =
-                                    sv_state.engine.lock().unwrap_or_else(|e| e.into_inner());
-                                match guard.as_mut() {
-                                    Some(engine) => engine
-                                        .transcribe(&audio_path, lang)
-                                        .map_err(|e| e.to_string()),
-                                    None => Err("SenseVoice 引擎未初始化".to_string()),
+                                    let mut guard =
+                                        engine_arc.lock().unwrap_or_else(|e| e.into_inner());
+                                    match guard.as_mut() {
+                                        Some(engine) => engine
+                                            .transcribe(&audio_path_sb, lang_val)
+                                            .map_err(|e| e.to_string()),
+                                        None => Err("SenseVoice 引擎未初始化".to_string()),
+                                    }
+                                })
+                                .await;
+
+                                match sb_result {
+                                    Ok(Ok(text)) => Ok(text),
+                                    Ok(Err(e)) => {
+                                        logger.error("sensevoice", &e, None);
+                                        Err(e)
+                                    }
+                                    Err(e) => Err(format!("SenseVoice 推理任务失败: {}", e)),
                                 }
                             } else {
                                 let prompt =
@@ -412,11 +429,25 @@ fn stop_recording(
 
                                     let clipboard_start = Instant::now();
                                     let final_text_clone = final_text.clone();
-                                    let clipboard_result = tokio::time::timeout(
+                                    let target_app_for_paste = saved_target_app.clone();
+                                    let clipboard_raw = tokio::time::timeout(
                                         std::time::Duration::from_secs(5),
-                                        async move { clipboard::write_and_paste(&final_text_clone) },
+                                        tokio::task::spawn_blocking(move || {
+                                            clipboard::write_and_paste(
+                                                &final_text_clone,
+                                                target_app_for_paste,
+                                            )
+                                        }),
                                     )
                                     .await;
+                                    let clipboard_result: Result<
+                                        Result<(), String>,
+                                        tokio::time::error::Elapsed,
+                                    > = match clipboard_raw {
+                                        Ok(Ok(r)) => Ok(r),
+                                        Ok(Err(e)) => Ok(Err(format!("剪贴板任务异常: {}", e))),
+                                        Err(e) => Err(e),
+                                    };
 
                                     match clipboard_result {
                                         Ok(Ok(())) => {
