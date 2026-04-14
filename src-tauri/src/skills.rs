@@ -110,7 +110,10 @@ pub async fn process_with_skills(
         return Ok(transcription.to_string());
     }
 
-    let meaningful_chars = transcription.chars().filter(|c| c.is_alphanumeric()).count();
+    let meaningful_chars = transcription
+        .chars()
+        .filter(|c| c.is_alphanumeric())
+        .count();
     if meaningful_chars < 2 {
         logger.info(
             "skills",

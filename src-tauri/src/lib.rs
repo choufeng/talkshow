@@ -273,7 +273,7 @@ fn stop_recording(
                                                     return Err(format!(
                                                         "SenseVoice 引擎加载失败: {}",
                                                         e
-                                                    ))
+                                                    ));
                                                 }
                                             }
                                         }
@@ -445,9 +445,7 @@ fn stop_recording(
                                         tokio::time::error::Elapsed,
                                     > = match clipboard_raw {
                                         Ok(Ok(r)) => Ok(r),
-                                        Ok(Err(e)) => {
-                                            Ok(Err(format!("剪贴板任务异常: {}", e)))
-                                        }
+                                        Ok(Err(e)) => Ok(Err(format!("剪贴板任务异常: {}", e))),
                                         Err(e) => Err(e),
                                     };
 
