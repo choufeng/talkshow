@@ -66,7 +66,7 @@ fn simulate_paste(target_app: &Option<String>) {
 }
 
 #[cfg(not(target_os = "macos"))]
-fn simulate_paste() {
+fn simulate_paste(_target_app: &Option<String>) {
     eprintln!("[TalkShow] Paste simulation not supported on this platform");
 }
 
