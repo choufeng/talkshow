@@ -27,22 +27,22 @@ pub use logger::Logger;
 pub use skills::{assemble_skills_prompt, process_with_skills_client};
 pub use translation::translate_text_client;
 
-use indicator::{INDICATOR_LABEL, TRAY_ID, destroy_indicator, restore_default_tray, show_indicator};
+use indicator::{
+    INDICATOR_LABEL, TRAY_ID, destroy_indicator, restore_default_tray, show_indicator,
+};
 use pipeline::{SenseVoiceState, play_sound, stop_recording};
 use providers::ProviderContext;
 use recording::AudioRecorder;
 use shortcuts::{
-    parse_shortcut, CANCELLED, LAST_REC_PRESS, RECORDING, RECORDING_MODE_NONE,
-    RECORDING_MODE_TRANSCRIPTION, RECORDING_MODE_TRANSLATION, SHORTCUT_IDS,
+    CANCELLED, LAST_REC_PRESS, RECORDING, RECORDING_MODE_NONE, RECORDING_MODE_TRANSCRIPTION,
+    RECORDING_MODE_TRANSLATION, SHORTCUT_IDS, parse_shortcut,
 };
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{
-    Listener, Manager, WebviewWindow, WebviewWindowBuilder, image::Image, window::Color,
-};
+use tauri::{Listener, Manager, WebviewWindow, WebviewWindowBuilder, image::Image, window::Color};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Shortcut, ShortcutState};
 
 fn toggle_window(window: &WebviewWindow) {

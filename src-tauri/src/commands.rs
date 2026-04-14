@@ -21,7 +21,10 @@ pub fn get_onboarding_status(app_handle: tauri::AppHandle) -> bool {
 }
 
 #[tauri::command]
-pub fn set_onboarding_completed(app_handle: tauri::AppHandle, completed: bool) -> Result<(), String> {
+pub fn set_onboarding_completed(
+    app_handle: tauri::AppHandle,
+    completed: bool,
+) -> Result<(), String> {
     let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
     let mut config = config::load_config(&app_data_dir);
     config.onboarding_completed = completed;
@@ -94,7 +97,10 @@ pub fn update_shortcut(
 }
 
 #[tauri::command]
-pub fn save_config_cmd(app_handle: tauri::AppHandle, config: config::AppConfig) -> Result<(), String> {
+pub fn save_config_cmd(
+    app_handle: tauri::AppHandle,
+    config: config::AppConfig,
+) -> Result<(), String> {
     config::validate_config(&config)?;
     let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
     config::save_config(&app_data_dir, &config)
