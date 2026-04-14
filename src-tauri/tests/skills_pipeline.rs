@@ -15,15 +15,8 @@ async fn test_skills_disabled_returns_original() {
     let providers = test_providers();
     let mut mock = MockLlmClientIntegration::new();
 
-    let result = process_with_skills_client(
-        &logger,
-        &config,
-        &tc,
-        &providers,
-        "原始文本",
-        &mut mock,
-    )
-    .await;
+    let result =
+        process_with_skills_client(&logger, &config, &tc, &providers, "原始文本", &mut mock).await;
 
     assert_eq!(result.unwrap(), "原始文本");
     assert_eq!(mock.send_text_call_count(), 0);
@@ -37,8 +30,7 @@ async fn test_skills_empty_transcription_returns_original() {
     let providers = test_providers();
     let mut mock = MockLlmClientIntegration::new();
 
-    let result =
-        process_with_skills_client(&logger, &config, &tc, &providers, "", &mut mock).await;
+    let result = process_with_skills_client(&logger, &config, &tc, &providers, "", &mut mock).await;
 
     assert_eq!(result.unwrap(), "");
     assert_eq!(mock.send_text_call_count(), 0);
@@ -63,15 +55,8 @@ async fn test_skills_no_enabled_skills_returns_original() {
     let providers = test_providers();
     let mut mock = MockLlmClientIntegration::new();
 
-    let result = process_with_skills_client(
-        &logger,
-        &config,
-        &tc,
-        &providers,
-        "原始文本",
-        &mut mock,
-    )
-    .await;
+    let result =
+        process_with_skills_client(&logger, &config, &tc, &providers, "原始文本", &mut mock).await;
 
     assert_eq!(result.unwrap(), "原始文本");
     assert_eq!(mock.send_text_call_count(), 0);
@@ -91,15 +76,8 @@ async fn test_skills_no_polish_provider_returns_original() {
     let providers = test_providers();
     let mut mock = MockLlmClientIntegration::new();
 
-    let result = process_with_skills_client(
-        &logger,
-        &config,
-        &tc,
-        &providers,
-        "原始文本",
-        &mut mock,
-    )
-    .await;
+    let result =
+        process_with_skills_client(&logger, &config, &tc, &providers, "原始文本", &mut mock).await;
 
     assert_eq!(result.unwrap(), "原始文本");
     assert_eq!(mock.send_text_call_count(), 0);
@@ -119,15 +97,8 @@ async fn test_skills_empty_polish_model_returns_original() {
     let providers = test_providers();
     let mut mock = MockLlmClientIntegration::new();
 
-    let result = process_with_skills_client(
-        &logger,
-        &config,
-        &tc,
-        &providers,
-        "原始文本",
-        &mut mock,
-    )
-    .await;
+    let result =
+        process_with_skills_client(&logger, &config, &tc, &providers, "原始文本", &mut mock).await;
 
     assert_eq!(result.unwrap(), "原始文本");
     assert_eq!(mock.send_text_call_count(), 0);
@@ -147,15 +118,8 @@ async fn test_skills_provider_not_found_returns_original() {
     let providers = test_providers();
     let mut mock = MockLlmClientIntegration::new();
 
-    let result = process_with_skills_client(
-        &logger,
-        &config,
-        &tc,
-        &providers,
-        "原始文本",
-        &mut mock,
-    )
-    .await;
+    let result =
+        process_with_skills_client(&logger, &config, &tc, &providers, "原始文本", &mut mock).await;
 
     assert_eq!(result.unwrap(), "原始文本");
     assert_eq!(mock.send_text_call_count(), 0);
@@ -199,15 +163,8 @@ async fn test_skills_falls_back_on_llm_error() {
 
     mock.expect_send_text(|_, _, _| Err("LLM error".to_string()));
 
-    let result = process_with_skills_client(
-        &logger,
-        &config,
-        &tc,
-        &providers,
-        "原始文本",
-        &mut mock,
-    )
-    .await;
+    let result =
+        process_with_skills_client(&logger, &config, &tc, &providers, "原始文本", &mut mock).await;
 
     assert_eq!(result.unwrap(), "原始文本");
     assert_eq!(mock.send_text_call_count(), 1);
@@ -225,12 +182,7 @@ fn test_assemble_skills_prompt_with_app_context() {
         enabled: true,
     }];
 
-    let (system, user) = assemble_skills_prompt(
-        &skills,
-        "转录文本",
-        "Finder",
-        "com.apple.finder",
-    );
+    let (system, user) = assemble_skills_prompt(&skills, "转录文本", "Finder", "com.apple.finder");
 
     assert!(system.contains("测试技能"));
     assert!(system.contains("测试 prompt"));
