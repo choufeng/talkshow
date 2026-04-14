@@ -98,18 +98,18 @@ export const BUILTIN_PROVIDERS: ProviderConfig[] = [
     name: 'OpenAI',
     api_key: '',
     endpoint: 'https://api.openai.com/v1',
-    models: [{ name: 'gpt-4o-transcribe', capabilities: ['transcription', 'chat'] }]
+    models: [{ name: 'gpt-4o', capabilities: ['chat'] }]
   },
   {
     id: 'vertex',
     name: 'Vertex AI',
-    models: [{ name: 'gemini-2.0-flash', capabilities: ['transcription', 'chat'] }]
+    models: [{ name: 'gemini-2.5-flash', capabilities: ['chat'] }]
   },
   {
     id: 'dashscope',
     name: '阿里云',
     api_key: '',
-    models: [{ name: 'qwen2-audio-instruct', capabilities: ['transcription'] }]
+    models: [{ name: 'qwen3.5-flash', capabilities: ['chat'] }]
   },
   {
     id: 'sensevoice',
@@ -177,7 +177,7 @@ function createConfigStore() {
     features: {
       transcription: {
         provider_id: 'vertex',
-        model: 'gemini-2.0-flash',
+        model: 'gemini-2.5-flash',
         polish_enabled: true,
         polish_provider_id: '',
         polish_model: ''

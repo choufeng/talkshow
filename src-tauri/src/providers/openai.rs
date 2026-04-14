@@ -212,8 +212,8 @@ impl Provider for OpenAIProvider {
 
     fn default_models() -> Vec<ModelConfig> {
         vec![ModelConfig {
-            name: "gpt-4o-transcribe".to_string(),
-            capabilities: vec!["transcription".to_string(), "chat".to_string()],
+            name: "gpt-4o".to_string(),
+            capabilities: vec!["chat".to_string()],
             verified: None,
         }]
     }
