@@ -1,7 +1,7 @@
 #[cfg(target_os = "macos")]
 use crate::macos;
 
-use tauri::{image::Image, window::Color, Emitter, Manager, WebviewWindowBuilder};
+use tauri::{Emitter, Manager, WebviewWindowBuilder, image::Image, window::Color};
 
 pub const TRAY_ID: &str = "main";
 
