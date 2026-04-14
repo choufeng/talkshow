@@ -79,20 +79,18 @@ pub fn get_project_from_gcloud_config() -> Option<String> {
             in_core = false;
             continue;
         }
-        if in_core {
-            if let Some(project) = trimmed.strip_prefix("project = ") {
-                return Some(project.trim().to_string());
-            }
+        if in_core && let Some(project) = trimmed.strip_prefix("project = ") {
+            return Some(project.trim().to_string());
         }
     }
     None
 }
 
 pub fn get_vertex_project() -> Result<String, ProviderError> {
-    if let Ok(project) = std::env::var("GOOGLE_CLOUD_PROJECT") {
-        if !project.is_empty() {
-            return Ok(project);
-        }
+    if let Ok(project) = std::env::var("GOOGLE_CLOUD_PROJECT")
+        && !project.is_empty()
+    {
+        return Ok(project);
     }
     get_project_from_gcloud_config().ok_or_else(|| {
         ProviderError::RequestError(
