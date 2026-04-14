@@ -110,6 +110,19 @@ pub async fn process_with_skills(
         return Ok(transcription.to_string());
     }
 
+    let meaningful_chars = transcription.chars().filter(|c| c.is_alphanumeric()).count();
+    if meaningful_chars < 2 {
+        logger.info(
+            "skills",
+            "转写内容过短，跳过处理",
+            Some(serde_json::json!({
+                "original_length": transcription.len(),
+                "original_preview": transcription.chars().take(50).collect::<String>(),
+            })),
+        );
+        return Ok(transcription.to_string());
+    }
+
     if transcription_config.polish_provider_id.is_empty()
         || transcription_config.polish_model.is_empty()
     {
@@ -117,7 +130,11 @@ pub async fn process_with_skills(
         return Ok(transcription.to_string());
     }
 
-    let (app_name, bundle_id) = match get_frontmost_app() {
+    let frontmost_result = tokio::task::spawn_blocking(get_frontmost_app)
+        .await
+        .unwrap_or_else(|e| Err(format!("spawn_blocking error: {}", e)));
+
+    let (app_name, bundle_id) = match frontmost_result {
         Ok(info) => info,
         Err(e) => {
             logger.warn(

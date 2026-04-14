@@ -19,6 +19,10 @@ pub fn get_saved_selected_text() -> Option<String> {
     SELECTED_TEXT.lock().ok().and_then(|g| g.clone())
 }
 
+pub fn get_target_app() -> Option<String> {
+    TARGET_APP.lock().ok().and_then(|g| g.clone())
+}
+
 #[tauri::command]
 pub fn get_replace_mode_state() -> serde_json::Value {
     let text = SELECTED_TEXT.lock().ok().and_then(|g| g.clone());
@@ -28,13 +32,13 @@ pub fn get_replace_mode_state() -> serde_json::Value {
     })
 }
 
-pub fn write_and_paste(text: &str) -> Result<(), String> {
+pub fn write_and_paste(text: &str, target_app: Option<String>) -> Result<(), String> {
     let mut clipboard =
         arboard::Clipboard::new().map_err(|e| format!("Failed to access clipboard: {}", e))?;
     clipboard
         .set_text(text)
         .map_err(|e| format!("Failed to write to clipboard: {}", e))?;
-    simulate_paste();
+    simulate_paste(&target_app);
     Ok(())
 }
 
@@ -44,17 +48,16 @@ fn escape_applescript_string(s: &str) -> String {
 }
 
 #[cfg(target_os = "macos")]
-fn simulate_paste() {
-    let target_app = TARGET_APP.lock().ok().and_then(|g| g.clone());
+fn simulate_paste(target_app: &Option<String>) {
     if let Some(app) = target_app {
         let _ = std::process::Command::new("osascript")
             .arg("-e")
             .arg(format!(
                 "tell application \"{}\" to activate",
-                escape_applescript_string(&app)
+                escape_applescript_string(app)
             ))
             .output();
-        std::thread::sleep(std::time::Duration::from_millis(50));
+        std::thread::sleep(std::time::Duration::from_millis(300));
     }
     let _ = std::process::Command::new("osascript")
         .arg("-e")
