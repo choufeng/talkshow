@@ -7,7 +7,7 @@ use super::SenseVoiceError;
 
 static ORT_INITIALIZED: AtomicBool = AtomicBool::new(false);
 
-fn find_onnxruntime_dylib() -> Option<PathBuf> {
+pub(crate) fn find_onnxruntime_dylib() -> Option<PathBuf> {
     let candidates: Vec<PathBuf> = vec![
         PathBuf::from("/opt/homebrew/lib/libonnxruntime.dylib"),
         PathBuf::from("/usr/local/lib/libonnxruntime.dylib"),
