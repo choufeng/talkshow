@@ -549,7 +549,7 @@ pub fn run() {
             let health_checks = health::run_health_checks();
             for check in &health_checks {
                 if let health::HealthStatus::Warning { message, .. } = &check.status {
-                    log::warn!("[health] {} 检查警告: {}", check.name, message);
+                    eprintln!("[health] {} 检查警告: {}", check.name, message);
                 }
             }
             let health_state = health::HealthState {
