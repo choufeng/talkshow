@@ -1,5 +1,5 @@
 mod download;
-mod engine;
+pub(crate) mod engine;
 
 pub use download::model_status;
 pub use engine::SenseVoiceEngine;

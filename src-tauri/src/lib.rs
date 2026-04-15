@@ -12,6 +12,7 @@ mod pipeline;
 mod providers;
 mod real_llm_client;
 mod recording;
+mod health;
 mod sensevoice;
 mod shortcuts;
 mod skills;
@@ -90,7 +91,8 @@ pub fn run() {
             sensevoice::download_sensevoice_model,
             sensevoice::delete_sensevoice_model,
             logger::get_log_sessions,
-            logger::get_log_content
+            logger::get_log_content,
+            health::get_health_status,
         ])
         .setup(|app| {
             let app_data_dir = app.path().app_data_dir().unwrap_or_default();
@@ -543,6 +545,17 @@ pub fn run() {
                     }
                 });
             }
+
+            let health_checks = health::run_health_checks();
+            for check in &health_checks {
+                if let health::HealthStatus::Warning { message, .. } = &check.status {
+                    log::warn!("[health] {} 检查警告: {}", check.name, message);
+                }
+            }
+            let health_state = health::HealthState {
+                checks: health_checks,
+            };
+            app.manage(health_state);
 
             let sensevoice_state = SenseVoiceState {
                 engine: Arc::new(Mutex::new(None)),

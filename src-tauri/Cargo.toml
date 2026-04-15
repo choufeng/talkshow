@@ -45,6 +45,7 @@ kaldi-native-fbank = "0.1"
 async-trait = "0.1"
 sha2 = "0.10"
 home = "0.5"
+log = "0.4"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
