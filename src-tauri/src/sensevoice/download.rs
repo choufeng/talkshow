@@ -57,14 +57,21 @@ fn model_dir(app_data_dir: &std::path::Path) -> PathBuf {
 
 pub fn model_status(app_data_dir: &std::path::Path) -> SenseVoiceModelStatus {
     let dir = model_dir(app_data_dir);
-    let onnx_path = dir.join("model_quant.onnx");
-    if onnx_path.exists() {
-        let size = std::fs::metadata(&onnx_path).map(|m| m.len()).unwrap_or(0);
-        if size > 100_000_000 {
-            return SenseVoiceModelStatus::Ready { size_bytes: size };
+    let mut total_size: u64 = 0;
+    for &(filename, expected_size, _expected_hash) in MODEL_FILES {
+        let path = dir.join(filename);
+        if !path.exists() {
+            return SenseVoiceModelStatus::NotDownloaded;
         }
+        let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+        if size != expected_size {
+            return SenseVoiceModelStatus::NotDownloaded;
+        }
+        total_size += size;
     }
-    SenseVoiceModelStatus::NotDownloaded
+    SenseVoiceModelStatus::Ready {
+        size_bytes: total_size,
+    }
 }
 
 pub async fn download_model_files(

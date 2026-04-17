@@ -74,6 +74,23 @@ impl SenseVoiceEngine {
     pub fn new(model_dir: &std::path::Path) -> Result<Self, SenseVoiceError> {
         ensure_ort_initialized()?;
 
+        let required_files = [
+            "model_quant.onnx",
+            "config.yaml",
+            "am.mvn",
+            "chn_jpn_yue_eng_ko_spectok.bpe.model",
+            "tokens.json",
+        ];
+        for filename in &required_files {
+            let path = model_dir.join(filename);
+            if !path.exists() {
+                return Err(SenseVoiceError::LoadFailed(format!(
+                    "模型文件缺失: {}，请重新下载模型",
+                    filename
+                )));
+            }
+        }
+
         let onnx_path = model_dir.join("model_quant.onnx");
         let session = Session::builder()
             .map_err(|e| SenseVoiceError::LoadFailed(e.to_string()))?
