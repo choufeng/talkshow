@@ -126,7 +126,7 @@ pub fn run() {
             let _tray = TrayIconBuilder::with_id(TRAY_ID)
                 .icon(default_icon_owned.clone())
                 .menu(&menu)
-                .show_menu_on_left_click(false)
+                .show_menu_on_left_click(true)
                 .tooltip("TalkShow")
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "quit" => {
@@ -140,7 +140,7 @@ pub fn run() {
                     _ => {}
                 })
                 .on_tray_icon_event(|tray, event| if let TrayIconEvent::Click {
-                        button: MouseButton::Left,
+                        button: MouseButton::Right,
                         button_state: MouseButtonState::Up,
                         ..
                     } = event {
@@ -280,7 +280,7 @@ pub fn run() {
                                     "recording:complete",
                                     mode,
                                 );
-                                play_sound("Submarine.aiff");
+                                play_sound("Frog.aiff");
                                 restore_default_tray(&app_handle, default_icon_owned.clone());
                             } else {
                                 let start_result =
@@ -316,7 +316,7 @@ pub fn run() {
 
                                                 // Show indicator immediately
                                                 show_indicator(&app_handle);
-                                                play_sound("Ping.aiff");
+                                                play_sound("Tink.aiff");
 
                                                 // === Phase 2: Background async operations (~300ms) ===
                                                 let app_handle_bg = app_handle.clone();
@@ -408,7 +408,7 @@ pub fn run() {
                                     "recording:complete",
                                     mode,
                                 );
-                                play_sound("Submarine.aiff");
+                                play_sound("Frog.aiff");
                                 restore_default_tray(&app_handle, default_icon_owned.clone());
                             } else {
                                 let start_result =
@@ -444,7 +444,7 @@ pub fn run() {
 
                                                 // Show indicator immediately
                                                 show_indicator(&app_handle);
-                                                play_sound("Ping.aiff");
+                                                play_sound("Tink.aiff");
 
                                                 // === Phase 2: Background async operations ===
                                                 let app_handle_bg = app_handle.clone();
