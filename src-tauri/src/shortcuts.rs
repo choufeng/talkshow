@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64};
 use std::sync::{Mutex, RwLock};
 use std::time::Instant;
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};

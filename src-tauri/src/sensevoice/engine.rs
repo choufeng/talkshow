@@ -4,8 +4,8 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::AppHandle;
 
-use super::bundled_paths;
 use super::SenseVoiceError;
+use super::bundled_paths;
 #[cfg(target_os = "macos")]
 use ort_sys;
 

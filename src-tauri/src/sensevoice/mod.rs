@@ -1,9 +1,9 @@
+mod bundled_paths;
 mod download;
 mod engine;
-mod bundled_paths;
 
 pub use download::model_status;
-pub use engine::{ensure_ort_initialized_pub, SenseVoiceEngine};
+pub use engine::{SenseVoiceEngine, ensure_ort_initialized_pub};
 
 use tauri::Manager;
 
