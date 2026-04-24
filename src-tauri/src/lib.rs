@@ -324,9 +324,15 @@ pub fn run() {
                                                 // === Phase 2: Background async operations (~300ms) ===
                                                 let app_handle_bg = app_handle.clone();
                                                 let esc_bg = esc_shortcut_handler;
+                                                let session_snapshot = SESSION_ID.fetch_add(1, Ordering::SeqCst) + 1;
 
                                                 std::thread::spawn(move || {
-                                                    // Get frontmost app name
+                                                    use std::sync::atomic::Ordering;
+
+                                                    // Checkpoint 1: get frontmost app
+                                                    if SESSION_ID.load(Ordering::SeqCst) != session_snapshot {
+                                                        return;
+                                                    }
                                                     let frontmost = std::process::Command::new("osascript")
                                                         .arg("-e")
                                                         .arg("tell application \"System Events\" to get name of first process whose frontmost is true")
@@ -334,13 +340,14 @@ pub fn run() {
                                                         .ok()
                                                         .filter(|o| o.status.success())
                                                         .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
-
-                                                    // Save target app for later paste
                                                     if let Some(ref app) = frontmost {
                                                         clipboard::save_target_app(app);
                                                     }
 
-                                                    // Auto mute
+                                                    // Checkpoint 2: auto mute
+                                                    if SESSION_ID.load(Ordering::SeqCst) != session_snapshot {
+                                                        return;
+                                                    }
                                                     let app_data_dir_mute = app_handle_bg.path().app_data_dir().unwrap_or_default();
                                                     let app_config_mute = config::load_config(&app_data_dir_mute);
                                                     if app_config_mute.features.recording.auto_mute {
@@ -350,11 +357,17 @@ pub fn run() {
                                                         );
                                                     }
 
-                                                    // Register ESC shortcut
+                                                    // Checkpoint 3: register ESC
+                                                    if SESSION_ID.load(Ordering::SeqCst) != session_snapshot {
+                                                        return;
+                                                    }
                                                     let h = app_handle_bg.clone();
                                                     let _ = h.global_shortcut().register(esc_bg);
 
-                                                    // Log
+                                                    // Checkpoint 4: log
+                                                    if SESSION_ID.load(Ordering::SeqCst) != session_snapshot {
+                                                        return;
+                                                    }
                                                     if let Some(logger) = app_handle_bg.try_state::<Logger>() {
                                                         logger.info("recording", "录音开始", None);
                                                     }
