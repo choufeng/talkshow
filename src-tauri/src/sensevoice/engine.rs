@@ -2,65 +2,34 @@ use ndarray::{Array1, Array2, Array3};
 use ort::session::Session;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
+use tauri::AppHandle;
 
+use super::bundled_paths;
 use super::SenseVoiceError;
 
 static ORT_INITIALIZED: AtomicBool = AtomicBool::new(false);
 
-fn find_onnxruntime_dylib() -> Option<PathBuf> {
-    let candidates: Vec<PathBuf> = vec![
-        PathBuf::from("/opt/homebrew/lib/libonnxruntime.dylib"),
-        PathBuf::from("/usr/local/lib/libonnxruntime.dylib"),
-    ];
-    for candidate in &candidates {
-        if candidate.exists() {
-            return Some(candidate.clone());
-        }
-    }
-    if let Ok(output) = std::process::Command::new("python3")
-        .args([
-            "-c",
-            "import onnxruntime; import os; print(os.path.dirname(onnxruntime.__file__))",
-        ])
-        .output()
-        && output.status.success()
-    {
-        let dir = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        let path = PathBuf::from(&dir).join("capi");
-        if let Ok(entries) = std::fs::read_dir(&path) {
-            for entry in entries.flatten() {
-                let name = entry.file_name();
-                let name_str = name.to_string_lossy();
-                if name_str.starts_with("libonnxruntime") && name_str.ends_with(".dylib") {
-                    return Some(entry.path());
-                }
-            }
-        }
-    }
-    None
-}
-
-fn ensure_ort_initialized() -> Result<(), SenseVoiceError> {
+fn ensure_ort_initialized(app: &AppHandle) -> Result<(), SenseVoiceError> {
     if ORT_INITIALIZED.load(Ordering::Acquire) {
         return Ok(());
     }
-    if let Some(dylib_path) = find_onnxruntime_dylib() {
-        ort::init_from(&dylib_path)
-            .map_err(|e| {
-                SenseVoiceError::LoadFailed(format!(
-                    "Failed to load ONNX Runtime from {}: {}",
-                    dylib_path.display(),
-                    e
-                ))
-            })?
-            .commit();
-        ORT_INITIALIZED.store(true, Ordering::Release);
-        Ok(())
-    } else {
-        Err(SenseVoiceError::LoadFailed(
-            "ONNX Runtime 动态库未找到。请通过 `brew install onnxruntime` 或 `pip3 install onnxruntime` 安装。".to_string()
-        ))
-    }
+    let dylib_path = bundled_paths::onnxruntime_dylib_path(app).ok_or_else(|| {
+        SenseVoiceError::LoadFailed(
+            "ONNX Runtime library not found in app bundle. Please reinstall the application."
+                .to_string(),
+        )
+    })?;
+    ort::init_from(&dylib_path)
+        .map_err(|e| {
+            SenseVoiceError::LoadFailed(format!(
+                "Failed to load ONNX Runtime from {}: {}",
+                dylib_path.display(),
+                e
+            ))
+        })?
+        .commit();
+    ORT_INITIALIZED.store(true, Ordering::Release);
+    Ok(())
 }
 
 pub struct SenseVoiceEngine {
@@ -68,11 +37,12 @@ pub struct SenseVoiceEngine {
     cmvn_means: Array1<f64>,
     cmvn_vars: Array1<f64>,
     model_dir: PathBuf,
+    ffmpeg_path: PathBuf,
 }
 
 impl SenseVoiceEngine {
-    pub fn new(model_dir: &std::path::Path) -> Result<Self, SenseVoiceError> {
-        ensure_ort_initialized()?;
+    pub fn new(model_dir: &std::path::Path, app: &AppHandle) -> Result<Self, SenseVoiceError> {
+        ensure_ort_initialized(app)?;
 
         let onnx_path = model_dir.join("model_quant.onnx");
         let session = Session::builder()
@@ -85,11 +55,18 @@ impl SenseVoiceEngine {
         let (cmvn_means, cmvn_vars) =
             parse_cmvn(&model_dir.join("am.mvn")).map_err(SenseVoiceError::LoadFailed)?;
 
+        let ffmpeg_path = bundled_paths::ffmpeg_bin_path(app).ok_or_else(|| {
+            SenseVoiceError::LoadFailed(
+                "ffmpeg not found in app bundle. Please reinstall the application.".to_string(),
+            )
+        })?;
+
         Ok(Self {
             session,
             cmvn_means,
             cmvn_vars,
             model_dir: model_dir.to_path_buf(),
+            ffmpeg_path,
         })
     }
 
@@ -98,7 +75,7 @@ impl SenseVoiceEngine {
         audio_path: &PathBuf,
         language: i32,
     ) -> Result<String, SenseVoiceError> {
-        let (waveform, sample_rate) = load_audio(audio_path)?;
+        let (waveform, sample_rate) = load_audio(audio_path, &self.ffmpeg_path)?;
         let waveform_16k = resample_to_16k(&waveform, sample_rate)?;
         if waveform_16k.len() < 4800 {
             return Ok(String::new());
@@ -199,7 +176,7 @@ fn parse_cmvn(mvn_path: &PathBuf) -> Result<(Array1<f64>, Array1<f64>), String> 
     Ok((Array1::from_vec(means), Array1::from_vec(vars)))
 }
 
-fn load_audio(path: &PathBuf) -> Result<(Vec<f32>, u32), SenseVoiceError> {
+fn load_audio(path: &PathBuf, ffmpeg_path: &PathBuf) -> Result<(Vec<f32>, u32), SenseVoiceError> {
     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
     let (wav_path, converted) = if ext == "wav" {
         (path.clone(), false)
@@ -210,7 +187,7 @@ fn load_audio(path: &PathBuf) -> Result<(Vec<f32>, u32), SenseVoiceError> {
             "{}_sensevoice.wav",
             path.file_stem().and_then(|s| s.to_str()).unwrap_or("tmp")
         ));
-        let output = std::process::Command::new("ffmpeg")
+        let output = std::process::Command::new(ffmpeg_path)
             .args(["-y", "-i"])
             .arg(path)
             .args(["-ar", "16000", "-ac", "1", "-f", "wav"])

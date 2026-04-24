@@ -197,6 +197,7 @@ pub fn stop_recording(
                                     .join("models")
                                     .join("sensevoice");
                                 let audio_path_sb = audio_path.clone();
+                                let app_handle_for_sv = h.clone();
 
                                 let sb_result = tokio::task::spawn_blocking(move || {
                                     {
@@ -204,7 +205,7 @@ pub fn stop_recording(
                                             engine_arc.lock().unwrap_or_else(|e| e.into_inner());
                                         if guard.is_none() {
                                             drop(guard);
-                                            match SenseVoiceEngine::new(&mdl_dir_sb) {
+                                            match SenseVoiceEngine::new(&mdl_dir_sb, &app_handle_for_sv) {
                                                 Ok(eng) => {
                                                     let mut g = engine_arc
                                                         .lock()
