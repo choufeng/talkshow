@@ -327,8 +327,6 @@ pub fn run() {
                                                 let session_snapshot = SESSION_ID.fetch_add(1, Ordering::SeqCst) + 1;
 
                                                 std::thread::spawn(move || {
-                                                    use std::sync::atomic::Ordering;
-
                                                     // Checkpoint 1: get frontmost app
                                                     if SESSION_ID.load(Ordering::SeqCst) != session_snapshot {
                                                         return;
