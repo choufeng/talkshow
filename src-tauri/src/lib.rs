@@ -187,13 +187,12 @@ pub fn run() {
                         let mode = RECORDING.load(Ordering::Relaxed);
                         SESSION_ID.fetch_add(1, Ordering::SeqCst);
                         RECORDING.store(RECORDING_MODE_NONE, Ordering::SeqCst);
-                        stop_recording(
-                            &app_handle_cancel,
-                            &recorder_cancel,
-                            &recording_start_cancel,
-                            "recording:cancel",
-                            mode,
-                        );
+                        let app_stop = app_handle_cancel.clone();
+                        let recorder_stop = recorder_cancel.clone();
+                        let rec_start_stop = recording_start_cancel.clone();
+                        std::thread::spawn(move || {
+                            stop_recording(&app_stop, &recorder_stop, &rec_start_stop, "recording:cancel", mode);
+                        });
                     } else {
                         CANCELLED.store(true, Ordering::SeqCst);
                     }
@@ -230,13 +229,12 @@ pub fn run() {
                                 let mode = RECORDING.load(Ordering::Relaxed);
                                 SESSION_ID.fetch_add(1, Ordering::SeqCst);
                                 RECORDING.store(RECORDING_MODE_NONE, Ordering::SeqCst);
-                                stop_recording(
-                                    &app_handle,
-                                    &recorder_handler,
-                                    &recording_start_handler,
-                                    "recording:cancel",
-                                    mode,
-                                );
+                                let app_stop = app_handle.clone();
+                                let recorder_stop = recorder_handler.clone();
+                                let rec_start_stop = recording_start_handler.clone();
+                                std::thread::spawn(move || {
+                                    stop_recording(&app_stop, &recorder_stop, &rec_start_stop, "recording:cancel", mode);
+                                });
                                 play_sound("Pop.aiff");
                             } else if app_handle.get_webview_window(INDICATOR_LABEL).is_some() {
                                 CANCELLED.store(true, Ordering::SeqCst);
@@ -276,13 +274,12 @@ pub fn run() {
                                 let mode = RECORDING.load(Ordering::Relaxed);
                                 SESSION_ID.fetch_add(1, Ordering::SeqCst);
                                 RECORDING.store(RECORDING_MODE_NONE, Ordering::SeqCst);
-                                stop_recording(
-                                    &app_handle,
-                                    &recorder_handler,
-                                    &recording_start_handler,
-                                    "recording:complete",
-                                    mode,
-                                );
+                                let app_stop = app_handle.clone();
+                                let recorder_stop = recorder_handler.clone();
+                                let rec_start_stop = recording_start_handler.clone();
+                                std::thread::spawn(move || {
+                                    stop_recording(&app_stop, &recorder_stop, &rec_start_stop, "recording:complete", mode);
+                                });
                                 play_sound("Frog.aiff");
                                 restore_default_tray(&app_handle, default_icon_owned.clone());
                             } else {
@@ -416,13 +413,12 @@ pub fn run() {
                                 let mode = RECORDING.load(Ordering::Relaxed);
                                 SESSION_ID.fetch_add(1, Ordering::SeqCst);
                                 RECORDING.store(RECORDING_MODE_NONE, Ordering::SeqCst);
-                                stop_recording(
-                                    &app_handle,
-                                    &recorder_handler,
-                                    &recording_start_handler,
-                                    "recording:complete",
-                                    mode,
-                                );
+                                let app_stop = app_handle.clone();
+                                let recorder_stop = recorder_handler.clone();
+                                let rec_start_stop = recording_start_handler.clone();
+                                std::thread::spawn(move || {
+                                    stop_recording(&app_stop, &recorder_stop, &rec_start_stop, "recording:complete", mode);
+                                });
                                 play_sound("Frog.aiff");
                                 restore_default_tray(&app_handle, default_icon_owned.clone());
                             } else {
