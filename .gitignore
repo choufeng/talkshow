@@ -16,3 +16,5 @@ src-tauri/target/
 coverage/
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+src-tauri/binaries/ffmpeg-*
+src-tauri/resources/libonnxruntime*.dylib
