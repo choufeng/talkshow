@@ -33,37 +33,37 @@ fn escape_applescript_string(s: &str) -> String {
 
 #[cfg(target_os = "macos")]
 fn simulate_paste(target_app: &Option<String>) {
+    // Use System Events to activate by process name rather than
+    // `tell application "<name>" to activate`, which requires the exact
+    // application bundle name and fails for process names like "stable"
+    // (e.g. Google Chrome Stable whose process name differs from its bundle name).
     let script = if let Some(app) = target_app {
         format!(
-            "tell application \"{}\" to activate\ndelay 0.3\ntell application \"System Events\" to keystroke \"v\" using command down",
+            "tell application \"System Events\"\n\
+             set frontmost of process \"{}\" to true\n\
+             end tell\n\
+             delay 0.3\n\
+             tell application \"System Events\" to keystroke \"v\" using command down",
             escape_applescript_string(app)
         )
     } else {
         String::from("tell application \"System Events\" to keystroke \"v\" using command down")
     };
 
-    match Command::new("osascript").arg("-e").arg(&script).spawn() {
-        Ok(mut child) => {
-            let deadline = Instant::now() + Duration::from_secs(3);
-            loop {
-                match child.try_wait() {
-                    Ok(Some(_)) => break,
-                    Ok(None) => {
-                        if Instant::now() >= deadline {
-                            eprintln!(
-                                "[TalkShow] osascript timed out, killing process (pid: {:?})",
-                                child.id()
-                            );
-                            let _ = child.kill();
-                            let _ = child.wait();
-                            break;
-                        }
-                        std::thread::sleep(Duration::from_millis(50));
-                    }
-                    Err(e) => {
-                        eprintln!("[TalkShow] osascript poll error: {}", e);
-                        break;
-                    }
+    let output = Command::new("osascript").arg("-e").arg(&script).output();
+    match output {
+        Ok(out) => {
+            if !out.status.success() {
+                let stderr = String::from_utf8_lossy(&out.stderr);
+                if stderr.contains("1002") || stderr.contains("not allowed to send keystrokes") {
+                    // Surface accessibility permission error clearly
+                    eprintln!(
+                        "[TalkShow] Paste blocked — grant Accessibility permission to this \
+                         app in System Settings → Privacy & Security → Accessibility. \
+                         Error: {stderr}"
+                    );
+                } else {
+                    eprintln!("[TalkShow] osascript failed: {stderr}");
                 }
             }
         }

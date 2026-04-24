@@ -33,6 +33,12 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "resources": [
+      "resources/libonnxruntime.dylib"
+    ],
+    "externalBin": [
+      "binaries/ffmpeg"
+    ],
     "macOS": {}
   }
 }

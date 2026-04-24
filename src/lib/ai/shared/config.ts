@@ -19,6 +19,10 @@ export function updateNestedPath<T>(
   path: string[],
   updater: (value: unknown) => unknown
 ): T {
+  // Guard against empty path – return the original object unchanged
+  if (path.length === 0) {
+    return obj;
+  }
   const [key, ...rest] = path;
   if (rest.length === 0) {
     return { ...obj, [key]: updater((obj as Record<string, unknown>)[key]) };

@@ -1,8 +1,9 @@
+pub(crate) mod bundled_paths;
 mod download;
 pub(crate) mod engine;
 
 pub use download::model_status;
-pub use engine::SenseVoiceEngine;
+pub use engine::{SenseVoiceEngine, ensure_ort_initialized_pub};
 
 use tauri::Manager;
 

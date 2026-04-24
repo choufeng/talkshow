@@ -70,3 +70,11 @@ describe('updateNestedPath', () => {
     expect(updated.x).toBe(3);
   });
 });
+
+describe('updateNestedPath edge cases', () => {
+  it('handles empty path gracefully', () => {
+    const obj = { a: 1 };
+    const updated = updateNestedPath(obj, [], () => 99);
+    expect(updated).toBe(obj);
+  });
+});

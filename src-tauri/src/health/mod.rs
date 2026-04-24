@@ -1,4 +1,4 @@
-use crate::sensevoice::engine::find_onnxruntime_dylib;
+use crate::sensevoice::bundled_paths;
 
 #[derive(Clone)]
 pub enum HealthStatus {
@@ -55,7 +55,7 @@ pub struct HealthState {
 pub trait HealthCheck {
     fn id(&self) -> &str;
     fn name(&self) -> &str;
-    fn check(&self) -> HealthStatus;
+    fn check(&self, app: &tauri::AppHandle) -> HealthStatus;
 }
 
 pub struct OnnxRuntimeCheck;
@@ -69,26 +69,25 @@ impl HealthCheck for OnnxRuntimeCheck {
         "ONNX Runtime"
     }
 
-    fn check(&self) -> HealthStatus {
-        match find_onnxruntime_dylib() {
+    fn check(&self, app: &tauri::AppHandle) -> HealthStatus {
+        match bundled_paths::onnxruntime_dylib_path(app) {
             Some(_) => HealthStatus::Ok,
             None => HealthStatus::Warning {
                 message: "ONNX Runtime 动态库未找到，SenseVoice 本地转写功能将不可用。".to_string(),
-                fix_hint: "请通过 brew install onnxruntime 或 pip3 install onnxruntime 安装。"
-                    .to_string(),
+                fix_hint: "请通过 brew install onnxruntime 安装。".to_string(),
             },
         }
     }
 }
 
-pub fn run_health_checks() -> Vec<HealthCheckResult> {
+pub fn run_health_checks(app: &tauri::AppHandle) -> Vec<HealthCheckResult> {
     let checks: Vec<Box<dyn HealthCheck>> = vec![Box::new(OnnxRuntimeCheck)];
     checks
         .iter()
         .map(|c| HealthCheckResult {
             id: c.id().to_string(),
             name: c.name().to_string(),
-            status: c.check(),
+            status: c.check(app),
         })
         .collect()
 }

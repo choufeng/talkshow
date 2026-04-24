@@ -36,7 +36,7 @@ use providers::ProviderContext;
 use recording::AudioRecorder;
 use shortcuts::{
     CANCELLED, LAST_REC_PRESS, RECORDING, RECORDING_MODE_NONE, RECORDING_MODE_TRANSCRIPTION,
-    RECORDING_MODE_TRANSLATION, SHORTCUT_IDS, parse_shortcut,
+    RECORDING_MODE_TRANSLATION, SESSION_ID, SHORTCUT_IDS, parse_shortcut,
 };
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
@@ -67,6 +67,7 @@ fn format_elapsed(start: &Instant) -> String {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -127,7 +128,7 @@ pub fn run() {
             let _tray = TrayIconBuilder::with_id(TRAY_ID)
                 .icon(default_icon_owned.clone())
                 .menu(&menu)
-                .show_menu_on_left_click(false)
+                .show_menu_on_left_click(true)
                 .tooltip("TalkShow")
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "quit" => {
@@ -141,7 +142,7 @@ pub fn run() {
                     _ => {}
                 })
                 .on_tray_icon_event(|tray, event| if let TrayIconEvent::Click {
-                        button: MouseButton::Left,
+                        button: MouseButton::Right,
                         button_state: MouseButtonState::Up,
                         ..
                     } = event {
@@ -186,14 +187,14 @@ pub fn run() {
                     let is_recording = RECORDING.load(Ordering::Relaxed) != RECORDING_MODE_NONE;
                     if is_recording {
                         let mode = RECORDING.load(Ordering::Relaxed);
+                        SESSION_ID.fetch_add(1, Ordering::SeqCst);
                         RECORDING.store(RECORDING_MODE_NONE, Ordering::SeqCst);
-                        stop_recording(
-                            &app_handle_cancel,
-                            &recorder_cancel,
-                            &recording_start_cancel,
-                            "recording:cancel",
-                            mode,
-                        );
+                        let app_stop = app_handle_cancel.clone();
+                        let recorder_stop = recorder_cancel.clone();
+                        let rec_start_stop = recording_start_cancel.clone();
+                        std::thread::spawn(move || {
+                            stop_recording(&app_stop, &recorder_stop, &rec_start_stop, "recording:cancel", mode);
+                        });
                     } else {
                         CANCELLED.store(true, Ordering::SeqCst);
                     }
@@ -228,14 +229,14 @@ pub fn run() {
                             let is_recording = RECORDING.load(Ordering::Relaxed) != RECORDING_MODE_NONE;
                             if is_recording {
                                 let mode = RECORDING.load(Ordering::Relaxed);
+                                SESSION_ID.fetch_add(1, Ordering::SeqCst);
                                 RECORDING.store(RECORDING_MODE_NONE, Ordering::SeqCst);
-                                stop_recording(
-                                    &app_handle,
-                                    &recorder_handler,
-                                    &recording_start_handler,
-                                    "recording:cancel",
-                                    mode,
-                                );
+                                let app_stop = app_handle.clone();
+                                let recorder_stop = recorder_handler.clone();
+                                let rec_start_stop = recording_start_handler.clone();
+                                std::thread::spawn(move || {
+                                    stop_recording(&app_stop, &recorder_stop, &rec_start_stop, "recording:cancel", mode);
+                                });
                                 play_sound("Pop.aiff");
                             } else if app_handle.get_webview_window(INDICATOR_LABEL).is_some() {
                                 CANCELLED.store(true, Ordering::SeqCst);
@@ -273,15 +274,15 @@ pub fn run() {
                             let is_recording = RECORDING.load(Ordering::Relaxed) != RECORDING_MODE_NONE;
                             if is_recording {
                                 let mode = RECORDING.load(Ordering::Relaxed);
+                                SESSION_ID.fetch_add(1, Ordering::SeqCst);
                                 RECORDING.store(RECORDING_MODE_NONE, Ordering::SeqCst);
-                                stop_recording(
-                                    &app_handle,
-                                    &recorder_handler,
-                                    &recording_start_handler,
-                                    "recording:complete",
-                                    mode,
-                                );
-                                play_sound("Submarine.aiff");
+                                let app_stop = app_handle.clone();
+                                let recorder_stop = recorder_handler.clone();
+                                let rec_start_stop = recording_start_handler.clone();
+                                std::thread::spawn(move || {
+                                    stop_recording(&app_stop, &recorder_stop, &rec_start_stop, "recording:complete", mode);
+                                });
+                                play_sound("Frog.aiff");
                                 restore_default_tray(&app_handle, default_icon_owned.clone());
                             } else {
                                 let start_result =
@@ -317,14 +318,18 @@ pub fn run() {
 
                                                 // Show indicator immediately
                                                 show_indicator(&app_handle);
-                                                play_sound("Ping.aiff");
+                                                play_sound("Tink.aiff");
 
                                                 // === Phase 2: Background async operations (~300ms) ===
                                                 let app_handle_bg = app_handle.clone();
                                                 let esc_bg = esc_shortcut_handler;
+                                                let session_snapshot = SESSION_ID.fetch_add(1, Ordering::SeqCst) + 1;
 
                                                 std::thread::spawn(move || {
-                                                    // Get frontmost app name
+                                                    // Checkpoint 1: get frontmost app
+                                                    if SESSION_ID.load(Ordering::SeqCst) != session_snapshot {
+                                                        return;
+                                                    }
                                                     let frontmost = std::process::Command::new("osascript")
                                                         .arg("-e")
                                                         .arg("tell application \"System Events\" to get name of first process whose frontmost is true")
@@ -332,13 +337,14 @@ pub fn run() {
                                                         .ok()
                                                         .filter(|o| o.status.success())
                                                         .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
-
-                                                    // Save target app for later paste
                                                     if let Some(ref app) = frontmost {
                                                         clipboard::save_target_app(app);
                                                     }
 
-                                                    // Auto mute
+                                                    // Checkpoint 2: auto mute
+                                                    if SESSION_ID.load(Ordering::SeqCst) != session_snapshot {
+                                                        return;
+                                                    }
                                                     let app_data_dir_mute = app_handle_bg.path().app_data_dir().unwrap_or_default();
                                                     let app_config_mute = config::load_config(&app_data_dir_mute);
                                                     if app_config_mute.features.recording.auto_mute {
@@ -348,11 +354,17 @@ pub fn run() {
                                                         );
                                                     }
 
-                                                    // Register ESC shortcut
+                                                    // Checkpoint 3: register ESC
+                                                    if SESSION_ID.load(Ordering::SeqCst) != session_snapshot {
+                                                        return;
+                                                    }
                                                     let h = app_handle_bg.clone();
                                                     let _ = h.global_shortcut().register(esc_bg);
 
-                                                    // Log
+                                                    // Checkpoint 4: log
+                                                    if SESSION_ID.load(Ordering::SeqCst) != session_snapshot {
+                                                        return;
+                                                    }
                                                     if let Some(logger) = app_handle_bg.try_state::<Logger>() {
                                                         logger.info("recording", "录音开始", None);
                                                     }
@@ -401,15 +413,15 @@ pub fn run() {
                             let is_recording = RECORDING.load(Ordering::Relaxed) != RECORDING_MODE_NONE;
                             if is_recording {
                                 let mode = RECORDING.load(Ordering::Relaxed);
+                                SESSION_ID.fetch_add(1, Ordering::SeqCst);
                                 RECORDING.store(RECORDING_MODE_NONE, Ordering::SeqCst);
-                                stop_recording(
-                                    &app_handle,
-                                    &recorder_handler,
-                                    &recording_start_handler,
-                                    "recording:complete",
-                                    mode,
-                                );
-                                play_sound("Submarine.aiff");
+                                let app_stop = app_handle.clone();
+                                let recorder_stop = recorder_handler.clone();
+                                let rec_start_stop = recording_start_handler.clone();
+                                std::thread::spawn(move || {
+                                    stop_recording(&app_stop, &recorder_stop, &rec_start_stop, "recording:complete", mode);
+                                });
+                                play_sound("Frog.aiff");
                                 restore_default_tray(&app_handle, default_icon_owned.clone());
                             } else {
                                 let start_result =
@@ -445,14 +457,33 @@ pub fn run() {
 
                                                 // Show indicator immediately
                                                 show_indicator(&app_handle);
-                                                play_sound("Ping.aiff");
+                                                play_sound("Tink.aiff");
 
                                                 // === Phase 2: Background async operations ===
                                                 let app_handle_bg = app_handle.clone();
                                                 let esc_bg = esc_shortcut_handler;
+                                                let session_snapshot = SESSION_ID.fetch_add(1, Ordering::SeqCst) + 1;
 
                                                 std::thread::spawn(move || {
-                                                    // Auto mute
+                                                    // Checkpoint 1: get frontmost app (was missing in translation mode)
+                                                    if SESSION_ID.load(Ordering::SeqCst) != session_snapshot {
+                                                        return;
+                                                    }
+                                                    let frontmost = std::process::Command::new("osascript")
+                                                        .arg("-e")
+                                                        .arg("tell application \"System Events\" to get name of first process whose frontmost is true")
+                                                        .output()
+                                                        .ok()
+                                                        .filter(|o| o.status.success())
+                                                        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
+                                                    if let Some(ref app) = frontmost {
+                                                        clipboard::save_target_app(app);
+                                                    }
+
+                                                    // Checkpoint 2: auto mute
+                                                    if SESSION_ID.load(Ordering::SeqCst) != session_snapshot {
+                                                        return;
+                                                    }
                                                     let app_data_dir_mute = app_handle_bg.path().app_data_dir().unwrap_or_default();
                                                     let app_config_mute = config::load_config(&app_data_dir_mute);
                                                     if app_config_mute.features.recording.auto_mute {
@@ -462,11 +493,17 @@ pub fn run() {
                                                         );
                                                     }
 
-                                                    // Register ESC shortcut
+                                                    // Checkpoint 3: register ESC
+                                                    if SESSION_ID.load(Ordering::SeqCst) != session_snapshot {
+                                                        return;
+                                                    }
                                                     let h = app_handle_bg.clone();
                                                     let _ = h.global_shortcut().register(esc_bg);
 
-                                                    // Log
+                                                    // Checkpoint 4: log
+                                                    if SESSION_ID.load(Ordering::SeqCst) != session_snapshot {
+                                                        return;
+                                                    }
                                                     if let Some(logger) = app_handle_bg.try_state::<Logger>() {
                                                         logger.info("recording", "录音开始 (翻译模式)", None);
                                                     }
@@ -546,7 +583,7 @@ pub fn run() {
                 });
             }
 
-            let health_checks = health::run_health_checks();
+            let health_checks = health::run_health_checks(app.handle());
             for check in &health_checks {
                 if let health::HealthStatus::Warning { message, .. } = &check.status {
                     eprintln!("[health] {} 检查警告: {}", check.name, message);
@@ -565,6 +602,19 @@ pub fn run() {
 
             let provider_ctx = ProviderContext::new();
             app.manage(provider_ctx);
+
+            // Pre-initialise the ONNX Runtime dylib on the main thread.
+            // Doing this here avoids a macOS CoreML/dyld deadlock that occurs
+            // when dlopen(libonnxruntime.dylib) is first called from a
+            // spawn_blocking background thread.
+            {
+                let app_handle_for_ort = app.handle().clone();
+                if let Err(e) = sensevoice::ensure_ort_initialized_pub(&app_handle_for_ort) {
+                    eprintln!("[startup] ORT pre-init failed (non-fatal): {}", e);
+                } else {
+                    eprintln!("[startup] ORT pre-init succeeded");
+                }
+            }
 
             app.manage(logger);
 
