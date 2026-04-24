@@ -17,29 +17,26 @@ pub fn onnxruntime_dylib_path(app: &AppHandle) -> Option<PathBuf> {
 }
 
 /// Returns the path to the bundled ffmpeg sidecar binary.
+/// In dev mode, looks in resource_dir()/binaries/ffmpeg-<triple>.
+/// In production (.app bundle), Tauri places sidecars in Contents/MacOS/,
+/// but resource_dir() points to Contents/Resources/ — so we also check the parent.
 pub fn ffmpeg_bin_path(app: &AppHandle) -> Option<PathBuf> {
-    // Try full Tauri target triple format first (e.g. ffmpeg-aarch64-apple-darwin)
-    if let Ok(triple) = tauri::utils::platform::target_triple() {
-        let full_path = app
-            .path()
-            .resource_dir()
-            .ok()?
-            .join("binaries")
-            .join(format!("ffmpeg-{}", triple));
-        if full_path.exists() {
-            return Some(full_path);
+    let triple = tauri::utils::platform::target_triple().ok()?;
+    let filename = format!("ffmpeg-{}", triple);
+
+    // Try resource_dir/binaries/ first (works in dev mode and some bundle layouts)
+    if let Ok(resource_dir) = app.path().resource_dir() {
+        let candidate = resource_dir.join("binaries").join(&filename);
+        if candidate.exists() {
+            return Some(candidate);
+        }
+        // In .app bundle, sidecars go to Contents/MacOS/ (sibling of Contents/Resources/)
+        if let Some(contents) = resource_dir.parent() {
+            let candidate = contents.join("MacOS").join(&filename);
+            if candidate.exists() {
+                return Some(candidate);
+            }
         }
     }
-    // Fallback: try simple arch name
-    let bin_path = app
-        .path()
-        .resource_dir()
-        .ok()?
-        .join("binaries")
-        .join(format!("ffmpeg-{}", std::env::consts::ARCH));
-    if bin_path.exists() {
-        Some(bin_path)
-    } else {
-        None
-    }
+    None
 }

@@ -9,6 +9,10 @@ use super::SenseVoiceError;
 
 static ORT_INITIALIZED: AtomicBool = AtomicBool::new(false);
 
+// Safety: concurrent calls to ensure_ort_initialized are prevented by the
+// Mutex<Option<SenseVoiceEngine>> lock held at the call site in pipeline.rs.
+// The AtomicBool is used only to skip re-initialization on subsequent calls
+// after the engine has already been loaded once.
 fn ensure_ort_initialized(app: &AppHandle) -> Result<(), SenseVoiceError> {
     if ORT_INITIALIZED.load(Ordering::Acquire) {
         return Ok(());

@@ -1,6 +1,6 @@
 mod download;
 mod engine;
-pub mod bundled_paths;
+mod bundled_paths;
 
 pub use download::model_status;
 pub use engine::SenseVoiceEngine;
