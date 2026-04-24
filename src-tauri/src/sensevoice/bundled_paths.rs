@@ -66,26 +66,48 @@ fn bundled_dylib_is_compatible(path: &PathBuf) -> bool {
 }
 
 /// Returns the path to the bundled ffmpeg sidecar binary.
-/// In dev mode, looks in resource_dir()/binaries/ffmpeg-<triple>.
-/// In production (.app bundle), Tauri places sidecars in Contents/MacOS/,
-/// but resource_dir() points to Contents/Resources/ — so we also check the parent.
+///
+/// Tauri places `externalBin` sidecars differently depending on context:
+/// - **dev mode**: copied to the same directory as the executable as
+///   `ffmpeg` (no triple suffix) — e.g. `target/debug/ffmpeg`.
+/// - **production .app**: placed in `Contents/MacOS/ffmpeg-<triple>`.
+///
+/// We probe all known locations in order.
 pub fn ffmpeg_bin_path(app: &AppHandle) -> Option<PathBuf> {
     let triple = tauri::utils::platform::target_triple().ok()?;
-    let filename = format!("ffmpeg-{}", triple);
+    let filename_with_triple = format!("ffmpeg-{}", triple);
 
-    // Try resource_dir/binaries/ first (works in dev mode and some bundle layouts)
+    // 1. Same directory as the running executable (dev mode: `target/debug/ffmpeg`)
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(exe_dir) = exe.parent() {
+            // dev: Tauri copies as plain "ffmpeg"
+            let plain = exe_dir.join("ffmpeg");
+            if plain.exists() {
+                return Some(plain);
+            }
+            // dev: also try with triple suffix
+            let with_triple = exe_dir.join(&filename_with_triple);
+            if with_triple.exists() {
+                return Some(with_triple);
+            }
+        }
+    }
+
+    // 2. resource_dir/binaries/<triple> (some bundle layouts)
     if let Ok(resource_dir) = app.path().resource_dir() {
-        let candidate = resource_dir.join("binaries").join(&filename);
+        let candidate = resource_dir.join("binaries").join(&filename_with_triple);
         if candidate.exists() {
             return Some(candidate);
         }
-        // In .app bundle, sidecars go to Contents/MacOS/ (sibling of Contents/Resources/)
+
+        // 3. Production .app: Contents/MacOS/<triple>  (sibling of Contents/Resources/)
         if let Some(contents) = resource_dir.parent() {
-            let candidate = contents.join("MacOS").join(&filename);
+            let candidate = contents.join("MacOS").join(&filename_with_triple);
             if candidate.exists() {
                 return Some(candidate);
             }
         }
     }
+
     None
 }
