@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicBool, AtomicU8};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64};
 use std::sync::{Mutex, RwLock};
 use std::time::Instant;
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
@@ -9,6 +9,7 @@ pub const RECORDING_MODE_TRANSLATION: u8 = 2;
 
 pub static RECORDING: AtomicU8 = AtomicU8::new(RECORDING_MODE_NONE);
 pub static CANCELLED: AtomicBool = AtomicBool::new(false);
+pub static SESSION_ID: AtomicU64 = AtomicU64::new(0);
 pub static LAST_REC_PRESS: Mutex<Option<Instant>> = Mutex::new(None);
 
 pub struct ShortcutIds {
@@ -91,5 +92,13 @@ mod tests {
         assert_eq!(RECORDING_MODE_NONE, 0);
         assert_eq!(RECORDING_MODE_TRANSCRIPTION, 1);
         assert_eq!(RECORDING_MODE_TRANSLATION, 2);
+    }
+
+    #[test]
+    fn test_session_id_increments() {
+        use std::sync::atomic::Ordering;
+        let before = SESSION_ID.fetch_add(1, Ordering::SeqCst);
+        let after = SESSION_ID.load(Ordering::SeqCst);
+        assert_eq!(after, before + 1);
     }
 }
