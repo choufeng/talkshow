@@ -50,28 +50,20 @@ fn simulate_paste(target_app: &Option<String>) {
         String::from("tell application \"System Events\" to keystroke \"v\" using command down")
     };
 
-    match Command::new("osascript").arg("-e").arg(&script).spawn() {
-        Ok(mut child) => {
-            let deadline = Instant::now() + Duration::from_secs(3);
-            loop {
-                match child.try_wait() {
-                    Ok(Some(_)) => break,
-                    Ok(None) => {
-                        if Instant::now() >= deadline {
-                            eprintln!(
-                                "[TalkShow] osascript timed out, killing process (pid: {:?})",
-                                child.id()
-                            );
-                            let _ = child.kill();
-                            let _ = child.wait();
-                            break;
-                        }
-                        std::thread::sleep(Duration::from_millis(50));
-                    }
-                    Err(e) => {
-                        eprintln!("[TalkShow] osascript poll error: {}", e);
-                        break;
-                    }
+    let output = Command::new("osascript").arg("-e").arg(&script).output();
+    match output {
+        Ok(out) => {
+            if !out.status.success() {
+                let stderr = String::from_utf8_lossy(&out.stderr);
+                if stderr.contains("1002") || stderr.contains("not allowed to send keystrokes") {
+                    // Surface accessibility permission error clearly
+                    eprintln!(
+                        "[TalkShow] Paste blocked — grant Accessibility permission to this \
+                         app in System Settings → Privacy & Security → Accessibility. \
+                         Error: {stderr}"
+                    );
+                } else {
+                    eprintln!("[TalkShow] osascript failed: {stderr}");
                 }
             }
         }
