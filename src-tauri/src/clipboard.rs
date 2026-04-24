@@ -33,9 +33,17 @@ fn escape_applescript_string(s: &str) -> String {
 
 #[cfg(target_os = "macos")]
 fn simulate_paste(target_app: &Option<String>) {
+    // Use System Events to activate by process name rather than
+    // `tell application "<name>" to activate`, which requires the exact
+    // application bundle name and fails for process names like "stable"
+    // (e.g. Google Chrome Stable whose process name differs from its bundle name).
     let script = if let Some(app) = target_app {
         format!(
-            "tell application \"{}\" to activate\ndelay 0.3\ntell application \"System Events\" to keystroke \"v\" using command down",
+            "tell application \"System Events\"\n\
+             set frontmost of process \"{}\" to true\n\
+             end tell\n\
+             delay 0.3\n\
+             tell application \"System Events\" to keystroke \"v\" using command down",
             escape_applescript_string(app)
         )
     } else {
