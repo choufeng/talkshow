@@ -35,7 +35,7 @@ use providers::ProviderContext;
 use recording::AudioRecorder;
 use shortcuts::{
     CANCELLED, LAST_REC_PRESS, RECORDING, RECORDING_MODE_NONE, RECORDING_MODE_TRANSCRIPTION,
-    RECORDING_MODE_TRANSLATION, SHORTCUT_IDS, parse_shortcut,
+    RECORDING_MODE_TRANSLATION, SESSION_ID, SHORTCUT_IDS, parse_shortcut,
 };
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
@@ -185,6 +185,7 @@ pub fn run() {
                     let is_recording = RECORDING.load(Ordering::Relaxed) != RECORDING_MODE_NONE;
                     if is_recording {
                         let mode = RECORDING.load(Ordering::Relaxed);
+                        SESSION_ID.fetch_add(1, Ordering::SeqCst);
                         RECORDING.store(RECORDING_MODE_NONE, Ordering::SeqCst);
                         stop_recording(
                             &app_handle_cancel,
@@ -227,6 +228,7 @@ pub fn run() {
                             let is_recording = RECORDING.load(Ordering::Relaxed) != RECORDING_MODE_NONE;
                             if is_recording {
                                 let mode = RECORDING.load(Ordering::Relaxed);
+                                SESSION_ID.fetch_add(1, Ordering::SeqCst);
                                 RECORDING.store(RECORDING_MODE_NONE, Ordering::SeqCst);
                                 stop_recording(
                                     &app_handle,
@@ -272,6 +274,7 @@ pub fn run() {
                             let is_recording = RECORDING.load(Ordering::Relaxed) != RECORDING_MODE_NONE;
                             if is_recording {
                                 let mode = RECORDING.load(Ordering::Relaxed);
+                                SESSION_ID.fetch_add(1, Ordering::SeqCst);
                                 RECORDING.store(RECORDING_MODE_NONE, Ordering::SeqCst);
                                 stop_recording(
                                     &app_handle,
@@ -400,6 +403,7 @@ pub fn run() {
                             let is_recording = RECORDING.load(Ordering::Relaxed) != RECORDING_MODE_NONE;
                             if is_recording {
                                 let mode = RECORDING.load(Ordering::Relaxed);
+                                SESSION_ID.fetch_add(1, Ordering::SeqCst);
                                 RECORDING.store(RECORDING_MODE_NONE, Ordering::SeqCst);
                                 stop_recording(
                                     &app_handle,
