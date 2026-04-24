@@ -3,7 +3,7 @@ mod engine;
 mod bundled_paths;
 
 pub use download::model_status;
-pub use engine::SenseVoiceEngine;
+pub use engine::{ensure_ort_initialized_pub, SenseVoiceEngine};
 
 use tauri::Manager;
 

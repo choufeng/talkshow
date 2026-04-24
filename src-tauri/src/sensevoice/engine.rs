@@ -6,32 +6,122 @@ use tauri::AppHandle;
 
 use super::bundled_paths;
 use super::SenseVoiceError;
+#[cfg(target_os = "macos")]
+use ort_sys;
+
+/// Loads `libonnxruntime.dylib` via `RTLD_LAZY | RTLD_GLOBAL` and manually
+/// initialises the ORT API using `ort::set_api`.
+///
+/// This bypasses ort's `G_ORT_LIB` / `std::sync::Once` loading path, which
+/// deadlocks on macOS when called from within a Tauri process (the `Once`
+/// ends up spinning forever — root cause appears to be an interaction between
+/// libloading's dlopen call and macOS's dyld lock in this runtime context).
+///
+/// By using raw `libc::dlopen` + `dlsym` we load the library successfully,
+/// then hand the resulting `OrtApi` pointer directly to `ort::set_api` which
+/// stores it in `G_ORT_API` without touching `G_ORT_LIB` at all.
+#[cfg(target_os = "macos")]
+unsafe fn load_ort_and_set_api(path: &std::path::Path) -> Result<(), SenseVoiceError> {
+    use std::ffi::CString;
+
+    let path_cstr = CString::new(path.as_os_str().as_encoded_bytes())
+        .map_err(|e| SenseVoiceError::LoadFailed(format!("bad dylib path: {e}")))?;
+
+    eprintln!("[ort-init] dlopen RTLD_LAZY | RTLD_GLOBAL");
+    let handle = libc::dlopen(path_cstr.as_ptr(), libc::RTLD_LAZY | libc::RTLD_GLOBAL);
+    if handle.is_null() {
+        let err = std::ffi::CStr::from_ptr(libc::dlerror())
+            .to_string_lossy()
+            .into_owned();
+        return Err(SenseVoiceError::LoadFailed(format!("dlopen failed: {err}")));
+    }
+    eprintln!("[ort-init] dlopen OK");
+
+    // OrtGetApiBase
+    let sym_name = b"OrtGetApiBase\0";
+    let sym = libc::dlsym(handle, sym_name.as_ptr() as *const libc::c_char);
+    if sym.is_null() {
+        return Err(SenseVoiceError::LoadFailed(
+            "OrtGetApiBase not found".into(),
+        ));
+    }
+    eprintln!("[ort-init] OrtGetApiBase symbol OK");
+
+    type OrtGetApiBaseFn = unsafe extern "C" fn() -> *const ort_sys::OrtApiBase;
+    let get_api_base: OrtGetApiBaseFn = std::mem::transmute(sym);
+
+    let api_base = get_api_base();
+    if api_base.is_null() {
+        return Err(SenseVoiceError::LoadFailed("OrtApiBase is null".into()));
+    }
+    eprintln!("[ort-init] OrtApiBase OK");
+
+    let api_ptr = ((*api_base).GetApi)(ort_sys::ORT_API_VERSION);
+    if api_ptr.is_null() {
+        return Err(SenseVoiceError::LoadFailed(format!(
+            "OrtApi v{} is null — dylib version mismatch?",
+            ort_sys::ORT_API_VERSION
+        )));
+    }
+    eprintln!("[ort-init] OrtApi OK, calling ort::set_api");
+
+    // Copy the OrtApi struct and hand it to ort.  The library stays loaded
+    // because we never call dlclose on the handle above.
+    let api: ort_sys::OrtApi = std::ptr::read(api_ptr);
+    ort::set_api(api);
+    eprintln!("[ort-init] ort::set_api done");
+    Ok(())
+}
 
 static ORT_INITIALIZED: AtomicBool = AtomicBool::new(false);
+
+/// Public entry point for pre-initialising ORT on the main thread at app
+/// startup.  Calling this early avoids a macOS dyld/CoreML deadlock that
+/// occurs when `dlopen(libonnxruntime.dylib)` is first called from a
+/// `spawn_blocking` background thread.
+pub fn ensure_ort_initialized_pub(app: &AppHandle) -> Result<(), SenseVoiceError> {
+    ensure_ort_initialized(app)
+}
 
 // Safety: concurrent calls to ensure_ort_initialized are prevented by the
 // Mutex<Option<SenseVoiceEngine>> lock held at the call site in pipeline.rs.
 // The AtomicBool is used only to skip re-initialization on subsequent calls
 // after the engine has already been loaded once.
 fn ensure_ort_initialized(app: &AppHandle) -> Result<(), SenseVoiceError> {
+    eprintln!("[ort-init] checking ORT_INITIALIZED flag");
     if ORT_INITIALIZED.load(Ordering::Acquire) {
+        eprintln!("[ort-init] already initialized, skipping");
         return Ok(());
     }
+    eprintln!("[ort-init] resolving dylib path");
     let dylib_path = bundled_paths::onnxruntime_dylib_path(app).ok_or_else(|| {
         SenseVoiceError::LoadFailed(
             "ONNX Runtime library not found in app bundle. Please reinstall the application."
                 .to_string(),
         )
     })?;
-    ort::init_from(&dylib_path)
-        .map_err(|e| {
+    eprintln!("[ort-init] dylib path = {:?}", dylib_path);
+    // On macOS, ort's normal load path (ort::init_from → libloading → G_ORT_LIB
+    // Once) deadlocks inside Tauri processes.  We bypass it entirely by loading
+    // the dylib ourselves and injecting the OrtApi via ort::set_api.
+    #[cfg(target_os = "macos")]
+    unsafe {
+        load_ort_and_set_api(&dylib_path)?;
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        eprintln!("[ort-init] calling ort::init_from (dlopen)");
+        let builder = ort::init_from(&dylib_path).map_err(|e| {
             SenseVoiceError::LoadFailed(format!(
                 "Failed to load ONNX Runtime from {}: {}",
                 dylib_path.display(),
                 e
             ))
-        })?
-        .commit();
+        })?;
+        eprintln!("[ort-init] dlopen done, calling commit()");
+        builder.commit();
+        eprintln!("[ort-init] commit() done");
+    }
     ORT_INITIALIZED.store(true, Ordering::Release);
     Ok(())
 }
@@ -46,24 +136,38 @@ pub struct SenseVoiceEngine {
 
 impl SenseVoiceEngine {
     pub fn new(model_dir: &std::path::Path, app: &AppHandle) -> Result<Self, SenseVoiceError> {
+        eprintln!("[sensevoice] step 1: ensure_ort_initialized");
         ensure_ort_initialized(app)?;
+        eprintln!("[sensevoice] step 1: done");
 
         let onnx_path = model_dir.join("model_quant.onnx");
-        let session = Session::builder()
-            .map_err(|e| SenseVoiceError::LoadFailed(e.to_string()))?
+        eprintln!("[sensevoice] step 2: Session::builder()");
+        let builder = Session::builder().map_err(|e| SenseVoiceError::LoadFailed(e.to_string()))?;
+        eprintln!("[sensevoice] step 2: with_intra_threads");
+        let mut builder = builder
             .with_intra_threads(4)
-            .map_err(|e| SenseVoiceError::LoadFailed(e.to_string()))?
+            .map_err(|e| SenseVoiceError::LoadFailed(e.to_string()))?;
+        eprintln!(
+            "[sensevoice] step 2: commit_from_file (loading {})",
+            onnx_path.display()
+        );
+        let session = builder
             .commit_from_file(&onnx_path)
             .map_err(|e| SenseVoiceError::LoadFailed(e.to_string()))?;
+        eprintln!("[sensevoice] step 2: done");
 
+        eprintln!("[sensevoice] step 3: parse_cmvn");
         let (cmvn_means, cmvn_vars) =
             parse_cmvn(&model_dir.join("am.mvn")).map_err(SenseVoiceError::LoadFailed)?;
+        eprintln!("[sensevoice] step 3: done");
 
+        eprintln!("[sensevoice] step 4: ffmpeg_bin_path");
         let ffmpeg_path = bundled_paths::ffmpeg_bin_path(app).ok_or_else(|| {
             SenseVoiceError::LoadFailed(
                 "ffmpeg not found in app bundle. Please reinstall the application.".to_string(),
             )
         })?;
+        eprintln!("[sensevoice] step 4: done → {:?}", ffmpeg_path);
 
         Ok(Self {
             session,

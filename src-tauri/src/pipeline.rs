@@ -200,19 +200,40 @@ pub fn stop_recording(
                                 let app_handle_for_sv = h.clone();
 
                                 let sb_result = tokio::task::spawn_blocking(move || {
+                                    let lg = app_handle_for_sv.state::<Logger>();
                                     {
                                         let guard =
                                             engine_arc.lock().unwrap_or_else(|e| e.into_inner());
                                         if guard.is_none() {
                                             drop(guard);
+                                            lg.info(
+                                                "sensevoice",
+                                                "开始加载 SenseVoice 引擎（首次初始化，可能需要 30-120 秒）",
+                                                Some(serde_json::json!({
+                                                    "model_dir": mdl_dir_sb.display().to_string(),
+                                                })),
+                                            );
+                                            let load_start = std::time::Instant::now();
                                             match SenseVoiceEngine::new(&mdl_dir_sb, &app_handle_for_sv) {
                                                 Ok(eng) => {
+                                                    lg.info(
+                                                        "sensevoice",
+                                                        "SenseVoice 引擎加载完成",
+                                                        Some(serde_json::json!({
+                                                            "load_ms": load_start.elapsed().as_millis(),
+                                                        })),
+                                                    );
                                                     let mut g = engine_arc
                                                         .lock()
                                                         .unwrap_or_else(|e| e.into_inner());
                                                     *g = Some(eng);
                                                 }
                                                 Err(e) => {
+                                                    lg.error(
+                                                        "sensevoice",
+                                                        &format!("SenseVoice 引擎加载失败: {}", e),
+                                                        None,
+                                                    );
                                                     return Err(format!(
                                                         "SenseVoice 引擎加载失败: {}",
                                                         e
@@ -221,6 +242,7 @@ pub fn stop_recording(
                                             }
                                         }
                                     }
+                                    lg.info("sensevoice", "开始转写音频", None);
                                     let mut guard =
                                         engine_arc.lock().unwrap_or_else(|e| e.into_inner());
                                     match guard.as_mut() {

@@ -55,16 +55,30 @@ fn model_dir(app_data_dir: &std::path::Path) -> PathBuf {
     app_data_dir.join("models").join(MODEL_DIR_NAME)
 }
 
+/// Files required at runtime (subset of MODEL_FILES that the engine actually reads).
+const REQUIRED_FILES: &[&str] = &[
+    "model_quant.onnx",
+    "am.mvn",
+    "chn_jpn_yue_eng_ko_spectok.bpe.model",
+];
+
 pub fn model_status(app_data_dir: &std::path::Path) -> SenseVoiceModelStatus {
     let dir = model_dir(app_data_dir);
-    let onnx_path = dir.join("model_quant.onnx");
-    if onnx_path.exists() {
-        let size = std::fs::metadata(&onnx_path).map(|m| m.len()).unwrap_or(0);
-        if size > 100_000_000 {
-            return SenseVoiceModelStatus::Ready { size_bytes: size };
+
+    // All required runtime files must be present.
+    for &file in REQUIRED_FILES {
+        if !dir.join(file).exists() {
+            return SenseVoiceModelStatus::NotDownloaded;
         }
     }
-    SenseVoiceModelStatus::NotDownloaded
+
+    let onnx_path = dir.join("model_quant.onnx");
+    let size = std::fs::metadata(&onnx_path).map(|m| m.len()).unwrap_or(0);
+    if size > 100_000_000 {
+        SenseVoiceModelStatus::Ready { size_bytes: size }
+    } else {
+        SenseVoiceModelStatus::NotDownloaded
+    }
 }
 
 pub async fn download_model_files(

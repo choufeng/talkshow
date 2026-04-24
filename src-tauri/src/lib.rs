@@ -554,6 +554,19 @@ pub fn run() {
             let provider_ctx = ProviderContext::new();
             app.manage(provider_ctx);
 
+            // Pre-initialise the ONNX Runtime dylib on the main thread.
+            // Doing this here avoids a macOS CoreML/dyld deadlock that occurs
+            // when dlopen(libonnxruntime.dylib) is first called from a
+            // spawn_blocking background thread.
+            {
+                let app_handle_for_ort = app.handle().clone();
+                if let Err(e) = sensevoice::ensure_ort_initialized_pub(&app_handle_for_ort) {
+                    eprintln!("[startup] ORT pre-init failed (non-fatal): {}", e);
+                } else {
+                    eprintln!("[startup] ORT pre-init succeeded");
+                }
+            }
+
             app.manage(logger);
 
             // --- Pre-create indicator window for instant show ---
