@@ -97,8 +97,7 @@ mod tests {
     #[test]
     fn test_session_id_increments() {
         use std::sync::atomic::Ordering;
-        let before = SESSION_ID.load(Ordering::SeqCst);
-        SESSION_ID.fetch_add(1, Ordering::SeqCst);
+        let before = SESSION_ID.fetch_add(1, Ordering::SeqCst);
         let after = SESSION_ID.load(Ordering::SeqCst);
         assert_eq!(after, before + 1);
     }
