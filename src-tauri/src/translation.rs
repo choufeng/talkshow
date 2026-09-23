@@ -1,4 +1,4 @@
-use crate::config::{ProviderConfig, SkillsConfig};
+use crate::config::{GlossaryEntry, ProviderConfig, SkillsConfig};
 use crate::llm_client::LlmClient;
 use crate::logger::Logger;
 use crate::providers::ProviderContext;
@@ -15,6 +15,18 @@ fn get_translation_skill_prompt(skills_config: &SkillsConfig) -> Option<String> 
         .map(|s| s.prompt.clone())
 }
 
+fn glossary_prompt(glossary: &[GlossaryEntry]) -> String {
+    if glossary.is_empty() {
+        return String::new();
+    }
+    let mut s =
+        String::from("\n\n【个人术语表】（最高优先级，翻译时遇到这些词必须按正确写法处理）\n");
+    for g in glossary {
+        s.push_str(&format!("- \"{}\" → \"{}\"\n", g.wrong, g.correct));
+    }
+    s
+}
+
 #[allow(clippy::too_many_arguments)]
 pub async fn translate_text(
     logger: &Logger,
@@ -25,6 +37,7 @@ pub async fn translate_text(
     model_name: &str,
     providers: &[ProviderConfig],
     vertex_cache: &ProviderContext,
+    glossary: &[GlossaryEntry],
 ) -> Result<String, String> {
     let provider = providers
         .iter()
@@ -37,6 +50,8 @@ pub async fn translate_text(
         system_prompt.push_str("\n\n");
         system_prompt.push_str(&skill_prompt);
     }
+
+    system_prompt.push_str(&glossary_prompt(glossary));
 
     let full_prompt = format!("{}\n\n{}", system_prompt, text);
 

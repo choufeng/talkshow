@@ -20,6 +20,7 @@ function configWithSkills() {
         ],
       },
       recording: { auto_mute: false },
+      glossary: [],
     },
   };
 }
@@ -35,6 +36,7 @@ function configWithoutSkills() {
       translation: { target_lang: 'English' },
       skills: { enabled: false, skills: [] },
       recording: { auto_mute: false },
+      glossary: [],
     },
   };
 }

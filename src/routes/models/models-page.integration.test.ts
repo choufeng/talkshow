@@ -39,6 +39,7 @@ function defaultConfig() {
       translation: { target_lang: 'English' },
       skills: { enabled: true, skills: [] },
       recording: { auto_mute: false },
+      glossary: [],
     },
   };
 }

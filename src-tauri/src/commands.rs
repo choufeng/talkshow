@@ -1,5 +1,6 @@
 use crate::ai;
 use crate::config;
+use crate::history;
 use crate::logger::Logger;
 use crate::providers::ProviderContext;
 use crate::shortcuts::{SHORTCUT_IDS, parse_shortcut};
@@ -353,6 +354,38 @@ pub fn delete_skill(app_handle: tauri::AppHandle, skill_id: String) -> Result<()
 }
 
 // --- TCC 权限(粘贴能力依赖 Accessibility + Automation)---
+
+#[tauri::command]
+pub fn get_history(app_handle: tauri::AppHandle, n: Option<usize>) -> Vec<history::HistoryEntry> {
+    let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
+    history::load_recent(&app_data_dir, n.unwrap_or(50))
+}
+
+#[tauri::command]
+pub async fn analyze_history(
+    app_handle: tauri::AppHandle,
+    n: Option<usize>,
+) -> Result<history::AnalyzeResult, String> {
+    let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
+    let app_config = config::load_config(&app_data_dir);
+    let transcription = app_config.features.transcription;
+
+    if transcription.polish_provider_id.is_empty() || transcription.polish_model.is_empty() {
+        return Err("请先在设置中配置润色模型（用于分析）".to_string());
+    }
+
+    let logger = app_handle.state::<Logger>();
+    history::analyze_history(
+        &logger,
+        &app_data_dir,
+        n.unwrap_or(30),
+        &transcription.polish_provider_id,
+        &transcription.polish_model,
+        &app_config.ai.providers,
+        &app_handle.state::<ProviderContext>(),
+    )
+    .await
+}
 
 #[tauri::command]
 pub fn check_accessibility_permission() -> bool {

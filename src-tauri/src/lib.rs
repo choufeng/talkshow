@@ -3,11 +3,13 @@ mod audio_control;
 mod clipboard;
 mod commands;
 mod config;
+mod history;
 mod indicator;
 mod llm_client;
 mod logger;
 #[cfg(target_os = "macos")]
 mod macos;
+mod permissions;
 mod pipeline;
 mod providers;
 mod recording;
@@ -15,7 +17,6 @@ mod sensevoice;
 mod session;
 mod shortcuts;
 mod skills;
-mod permissions;
 mod sys;
 mod translation;
 
@@ -237,7 +238,9 @@ pub fn run() {
             commands::check_accessibility_permission,
             commands::reset_tcc_permissions,
             commands::open_accessibility_settings,
-            commands::probe_automation_permission
+            commands::probe_automation_permission,
+            commands::get_history,
+            commands::analyze_history
         ])
         .setup(|app| {
             let app_data_dir = app.path().app_data_dir().unwrap_or_default();

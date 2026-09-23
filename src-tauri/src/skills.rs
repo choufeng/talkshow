@@ -1,4 +1,4 @@
-use crate::config::{ProviderConfig, Skill, SkillsConfig};
+use crate::config::{GlossaryEntry, ProviderConfig, Skill, SkillsConfig};
 use crate::llm_client::LlmClient;
 use crate::logger::Logger;
 use crate::providers::ProviderContext;
@@ -35,6 +35,7 @@ pub fn assemble_skills_prompt(
     transcription: &str,
     app_name: &str,
     bundle_id: &str,
+    glossary: &[GlossaryEntry],
 ) -> (String, String) {
     let mut system_prompt = String::from(
         "你是一个语音转文字的文本处理助手。请根据以下规则处理用户的输入文本。\n\n基础规则：\n1. 如果输入是短内容（如单词、短语、简短回答）或非完整句子，不要添加句尾标点符号。只有当输入明显构成完整句子时才添加标点。\n2. 当输入包含多种语言（如中英文混用）时，保留各语言的原文表达，不要尝试翻译或统一为某一种语言。\n",
@@ -45,6 +46,13 @@ pub fn assemble_skills_prompt(
         app_name, bundle_id
     ));
     system_prompt.push_str("请仅应用与当前场景相关的规则，跳过不适用的规则。");
+
+    if !glossary.is_empty() {
+        system_prompt.push_str("\n\n【个人术语表】（最高优先级）\n以下是用户确认过的专有名词正确写法，遇到相同或发音相近的错误写法时必须替换为正确写法：\n");
+        for g in glossary {
+            system_prompt.push_str(&format!("- \"{}\" → \"{}\"\n", g.wrong, g.correct));
+        }
+    }
 
     for skill in skills {
         system_prompt.push_str(&format!("\n---\n【{}】\n{}", skill.name, skill.prompt));
@@ -64,15 +72,17 @@ pub async fn process_with_skills(
     providers: &[ProviderConfig],
     transcription: &str,
     vertex_cache: &ProviderContext,
+    glossary: &[GlossaryEntry],
 ) -> Result<String, String> {
-    if !skills_config.enabled {
+    // skills 总开关关闭且无术语表 → 直接透传；术语表独立生效
+    if !skills_config.enabled && glossary.is_empty() {
         return Ok(transcription.to_string());
     }
 
     let enabled_skills: Vec<&Skill> = skills_config.skills.iter().filter(|s| s.enabled).collect();
 
-    if enabled_skills.is_empty() {
-        logger.info("skills", "没有启用的 Skill，跳过处理", None);
+    if enabled_skills.is_empty() && glossary.is_empty() {
+        logger.info("skills", "没有启用的 Skill 且无术语表，跳过处理", None);
         return Ok(transcription.to_string());
     }
 
@@ -133,8 +143,13 @@ pub async fn process_with_skills(
     let start = std::time::Instant::now();
 
     let skills_owned: Vec<Skill> = enabled_skills.into_iter().cloned().collect();
-    let (system_prompt, user_message) =
-        assemble_skills_prompt(&skills_owned, transcription, &app_name, &bundle_id);
+    let (system_prompt, user_message) = assemble_skills_prompt(
+        &skills_owned,
+        transcription,
+        &app_name,
+        &bundle_id,
+        glossary,
+    );
 
     logger.info(
         "skills",
@@ -268,7 +283,7 @@ pub async fn process_with_skills_client(
     let (app_name, bundle_id) =
         get_frontmost_app().unwrap_or(("Unknown".to_string(), "unknown".to_string()));
     let (system_prompt, user_message) =
-        assemble_skills_prompt(&skills_owned, transcription, &app_name, &bundle_id);
+        assemble_skills_prompt(&skills_owned, transcription, &app_name, &bundle_id, &[]);
 
     let full_prompt = format!("{}\n\n输入文本：\n{}", system_prompt, user_message);
 
@@ -507,7 +522,7 @@ mod tests {
             editable: true,
             enabled: true,
         }];
-        let (system, user) = assemble_skills_prompt(&skills, "你好", "App", "com.app");
+        let (system, user) = assemble_skills_prompt(&skills, "你好", "App", "com.app", &[]);
         assert!(system.contains("测试技能"));
         assert!(system.contains("测试 prompt"));
         assert_eq!(user, "你好");
@@ -516,7 +531,8 @@ mod tests {
     #[test]
     fn test_assemble_skills_prompt_includes_app_context() {
         let skills = vec![];
-        let (system, _) = assemble_skills_prompt(&skills, "你好", "Finder", "com.apple.finder");
+        let (system, _) =
+            assemble_skills_prompt(&skills, "你好", "Finder", "com.apple.finder", &[]);
         assert!(system.contains("Finder"));
         assert!(system.contains("com.apple.finder"));
     }

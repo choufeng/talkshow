@@ -182,7 +182,8 @@ fn test_assemble_skills_prompt_with_app_context() {
         enabled: true,
     }];
 
-    let (system, user) = assemble_skills_prompt(&skills, "转录文本", "Finder", "com.apple.finder");
+    let (system, user) =
+        assemble_skills_prompt(&skills, "转录文本", "Finder", "com.apple.finder", &[]);
 
     assert!(system.contains("测试技能"));
     assert!(system.contains("测试 prompt"));
@@ -194,7 +195,7 @@ fn test_assemble_skills_prompt_with_app_context() {
 #[test]
 fn test_assemble_skills_prompt_without_selected_text() {
     let skills: Vec<Skill> = vec![];
-    let (_system, _user) = assemble_skills_prompt(&skills, "你好", "App", "com.app");
+    let (_system, _user) = assemble_skills_prompt(&skills, "你好", "App", "com.app", &[]);
 
     assert_eq!(_user, "你好");
 }

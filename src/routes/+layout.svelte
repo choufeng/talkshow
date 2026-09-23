@@ -4,7 +4,7 @@
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import type { Snippet } from 'svelte';
-  import { House, Settings, Bot, ScrollText, Sparkles } from 'lucide-svelte';
+  import { House, Settings, Bot, ScrollText, Sparkles, History } from 'lucide-svelte';
   import { onboarding } from '$lib/stores/onboarding';
   import OnboardingWizard from '$lib/components/onboarding/OnboardingWizard.svelte';
   import PermissionBanner from '$lib/components/PermissionBanner.svelte';
@@ -25,7 +25,8 @@
     $page.url.pathname === '/settings' ? 'settings' :
     $page.url.pathname === '/skills' ? 'skills' :
     $page.url.pathname === '/models' ? 'models' :
-    $page.url.pathname === '/logs' ? 'logs' : 'home'
+    $page.url.pathname === '/logs' ? 'logs' :
+    $page.url.pathname === '/history' ? 'history' : 'home'
   );
 
   function navigateTo(path: string) {
@@ -72,7 +73,14 @@
         <span>技能</span>
       </button>
       <button
-        class="flex items-center gap-3 px-6 py-3 w-full text-[15px] text-foreground text-left transition-colors {activeMenu === 'settings' ? 'bg-gradient-to-r from-btn-primary-from/15 to-btn-primary-from/5 border-l-[3px] border-l-accent-foreground font-medium shadow-[0_1px_3px_oklch(38%_0.1_160/0.1)]' : 'hover:bg-muted/50 border-l-[3px] border-l-transparent'}"
+        class="flex items-center gap-3 px-6 py-3 w-full text-[15px] text-foreground text-left transition-colors {activeMenu === 'history' ? 'bg-gradient-to-r from-btn-primary-from/15 to-btn-primary-from/5 border-l-[3px] border-l-accent-foreground font-medium shadow-[0_1px_3px_oklch(38%0.1_160/0.1)]' : 'hover:bg-muted/50 border-l-[3px] border-l-transparent'}"
+        onclick={() => navigateTo('/history')}
+      >
+        <History size={20} class="shrink-0" />
+        <span>历史回溯</span>
+      </button>
+      <button
+        class="flex items-center gap-3 px-6 py-3 w-full text-[15px] text-foreground text-left transition-colors {activeMenu === 'settings' ?'bg-gradient-to-r from-btn-primary-from/15 to-btn-primary-from/5 border-l-[3px] border-l-accent-foreground font-medium shadow-[0_1px_3px_oklch(38%_0.1_160/0.1)]' : 'hover:bg-muted/50 border-l-[3px] border-l-transparent'}"
         onclick={() => navigateTo('/settings')}
       >
         <Settings size={20} class="shrink-0" />

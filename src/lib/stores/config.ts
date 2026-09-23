@@ -72,11 +72,17 @@ export interface RecordingFeaturesConfig {
   auto_mute: boolean;
 }
 
+export interface GlossaryEntry {
+  wrong: string;
+  correct: string;
+}
+
 export interface FeaturesConfig {
   transcription: TranscriptionConfig;
   translation: TranslationConfig;
   skills: SkillsConfig;
   recording: RecordingFeaturesConfig;
+  glossary: GlossaryEntry[];
 }
 
 export interface AppConfig {
@@ -191,7 +197,8 @@ function createConfigStore() {
       },
       recording: {
         auto_mute: false
-      }
+      },
+      glossary: []
     }
   });
 
@@ -203,6 +210,7 @@ function createConfigStore() {
         config.ai.providers = mergeBuiltinProviders(
           migrateModels(config.ai.providers || [])
         );
+        config.features.glossary = config.features.glossary || [];
         set(config);
       } catch (error) {
         console.error('Failed to load config:', error);

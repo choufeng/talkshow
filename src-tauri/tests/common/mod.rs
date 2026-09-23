@@ -36,6 +36,7 @@ pub fn test_app_config() -> AppConfig {
             },
             skills: enabled_skills_config(),
             recording: RecordingFeaturesConfig { auto_mute: false },
+            glossary: vec![],
         },
         onboarding_completed: false,
     }

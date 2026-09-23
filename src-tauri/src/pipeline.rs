@@ -2,6 +2,7 @@ use crate::ai;
 use crate::audio_control;
 use crate::clipboard;
 use crate::config;
+use crate::history::{self, HistoryEntry};
 use crate::indicator::{destroy_indicator, emit_indicator, emit_indicator_paste_failed};
 use crate::logger::Logger;
 use crate::providers::ProviderContext;
@@ -145,6 +146,7 @@ pub fn stop_recording(
                         let audio_path = result.path.clone();
                         let model_name = transcription.model.clone();
                         let skills_config = app_config.features.skills.clone();
+                        let glossary = app_config.features.glossary.clone();
                         let skills_providers = app_config.ai.providers.clone();
                         let h = app_handle.clone();
                         let saved_target_app = session.target_app.clone();
@@ -300,6 +302,7 @@ pub fn stop_recording(
                                 })));
 
                                     let skills_start = Instant::now();
+                                    let raw_text_for_history = text.clone();
                                     let mut final_text = skills::process_with_skills(
                                         &logger,
                                         &skills_config,
@@ -307,6 +310,7 @@ pub fn stop_recording(
                                         &skills_providers,
                                         &text,
                                         &h.state::<ProviderContext>(),
+                                        &glossary,
                                     )
                                     .await
                                     .unwrap_or_else(|e| {
@@ -342,6 +346,7 @@ pub fn stop_recording(
                                                 &transcription.polish_model,
                                                 &skills_providers,
                                                 &h.state::<ProviderContext>(),
+                                                &glossary,
                                             )
                                             .await
                                             {
@@ -386,6 +391,31 @@ pub fn stop_recording(
                                             "original_text": original_text,
                                         }),
                                     );
+
+                                    // 写入历史记录（供回溯分析与术语沉淀）
+                                    {
+                                        let data_dir = h.path().app_data_dir().unwrap_or_default();
+                                        let entry = HistoryEntry {
+                                            ts: chrono::Local::now().to_rfc3339(),
+                                            mode: if session.mode
+                                                == crate::session::MODE_TRANSLATION
+                                            {
+                                                "translation".to_string()
+                                            } else {
+                                                "transcription".to_string()
+                                            },
+                                            raw_text: raw_text_for_history.clone(),
+                                            final_text: final_text.clone(),
+                                            audio_path: audio_path.display().to_string(),
+                                        };
+                                        if let Err(e) = history::append(&data_dir, &entry) {
+                                            logger.warn(
+                                                "history",
+                                                "历史记录写入失败",
+                                                Some(serde_json::json!({ "error": e })),
+                                            );
+                                        }
+                                    }
 
                                     let clipboard_start = Instant::now();
                                     let final_text_clone = final_text.clone();

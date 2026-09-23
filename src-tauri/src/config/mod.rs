@@ -234,6 +234,15 @@ impl Default for SkillsConfig {
 
 #[derive(Serialize, Deserialize, Clone, Default)]
 #[serde(default)]
+pub struct GlossaryEntry {
+    /// 错误写法（或常见误转写形态）
+    pub wrong: String,
+    /// 正确写法
+    pub correct: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(default)]
 pub struct RecordingFeaturesConfig {
     pub auto_mute: bool,
 }
@@ -245,6 +254,8 @@ pub struct FeaturesConfig {
     pub translation: TranslationConfig,
     pub skills: SkillsConfig,
     pub recording: RecordingFeaturesConfig,
+    /// 个人术语表：纠正转写/翻译中的专有名词错误
+    pub glossary: Vec<GlossaryEntry>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -280,6 +291,7 @@ impl Default for AppConfig {
                 },
                 skills: SkillsConfig::default(),
                 recording: RecordingFeaturesConfig::default(),
+                glossary: Vec::new(),
             },
             onboarding_completed: false,
         }
