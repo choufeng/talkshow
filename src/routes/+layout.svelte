@@ -7,6 +7,7 @@
   import { House, Settings, Bot, ScrollText, Sparkles } from 'lucide-svelte';
   import { onboarding } from '$lib/stores/onboarding';
   import OnboardingWizard from '$lib/components/onboarding/OnboardingWizard.svelte';
+  import PermissionBanner from '$lib/components/PermissionBanner.svelte';
 
   let { children }: { children: Snippet } = $props();
 
@@ -41,6 +42,7 @@
 {:else if !$onboarding.completed}
   <OnboardingWizard />
 {:else}
+<PermissionBanner />
 <div class="flex h-screen w-screen overflow-hidden">
   <aside class="w-52 bg-background-alt border-r border-border flex flex-col">
     <div class="flex items-center gap-2.5 px-6 py-5 font-semibold text-subheading text-foreground border-b border-border">

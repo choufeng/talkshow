@@ -15,6 +15,7 @@ mod sensevoice;
 mod session;
 mod shortcuts;
 mod skills;
+mod permissions;
 mod sys;
 mod translation;
 
@@ -232,7 +233,11 @@ pub fn run() {
             sensevoice::download_sensevoice_model,
             sensevoice::delete_sensevoice_model,
             logger::get_log_sessions,
-            logger::get_log_content
+            logger::get_log_content,
+            commands::check_accessibility_permission,
+            commands::reset_tcc_permissions,
+            commands::open_accessibility_settings,
+            commands::probe_automation_permission
         ])
         .setup(|app| {
             let app_data_dir = app.path().app_data_dir().unwrap_or_default();
