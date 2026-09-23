@@ -72,11 +72,9 @@ jobs:
           restore-keys: |
             rust-${{ matrix.rust-version }}-
 
-      - name: Create stub binaries and resources for CI
+      - name: Create stub resources for CI
         run: |
-          mkdir -p src-tauri/binaries src-tauri/resources
-          printf '#!/bin/sh\n' > src-tauri/binaries/ffmpeg-aarch64-apple-darwin
-          chmod +x src-tauri/binaries/ffmpeg-aarch64-apple-darwin
+          mkdir -p src-tauri/resources
           touch src-tauri/resources/libonnxruntime.dylib
 
       - name: Check formatting

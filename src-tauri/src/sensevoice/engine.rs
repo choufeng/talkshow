@@ -130,7 +130,6 @@ pub struct SenseVoiceEngine {
     cmvn_means: Array1<f64>,
     cmvn_vars: Array1<f64>,
     model_dir: PathBuf,
-    ffmpeg_path: PathBuf,
 }
 
 impl SenseVoiceEngine {
@@ -160,30 +159,20 @@ impl SenseVoiceEngine {
             parse_cmvn(&model_dir.join("am.mvn")).map_err(SenseVoiceError::LoadFailed)?;
         eprintln!("[sensevoice] step 3: done");
 
-        eprintln!("[sensevoice] step 4: ffmpeg_bin_path");
-        let ffmpeg_path = bundled_paths::ffmpeg_bin_path(app).ok_or_else(|| {
-            SenseVoiceError::LoadFailed(
-                "ffmpeg not found in app bundle. Please reinstall the application.".to_string(),
-            )
-        })?;
-        eprintln!("[sensevoice] step 4: done → {:?}", ffmpeg_path);
-
         Ok(Self {
             session,
             cmvn_means,
             cmvn_vars,
             model_dir: model_dir.to_path_buf(),
-            ffmpeg_path,
         })
     }
 
     pub fn transcribe(
         &mut self,
-        audio_path: &PathBuf,
+        audio_path: &std::path::Path,
         language: i32,
     ) -> Result<String, SenseVoiceError> {
-        let (waveform, sample_rate) = load_audio(audio_path, &self.ffmpeg_path)?;
-        let waveform_16k = resample_to_16k(&waveform, sample_rate)?;
+        let (waveform_16k, _sample_rate) = load_audio(audio_path)?;
         if waveform_16k.len() < 4800 {
             return Ok(String::new());
         }
@@ -283,52 +272,103 @@ fn parse_cmvn(mvn_path: &PathBuf) -> Result<(Array1<f64>, Array1<f64>), String> 
     Ok((Array1::from_vec(means), Array1::from_vec(vars)))
 }
 
-fn load_audio(path: &PathBuf, ffmpeg_path: &PathBuf) -> Result<(Vec<f32>, u32), SenseVoiceError> {
-    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-    let (wav_path, converted) = if ext == "wav" {
-        (path.clone(), false)
-    } else {
-        let tmp_dir = std::env::temp_dir().join("talkshow");
-        let _ = std::fs::create_dir_all(&tmp_dir);
-        let tmp_wav = tmp_dir.join(format!(
-            "{}_sensevoice.wav",
-            path.file_stem().and_then(|s| s.to_str()).unwrap_or("tmp")
-        ));
-        let output = std::process::Command::new(ffmpeg_path)
-            .args(["-y", "-i"])
-            .arg(path)
-            .args(["-ar", "16000", "-ac", "1", "-f", "wav"])
-            .arg(&tmp_wav)
-            .output()
-            .map_err(|e| SenseVoiceError::InvalidAudio(format!("ffmpeg failed: {}", e)))?;
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(SenseVoiceError::InvalidAudio(format!(
-                "ffmpeg conversion failed: {}",
-                stderr
-            )));
-        }
-        (tmp_wav, true)
-    };
-    let mut reader = hound::WavReader::open(&wav_path)
-        .map_err(|e| SenseVoiceError::InvalidAudio(e.to_string()))?;
-    let spec = reader.spec();
-    let sample_rate = spec.sample_rate;
-    let samples: Vec<f32> = match spec.sample_format {
-        hound::SampleFormat::Int => {
-            let max_val = 2i32.pow(spec.bits_per_sample as u32 - 1) as f32;
-            reader
-                .samples::<i32>()
-                .filter_map(|s| s.ok())
-                .map(|s| s as f32 / max_val)
-                .collect()
-        }
-        hound::SampleFormat::Float => reader.samples::<f32>().filter_map(|s| s.ok()).collect(),
-    };
-    if converted {
-        let _ = std::fs::remove_file(&wav_path);
+/// 纯 Rust 音频解码：symphonia 解码（WAV/FLAC 等）→ f32 interleaved →
+/// 多声道平均降为单声道 → 非必备率时用 rubato 重采样到 16 kHz。
+/// 返回 `(样本, 16000)`。
+fn load_audio(path: &std::path::Path) -> Result<(Vec<f32>, u32), SenseVoiceError> {
+    use symphonia::core::audio::SampleBuffer;
+    use symphonia::core::codecs::{CODEC_TYPE_NULL, DecoderOptions};
+    use symphonia::core::errors::Error as SymphoniaError;
+    use symphonia::core::io::MediaSourceStream;
+    use symphonia::core::probe::Hint;
+
+    let file = std::fs::File::open(path)
+        .map_err(|e| SenseVoiceError::InvalidAudio(format!("打开音频失败: {e}")))?;
+    let mss = MediaSourceStream::new(Box::new(file), Default::default());
+
+    let mut hint = Hint::new();
+    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+        hint.with_extension(ext);
     }
-    Ok((samples, sample_rate))
+
+    let probed = symphonia::default::get_probe()
+        .format(
+            &hint,
+            mss,
+            &symphonia::core::formats::FormatOptions::default(),
+            &symphonia::core::meta::MetadataOptions::default(),
+        )
+        .map_err(|e| SenseVoiceError::InvalidAudio(format!("音频格式探测失败: {e}")))?;
+    let mut format = probed.format;
+
+    let track = format
+        .tracks()
+        .iter()
+        .find(|t| t.codec_params.codec != CODEC_TYPE_NULL)
+        .ok_or_else(|| SenseVoiceError::InvalidAudio("无音频轨道".into()))?;
+    let track_id = track.id;
+
+    let mut decoder = symphonia::default::get_codecs()
+        .make(&track.codec_params, &DecoderOptions::default())
+        .map_err(|e| SenseVoiceError::InvalidAudio(format!("解码器初始化失败: {e}")))?;
+
+    let mut sample_buf: Option<SampleBuffer<f32>> = None;
+    let mut interleaved: Vec<f32> = Vec::new();
+    let mut sample_rate = track.codec_params.sample_rate.unwrap_or(16000);
+    let mut channels = track
+        .codec_params
+        .channels
+        .map(|c| c.count())
+        .unwrap_or(1)
+        .max(1);
+
+    loop {
+        let packet = match format.next_packet() {
+            Ok(p) => p,
+            Err(SymphoniaError::IoError(ref e))
+                if e.kind() == std::io::ErrorKind::UnexpectedEof =>
+            {
+                break;
+            }
+            Err(e) => {
+                return Err(SenseVoiceError::InvalidAudio(format!(
+                    "读取音频包失败: {e}"
+                )));
+            }
+        };
+        if packet.track_id() != track_id {
+            continue;
+        }
+        let decoded = match decoder.decode(&packet) {
+            Ok(d) => d,
+            Err(SymphoniaError::DecodeError(_)) => continue,
+            Err(e) => return Err(SenseVoiceError::InvalidAudio(format!("解码失败: {e}"))),
+        };
+        let spec = *decoded.spec();
+        sample_rate = spec.rate;
+        channels = spec.channels.count().max(1);
+        let buf = sample_buf
+            .get_or_insert_with(|| SampleBuffer::<f32>::new(decoded.capacity() as u64, spec));
+        buf.copy_interleaved_ref(decoded);
+        interleaved.extend_from_slice(buf.samples());
+    }
+
+    // 多声道 → 单声道（各声道取平均）
+    let mono: Vec<f32> = if channels <= 1 {
+        interleaved
+    } else {
+        interleaved
+            .chunks(channels)
+            .map(|frame| frame.iter().sum::<f32>() / channels as f32)
+            .collect()
+    };
+
+    if sample_rate == 16000 {
+        Ok((mono, 16000))
+    } else {
+        let out = resample_to_16k(&mono, sample_rate)?;
+        Ok((out, 16000))
+    }
 }
 
 fn resample_to_16k(samples: &[f32], src_rate: u32) -> Result<Vec<f32>, SenseVoiceError> {
@@ -588,5 +628,51 @@ mod tests {
         let (padded, len) = pad_features(&feat);
         assert_eq!(len, 10);
         assert_eq!(padded.dim(), (1, 10, 560));
+    }
+
+    #[test]
+    fn load_audio_resamples_stereo_wav_to_16k_mono() {
+        use std::f32::consts::PI;
+
+        // 22050 Hz 立体声 16bit 正弦 WAV，0.5 秒，左右声道异相
+        let spec = hound::WavSpec {
+            channels: 2,
+            sample_rate: 22050,
+            bits_per_sample: 16,
+            sample_format: hound::SampleFormat::Int,
+        };
+        let file = tempfile::Builder::new()
+            .suffix(".wav")
+            .tempfile()
+            .expect("create temp wav");
+        let mut writer = hound::WavWriter::create(file.path(), spec).unwrap();
+        let src_rate = 22050.0f32;
+        let duration_s = 0.5f32;
+        for i in 0..(src_rate * duration_s) as usize {
+            let t = i as f32 / src_rate;
+            let s = (t * 440.0 * 2.0 * PI).sin() * 0.5;
+            let l = (s * i16::MAX as f32) as i16;
+            let r = (-s * i16::MAX as f32) as i16;
+            writer.write_sample(l).unwrap();
+            writer.write_sample(r).unwrap();
+        }
+        writer.finalize().unwrap();
+
+        let (samples, sample_rate) = load_audio(file.path()).unwrap();
+
+        assert_eq!(sample_rate, 16000);
+        // 异相反相加平均 ≈ 0，降混后幅度应远小于单声道峰值
+        assert!(samples.iter().all(|s| s.is_finite()));
+        assert!(samples.iter().all(|s| s.abs() <= 1.0));
+        let peak = samples.iter().map(|s| s.abs()).fold(0.0f32, f32::max);
+        assert!(peak < 0.1, "stereo downmix should cancel, peak = {peak}");
+        // 长度 ≈ 时长 × 16000（±10%）
+        let expected = 8000.0f32;
+        assert!(
+            (samples.len() as f32 - expected).abs() / expected < 0.1,
+            "len = {}, expected ~{}",
+            samples.len(),
+            expected
+        );
     }
 }
