@@ -10,7 +10,6 @@ mod logger;
 mod macos;
 mod pipeline;
 mod providers;
-mod real_llm_client;
 mod recording;
 mod sensevoice;
 mod session;
