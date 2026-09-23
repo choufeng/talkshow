@@ -89,6 +89,17 @@ pub fn stop_recording(
     match event_name {
         "recording:complete" => match recorder.lock() {
             Ok(mut r) => {
+                // 快速重启守卫:必须持 recorder 锁时检查(与 begin_session 的 start() 抢锁互斥)。
+                // 新会话已接管 recorder → 跳过 stop,避免拿新 start_time 算出 duration≈0
+                // 触发 TooShort 误销毁新会话指示器。锁序 recorder→manager 单向。
+                if let Some(mgr) = app_handle.try_state::<SessionManager>()
+                    && mgr.has_active()
+                {
+                    if let Some(ref lg) = logger {
+                        lg.info("recording", "新会话已接管，跳过旧会话停止", None);
+                    }
+                    return;
+                }
                 let save_start = Instant::now();
                 let stop_result = r.stop();
                 let save_elapsed = save_start.elapsed().as_millis();
@@ -497,6 +508,15 @@ pub fn stop_recording(
         },
         "recording:cancel" => {
             if let Ok(mut r) = recorder.lock() {
+                // 同 recording:complete 的快速重启守卫,持锁检查新会话是否已接管
+                if let Some(mgr) = app_handle.try_state::<SessionManager>()
+                    && mgr.has_active()
+                {
+                    if let Some(ref lg) = logger {
+                        lg.info("recording", "新会话已接管，跳过旧会话取消", None);
+                    }
+                    return;
+                }
                 let _duration = r.cancel();
             }
             println!("[TalkShow] Recording cancelled ({}s)", duration);

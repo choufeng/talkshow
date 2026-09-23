@@ -101,22 +101,19 @@ fn begin_session(
     };
 
     let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
-    let started = recorder
-        .lock()
-        .map(|mut r| {
-            r.set_output_dir(app_data_dir);
-            r.start().is_ok()
-        })
-        .unwrap_or(false);
+    // 只调用一次 r.start(),错误直接取自该结果(避免失败路径二次 start 重试副作用)
+    let start_result = recorder.lock().ok().map(|mut r| {
+        r.set_output_dir(app_data_dir);
+        r.start()
+    });
 
-    if !started {
+    let start_err = match start_result {
+        Some(Ok(())) => None,
+        Some(Err(e)) => Some(e.to_string()),
+        None => Some("录音状态锁获取失败".to_string()),
+    };
+    if let Some(err_detail) = start_err {
         manager.stop(); // 回滚会话,允许重试
-        let err_detail = recorder
-            .lock()
-            .ok()
-            .and_then(|mut r| r.start().err())
-            .map(|e| e.to_string())
-            .unwrap_or_else(|| "Unknown error".into());
         eprintln!("[TalkShow] Failed to start recording: {}", err_detail);
         if let Some(logger) = app_handle.try_state::<Logger>() {
             logger.error(
