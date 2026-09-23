@@ -1,10 +1,5 @@
-// pipeline 已接线;start/stop/signal_cancel 等由 lib.rs 在下一任务(Task 5)接线,接完移除本豁免。
-#![allow(dead_code)]
-
 use std::sync::Mutex;
-use std::time::Instant;
 
-pub const MODE_NONE: u8 = 0;
 pub const MODE_TRANSCRIPTION: u8 = 1;
 pub const MODE_TRANSLATION: u8 = 2;
 
@@ -12,7 +7,6 @@ pub const MODE_TRANSLATION: u8 = 2;
 pub struct Session {
     pub id: u64,
     pub mode: u8,
-    pub started_at: Instant,
     pub target_app: Option<String>,
 }
 
@@ -51,7 +45,6 @@ impl SessionManager {
         let s = Session {
             id,
             mode,
-            started_at: Instant::now(),
             target_app: None,
         };
         g.active = Some(s.clone());

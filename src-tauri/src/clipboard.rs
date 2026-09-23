@@ -1,19 +1,3 @@
-use std::sync::Mutex;
-
-static TARGET_APP: Mutex<Option<String>> = Mutex::new(None);
-
-pub fn save_target_app(app_name: &str) {
-    if let Ok(mut guard) = TARGET_APP.lock() {
-        *guard = Some(app_name.to_string());
-    }
-}
-
-// pipeline 已改读 session.target_app;lib.rs 录音线程接线(Task 5)后删除。
-#[allow(dead_code)]
-pub fn get_target_app() -> Option<String> {
-    TARGET_APP.lock().ok().and_then(|g| g.clone())
-}
-
 pub fn write_and_paste(text: &str, target_app: Option<String>) -> Result<(), String> {
     let mut clipboard =
         arboard::Clipboard::new().map_err(|e| format!("Failed to access clipboard: {}", e))?;

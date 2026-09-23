@@ -6,10 +6,6 @@
 //!
 //! 所有函数都会阻塞调用线程直至结果返回 —— 只在后台线程调用。
 
-// 模块尚未接线(后续任务迁移 audio_control/clipboard/skills/lib.rs 调用点),
-// 挂载期先豁免 dead_code,接线后移除。
-#![allow(dead_code)]
-
 use std::sync::OnceLock;
 use std::sync::mpsc;
 
