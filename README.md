@@ -190,20 +190,23 @@ Skills 是转写完成后的文本处理管线，可以对转写结果进行自�
 │  └──────────┘              └──────────┬──────────┘  │
 │                                       │              │
 │  ┌────────────────────┐               │              │
-│  │ 录音指示器 (浮窗)    │◄── 事件 ──────┤              │
+│  │ 录音指示器 (浮窗)    │◄── 事件 ──────┤              │  │
 │  │ /recording         │               │              │
-│  └────────────────────┘               │              │
-│                                       ▼              │
+│  └────────────────────┘               ▼              │
 │  ┌──────────────────────────────────────────────┐    │
-│  │              Rust 后端 (lib.rs)               │    │
+│  │            Rust 后端 (lib.rs 分发)             │    │
 │  │                                               │    │
-│  │  录音 → WAV/FLAC → AI转写 → Skills → 粘贴    │    │
-│  │    │              │         │        │        │    │
-│  │  recording     ai.rs   skills.rs  clipboard  │    │
-│  │    │       ┌─────┴─────┐              │      │    │
-│  │    │   Vertex AI  OpenAI              │      │    │
-│  │    │   sensevoice.rs (本地)            │      │    │
-│  │  config.rs · logger.rs                       │    │
+│  │  session.rs 会话状态机(唯一状态 owner)         │    │
+│  │    │                                         │    │
+│  │    ▼                                         │    │
+│  │  pipeline.rs 编排:录音→转写→Skills→粘贴      │    │
+│  │    │            │         │        │        │    │
+│  │  recording   providers/  skills   sys.rs   │    │
+│  │    │       ┌────┴─────┐          (系统交互    │    │
+│  │    │   Vertex/DashScope            串行队列)  │    │
+│  │    │   OpenAI/Zhipu                    │      │    │
+│  │    │   sensevoice/ (本地)              │      │    │
+│  │  config/ · logger.rs · llm_client.rs          │    │
 │  └──────────────────────┬───────────────────────┘    │
 │                         ▲ Tauri IPC                  │
 │  ┌──────────────────────┴───────────────────────┐    │
@@ -219,6 +222,15 @@ Skills 是转写完成后的文本处理管线，可以对转写结果进行自�
 └──────────────────────────────────────────────────────┘
 ```
 
+核心数据流:
+
+```
+快捷键 → SessionManager(会话状态机) → pipeline(转写/翻译编排)
+                                          ├─ providers/(转写/润色/翻译)
+                                          ├─ skills/(文本后处理)
+                                          └─ sys/(osascript 串行: 静音/粘贴/前台应用)
+```
+
 ## 开发指南
 
 ### 项目结构
@@ -228,24 +240,34 @@ talkshow/
 ├── src/                        # 前端源码 (SvelteKit)
 │   ├── routes/                 # 页面路由
 │   │   ├── +page.svelte        # 首页
-│   │   ├── +layout.svelte      # 全局布局（侧边栏导航）
+│   │   ├── +layout.svelte      # 全局布局(侧边栏导航)
 │   │   ├── models/             # 模型管理页
 │   │   ├── skills/             # 技能设置页
 │   │   ├── settings/           # 快捷键设置页
 │   │   ├── logs/               # 日志查看页
 │   │   └── recording/          # 录音指示器浮窗
 │   └── lib/
-│       ├── components/ui/      # UI 组件（Dialog、Select、ShortcutRecorder 等）
-│       └── stores/             # Svelte Stores（config、theme）
+│       ├── components/ui/      # UI 组件(Dialog、Select、ShortcutRecorder 等)
+│       └── stores/             # Svelte Stores(config、theme)
 ├── src-tauri/                  # 后端源码 (Rust / Tauri)
 │   ├── src/
-│   │   ├── lib.rs              # 核心模块：初始化、托盘、快捷键、录音控制、AI 调度
-│   │   ├── ai.rs               # AI Provider 请求（Vertex AI / OpenAI Compatible）
-│   │   ├── config.rs           # 配置模型定义与持久化
+│   │   ├── lib.rs              # 入口:初始化、托盘、快捷键分发、会话生命周期
+│   │   ├── session.rs          # SessionManager 录音会话状态机(唯一状态 owner)
+│   │   ├── sys.rs              # macOS 系统交互收口(osascript 串行执行器)
+│   │   ├── pipeline.rs         # 转写/翻译流水线编排
+│   │   ├── commands.rs         # Tauri IPC 命令
+│   │   ├── config/             # 配置模型定义与持久化
+│   │   ├── providers/          # AI Provider(vertex/dashscope/openai/zhipu/sensevoice)
+│   │   ├── sensevoice/         # SenseVoice 本地 ONNX 推理引擎
 │   │   ├── recording.rs        # 音频采集、WAV 写入、FLAC 编码
-│   │   ├── sensevoice.rs       # SenseVoice 本地 ONNX 推理引擎
 │   │   ├── skills.rs           # Skills 后处理管线
+│   │   ├── translation.rs      # 翻译流程
+│   │   ├── llm_client.rs       # LLM 客户端抽象(trait + RealLlmClient)
+│   │   ├── ai.rs               # AI 请求编排
 │   │   ├── clipboard.rs        # 剪贴板写入 + 模拟粘贴
+│   │   ├── audio_control.rs    # 系统音量保存/静音/恢复
+│   │   ├── indicator.rs        # 录音指示器浮窗与托盘
+│   │   ├── shortcuts.rs        # 快捷键解析与注册表
 │   │   └── logger.rs           # JSONL 格式日志
 │   ├── capabilities/           # Tauri 权限配置
 │   ├── icons/                  # 应用图标
