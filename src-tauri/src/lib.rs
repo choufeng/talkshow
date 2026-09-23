@@ -16,6 +16,7 @@ mod sensevoice;
 mod session;
 mod shortcuts;
 mod skills;
+mod sys;
 mod translation;
 
 pub use config::{
