@@ -1,8 +1,7 @@
-// 模块尚未接线(后续任务接入 shortcuts/clipboard),挂载期先豁免 dead_code,接线后移除。
+// pipeline 已接线;start/stop/signal_cancel 等由 lib.rs 在下一任务(Task 5)接线,接完移除本豁免。
 #![allow(dead_code)]
 
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
 pub const MODE_NONE: u8 = 0;
@@ -21,11 +20,11 @@ struct Inner {
     active: Option<Session>,
     last_finished: Option<u64>,
     cancelled: Option<u64>,
+    next_id: u64,
 }
 
 pub struct SessionManager {
     inner: Mutex<Inner>,
-    next_id: AtomicU64,
 }
 
 impl SessionManager {
@@ -35,8 +34,8 @@ impl SessionManager {
                 active: None,
                 last_finished: None,
                 cancelled: None,
+                next_id: 1,
             }),
-            next_id: AtomicU64::new(1),
         }
     }
 
@@ -47,8 +46,10 @@ impl SessionManager {
         if g.active.is_some() {
             return None;
         }
+        let id = g.next_id;
+        g.next_id += 1;
         let s = Session {
-            id: self.next_id.fetch_add(1, Ordering::SeqCst),
+            id,
             mode,
             started_at: Instant::now(),
             target_app: None,
@@ -73,14 +74,16 @@ impl SessionManager {
     /// - 处理中(无活动会话)→ 标记最近结束的会话为取消,返回 None(pipeline 自行检查)
     pub fn signal_cancel(&self) -> Option<Session> {
         let mut g = self.lock();
-        let s = g.active.take();
-        let id = match &s {
-            Some(s) => Some(s.id),
-            None => g.last_finished,
-        }?;
-        g.cancelled = Some(id);
-        g.last_finished = Some(id);
-        s
+        let Some(s) = g.active.take() else {
+            // 处理中:标记最近结束的会话为取消(无历史则忽略)。
+            if let Some(id) = g.last_finished {
+                g.cancelled = Some(id);
+            }
+            return None;
+        };
+        g.cancelled = Some(s.id);
+        g.last_finished = Some(s.id);
+        Some(s)
     }
 
     /// 后台线程 checkpoint:该会话是否仍是当前活动会话。
@@ -180,6 +183,13 @@ mod tests {
         let n = m.start(MODE_TRANSLATION).unwrap();
         assert!(!m.is_cancelled(n.id));
         assert!(!m.is_cancelled(s.id));
+    }
+
+    #[test]
+    fn signal_cancel_on_fresh_manager_returns_none() {
+        let m = SessionManager::new();
+        assert!(m.signal_cancel().is_none());
+        assert!(!m.has_active());
     }
 
     #[test]

@@ -8,10 +8,9 @@ use crate::providers::ProviderContext;
 use crate::recording;
 use crate::recording::AudioRecorder;
 use crate::sensevoice::SenseVoiceEngine;
-use crate::shortcuts::{CANCELLED, RECORDING, RECORDING_MODE_NONE, RECORDING_MODE_TRANSLATION};
+use crate::session::{Session, SessionManager};
 use crate::skills;
 use crate::translation;
-use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tauri::{Emitter, Manager};
@@ -20,6 +19,18 @@ use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Shortcut};
 pub struct SenseVoiceState {
     pub engine: Arc<Mutex<Option<SenseVoiceEngine>>>,
     pub language: Arc<Mutex<i32>>,
+}
+
+/// pipeline 结束时清理 ESC 快捷键:仅当没有新的录音会话进行中。
+/// (录音开始的后台线程会注册 ESC;有活动会话时不能注销)
+fn cleanup_esc(h: &tauri::AppHandle) {
+    if let Some(mgr) = h.try_state::<SessionManager>()
+        && !mgr.has_active()
+    {
+        let _ = h
+            .global_shortcut()
+            .unregister(Shortcut::new(None, Code::Escape));
+    }
 }
 
 pub fn show_notification(app_handle: &tauri::AppHandle, title: &str, body: &str) {
@@ -51,7 +62,7 @@ pub fn stop_recording(
     recorder: &Arc<std::sync::Mutex<AudioRecorder>>,
     recording_start: &Arc<std::sync::Mutex<Option<Instant>>>,
     event_name: &str,
-    recording_mode: u8,
+    session: Session,
 ) {
     let app_data_dir_restore = app_handle.path().app_data_dir().unwrap_or_default();
     let _ = audio_control::restore(
@@ -125,10 +136,10 @@ pub fn stop_recording(
                         let skills_config = app_config.features.skills.clone();
                         let skills_providers = app_config.ai.providers.clone();
                         let h = app_handle.clone();
-                        let saved_target_app = clipboard::get_target_app();
-                        CANCELLED.store(false, Ordering::SeqCst);
+                        let saved_target_app = session.target_app.clone();
                         tauri::async_runtime::spawn(async move {
                             let pipeline_start = Instant::now();
+                            let mgr = h.state::<SessionManager>();
                             let _ = config_elapsed;
 
                             if let Some(lg) = h.try_state::<Logger>() {
@@ -149,25 +160,17 @@ pub fn stop_recording(
                                         lg.error("ai", "未找到配置的 AI 提供商", None);
                                     }
                                     destroy_indicator(&h);
-                                    if RECORDING.load(Ordering::SeqCst) == RECORDING_MODE_NONE {
-                                        let _ = h
-                                            .global_shortcut()
-                                            .unregister(Shortcut::new(None, Code::Escape));
-                                    }
+                                    cleanup_esc(&h);
                                     return;
                                 }
                             };
 
-                            if CANCELLED.load(Ordering::SeqCst) {
+                            if mgr.is_cancelled(session.id) {
                                 if let Some(lg) = h.try_state::<Logger>() {
                                     lg.info("pipeline", "流水线已取消 (AI请求前)", None);
                                 }
                                 destroy_indicator(&h);
-                                if RECORDING.load(Ordering::SeqCst) == RECORDING_MODE_NONE {
-                                    let _ = h
-                                        .global_shortcut()
-                                        .unregister(Shortcut::new(None, Code::Escape));
-                                }
+                                cleanup_esc(&h);
                                 return;
                             }
 
@@ -306,13 +309,13 @@ pub fn stop_recording(
                                     let skills_elapsed = skills_start.elapsed().as_millis();
 
                                     let original_text =
-                                        if recording_mode == RECORDING_MODE_TRANSLATION {
+                                        if session.mode == crate::session::MODE_TRANSLATION {
                                             Some(final_text.clone())
                                         } else {
                                             None
                                         };
 
-                                    if recording_mode == RECORDING_MODE_TRANSLATION {
+                                    if session.mode == crate::session::MODE_TRANSLATION {
                                         if transcription.polish_enabled
                                             && !transcription.polish_provider_id.is_empty()
                                             && !transcription.polish_model.is_empty()
@@ -336,13 +339,7 @@ pub fn stop_recording(
                                                     logger.error("translation", &e, None);
                                                     show_notification(&h, "翻译失败", &e);
                                                     destroy_indicator(&h);
-                                                    if RECORDING.load(Ordering::SeqCst)
-                                                        == RECORDING_MODE_NONE
-                                                    {
-                                                        let _ = h.global_shortcut().unregister(
-                                                            Shortcut::new(None, Code::Escape),
-                                                        );
-                                                    }
+                                                    cleanup_esc(&h);
                                                     return;
                                                 }
                                             }
@@ -353,29 +350,19 @@ pub fn stop_recording(
                                                 "请先启用润色并配置润色模型",
                                             );
                                             destroy_indicator(&h);
-                                            if RECORDING.load(Ordering::SeqCst)
-                                                == RECORDING_MODE_NONE
-                                            {
-                                                let _ = h
-                                                    .global_shortcut()
-                                                    .unregister(Shortcut::new(None, Code::Escape));
-                                            }
+                                            cleanup_esc(&h);
                                             return;
                                         }
                                     }
 
-                                    if CANCELLED.load(Ordering::SeqCst) {
+                                    if mgr.is_cancelled(session.id) {
                                         logger.info("pipeline", "流水线已取消", None);
                                         destroy_indicator(&h);
-                                        if RECORDING.load(Ordering::SeqCst) == RECORDING_MODE_NONE {
-                                            let _ = h
-                                                .global_shortcut()
-                                                .unregister(Shortcut::new(None, Code::Escape));
-                                        }
+                                        cleanup_esc(&h);
                                         return;
                                     }
 
-                                    if RECORDING.load(Ordering::SeqCst) != RECORDING_MODE_NONE {
+                                    if mgr.has_active() {
                                         logger.info("ai", "录音已重新开始，丢弃当前 AI 结果", None);
                                         return;
                                     }
@@ -384,7 +371,7 @@ pub fn stop_recording(
                                         "pipeline:complete",
                                         serde_json::json!({
                                             "text": &final_text,
-                                            "mode": recording_mode,
+                                            "mode": session.mode,
                                             "original_text": original_text,
                                         }),
                                     );
@@ -435,13 +422,7 @@ pub fn stop_recording(
                                                 })),
                                             );
                                             emit_indicator(&h, "indicator:done");
-                                            if RECORDING.load(Ordering::SeqCst)
-                                                == RECORDING_MODE_NONE
-                                            {
-                                                let _ = h
-                                                    .global_shortcut()
-                                                    .unregister(Shortcut::new(None, Code::Escape));
-                                            }
+                                            cleanup_esc(&h);
                                         }
                                         Ok(Err(e)) => {
                                             logger.error(
@@ -474,11 +455,7 @@ pub fn stop_recording(
                                     );
                                     show_notification(&h, "AI 处理失败", &e);
                                     destroy_indicator(&h);
-                                    if RECORDING.load(Ordering::SeqCst) == RECORDING_MODE_NONE {
-                                        let _ = h
-                                            .global_shortcut()
-                                            .unregister(Shortcut::new(None, Code::Escape));
-                                    }
+                                    cleanup_esc(&h);
                                 }
                             }
                         });
@@ -496,9 +473,7 @@ pub fn stop_recording(
                         };
                         let _ = app_handle.emit("recording:cancel", cancelled);
                         destroy_indicator(app_handle);
-                        let _ = app_handle
-                            .global_shortcut()
-                            .unregister(Shortcut::new(None, Code::Escape));
+                        cleanup_esc(app_handle);
                     }
                     Err(e) => {
                         if let Some(ref lg) = logger {
@@ -510,18 +485,14 @@ pub fn stop_recording(
                         }
                         let _ = app_handle.emit("recording:error", e.to_string());
                         destroy_indicator(app_handle);
-                        let _ = app_handle
-                            .global_shortcut()
-                            .unregister(Shortcut::new(None, Code::Escape));
+                        cleanup_esc(app_handle);
                     }
                 }
             }
             Err(_) => {
                 let _ = app_handle.emit("recording:error", "Recording lock poisoned");
                 destroy_indicator(app_handle);
-                let _ = app_handle
-                    .global_shortcut()
-                    .unregister(Shortcut::new(None, Code::Escape));
+                cleanup_esc(app_handle);
             }
         },
         "recording:cancel" => {

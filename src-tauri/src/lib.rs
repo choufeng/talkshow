@@ -35,6 +35,7 @@ use indicator::{
 use pipeline::{SenseVoiceState, play_sound, stop_recording};
 use providers::ProviderContext;
 use recording::AudioRecorder;
+use session::SessionManager;
 use shortcuts::{
     CANCELLED, LAST_REC_PRESS, RECORDING, RECORDING_MODE_NONE, RECORDING_MODE_TRANSCRIPTION,
     RECORDING_MODE_TRANSLATION, SESSION_ID, SHORTCUT_IDS, parse_shortcut,
@@ -100,6 +101,7 @@ pub fn run() {
             let _ = audio_control::cleanup_stale_state(&app_data_dir);
             let logger = Logger::new(&app_data_dir)
                 .expect("Failed to initialize logger");
+            app.manage(SessionManager::new());
             let app_config = config::load_config(&app_data_dir);
             let shortcut_str = app_config.shortcut.clone();
             let recording_shortcut_str = app_config.recording_shortcut.clone();

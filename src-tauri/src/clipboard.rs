@@ -8,6 +8,8 @@ pub fn save_target_app(app_name: &str) {
     }
 }
 
+// pipeline 已改读 session.target_app;lib.rs 录音线程接线(Task 5)后删除。
+#[allow(dead_code)]
 pub fn get_target_app() -> Option<String> {
     TARGET_APP.lock().ok().and_then(|g| g.clone())
 }
