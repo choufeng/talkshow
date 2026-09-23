@@ -1,5 +1,3 @@
-#[cfg(target_os = "macos")]
-use std::process::Command;
 use std::sync::Mutex;
 
 static TARGET_APP: Mutex<Option<String>> = Mutex::new(None);
@@ -35,6 +33,9 @@ fn simulate_paste(target_app: &Option<String>) {
     // `tell application "<name>" to activate`, which requires the exact
     // application bundle name and fails for process names like "stable"
     // (e.g. Google Chrome Stable whose process name differs from its bundle name).
+    //
+    // `delay 0.3`:等待前台切换完成。串行队列中延迟可接受,
+    // 替代品是并发执行 AppleEvents 导致的死锁。
     let script = if let Some(app) = target_app {
         format!(
             "tell application \"System Events\"\n\
@@ -48,25 +49,19 @@ fn simulate_paste(target_app: &Option<String>) {
         String::from("tell application \"System Events\" to keystroke \"v\" using command down")
     };
 
-    let output = Command::new("osascript").arg("-e").arg(&script).output();
-    match output {
-        Ok(out) => {
-            if !out.status.success() {
-                let stderr = String::from_utf8_lossy(&out.stderr);
-                if stderr.contains("1002") || stderr.contains("not allowed to send keystrokes") {
-                    // Surface accessibility permission error clearly
-                    eprintln!(
-                        "[TalkShow] Paste blocked — grant Accessibility permission to this \
-                         app in System Settings → Privacy & Security → Accessibility. \
-                         Error: {stderr}"
-                    );
-                } else {
-                    eprintln!("[TalkShow] osascript failed: {stderr}");
-                }
+    match crate::sys::osascript(&script) {
+        Ok(_) => {}
+        Err(stderr) => {
+            if stderr.contains("1002") || stderr.contains("not allowed to send keystrokes") {
+                // Surface accessibility permission error clearly
+                eprintln!(
+                    "[TalkShow] Paste blocked — grant Accessibility permission to this \
+                     app in System Settings → Privacy & Security → Accessibility. \
+                     Error: {stderr}"
+                );
+            } else {
+                eprintln!("[TalkShow] osascript failed: {stderr}");
             }
-        }
-        Err(e) => {
-            eprintln!("[TalkShow] Failed to spawn osascript: {}", e);
         }
     }
 }

@@ -13,35 +13,14 @@ fn escape_applescript_string(s: &str) -> String {
 
 #[cfg(target_os = "macos")]
 fn get_frontmost_app() -> Result<(String, String), String> {
-    let output = std::process::Command::new("osascript")
-        .arg("-e")
-        .arg("tell application \"System Events\" to get name of first process whose frontmost is true")
-        .output()
-        .map_err(|e| format!("Failed to get frontmost app: {}", e))?;
+    let app_name = crate::sys::frontmost_app_name()
+        .ok_or_else(|| "Failed to get frontmost app".to_string())?;
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("osascript failed: {}", stderr));
-    }
-
-    let app_name = String::from_utf8_lossy(&output.stdout).trim().to_string();
-
-    let bundle_output = std::process::Command::new("osascript")
-        .arg("-e")
-        .arg(format!(
-            "tell application \"System Events\" to get bundle identifier of process \"{}\"",
-            escape_applescript_string(&app_name)
-        ))
-        .output()
-        .map_err(|e| format!("Failed to get bundle id: {}", e))?;
-
-    let bundle_id = if bundle_output.status.success() {
-        String::from_utf8_lossy(&bundle_output.stdout)
-            .trim()
-            .to_string()
-    } else {
-        "unknown".to_string()
-    };
+    let bundle_id = crate::sys::osascript(&format!(
+        "tell application \"System Events\" to get bundle identifier of process \"{}\"",
+        escape_applescript_string(&app_name)
+    ))
+    .unwrap_or_else(|_| "unknown".to_string());
 
     Ok((app_name, bundle_id))
 }
