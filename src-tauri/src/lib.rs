@@ -13,6 +13,7 @@ mod providers;
 mod real_llm_client;
 mod recording;
 mod sensevoice;
+mod session;
 mod shortcuts;
 mod skills;
 mod translation;
