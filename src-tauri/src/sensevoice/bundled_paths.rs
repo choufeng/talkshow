@@ -78,18 +78,18 @@ pub fn ffmpeg_bin_path(app: &AppHandle) -> Option<PathBuf> {
     let filename_with_triple = format!("ffmpeg-{}", triple);
 
     // 1. Same directory as the running executable (dev mode: `target/debug/ffmpeg`)
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(exe_dir) = exe.parent() {
-            // dev: Tauri copies as plain "ffmpeg"
-            let plain = exe_dir.join("ffmpeg");
-            if plain.exists() {
-                return Some(plain);
-            }
-            // dev: also try with triple suffix
-            let with_triple = exe_dir.join(&filename_with_triple);
-            if with_triple.exists() {
-                return Some(with_triple);
-            }
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(exe_dir) = exe.parent()
+    {
+        // dev: Tauri copies as plain "ffmpeg"
+        let plain = exe_dir.join("ffmpeg");
+        if plain.exists() {
+            return Some(plain);
+        }
+        // dev: also try with triple suffix
+        let with_triple = exe_dir.join(&filename_with_triple);
+        if with_triple.exists() {
+            return Some(with_triple);
         }
     }
 

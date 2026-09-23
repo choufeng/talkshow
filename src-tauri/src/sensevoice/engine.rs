@@ -6,8 +6,6 @@ use tauri::AppHandle;
 
 use super::SenseVoiceError;
 use super::bundled_paths;
-#[cfg(target_os = "macos")]
-use ort_sys;
 
 /// Loads `libonnxruntime.dylib` via `RTLD_LAZY | RTLD_GLOBAL` and manually
 /// initialises the ORT API using `ort::set_api`.
@@ -21,6 +19,7 @@ use ort_sys;
 /// then hand the resulting `OrtApi` pointer directly to `ort::set_api` which
 /// stores it in `G_ORT_API` without touching `G_ORT_LIB` at all.
 #[cfg(target_os = "macos")]
+#[allow(unsafe_op_in_unsafe_fn)] // deliberate raw dlopen, see doc comment above
 unsafe fn load_ort_and_set_api(path: &std::path::Path) -> Result<(), SenseVoiceError> {
     use std::ffi::CString;
 

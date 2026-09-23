@@ -1,8 +1,6 @@
 #[cfg(target_os = "macos")]
 use std::process::Command;
 use std::sync::Mutex;
-#[cfg(target_os = "macos")]
-use std::time::{Duration, Instant};
 
 static TARGET_APP: Mutex<Option<String>> = Mutex::new(None);
 
