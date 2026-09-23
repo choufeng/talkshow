@@ -351,3 +351,25 @@ pub fn delete_skill(app_handle: tauri::AppHandle, skill_id: String) -> Result<()
     app_config.features.skills.enabled = true;
     config::save_config(&app_data_dir, &app_config)
 }
+
+// --- TCC 权限(粘贴能力依赖 Accessibility + Automation)---
+
+#[tauri::command]
+pub fn check_accessibility_permission() -> bool {
+    crate::permissions::is_trusted()
+}
+
+#[tauri::command]
+pub fn reset_tcc_permissions() -> Result<String, String> {
+    crate::permissions::reset_tcc()
+}
+
+#[tauri::command]
+pub fn open_accessibility_settings(automation: Option<bool>) {
+    crate::permissions::open_accessibility_settings(automation.unwrap_or(false));
+}
+
+#[tauri::command]
+pub fn probe_automation_permission() -> Result<(), String> {
+    crate::permissions::probe_automation()
+}
