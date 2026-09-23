@@ -18,17 +18,7 @@ fn state_file_path(app_data_dir: &std::path::Path) -> PathBuf {
 }
 
 fn get_current_volume() -> Result<f64, String> {
-    let output = std::process::Command::new("osascript")
-        .arg("-e")
-        .arg("output volume of (get volume settings)")
-        .output()
-        .map_err(|e| e.to_string())?;
-
-    if !output.status.success() {
-        return Err("Failed to get volume".to_string());
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let stdout = crate::sys::osascript("output volume of (get volume settings)")?;
     stdout
         .parse::<f64>()
         .map_err(|_| format!("Failed to parse volume: {}", stdout))
@@ -36,17 +26,7 @@ fn get_current_volume() -> Result<f64, String> {
 
 fn set_volume(volume: f64) -> Result<(), String> {
     let vol = volume.round() as i64;
-    let output = std::process::Command::new("osascript")
-        .arg("-e")
-        .arg(format!("set volume output volume {}", vol))
-        .output()
-        .map_err(|e| e.to_string())?;
-
-    if output.status.success() {
-        Ok(())
-    } else {
-        Err(String::from_utf8_lossy(&output.stderr).to_string())
-    }
+    crate::sys::osascript(&format!("set volume output volume {}", vol)).map(|_| ())
 }
 
 pub fn save_and_mute(
