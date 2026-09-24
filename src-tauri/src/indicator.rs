@@ -26,13 +26,12 @@ pub fn show_indicator(app_handle: &tauri::AppHandle) {
             let size = monitor.size();
             let scale = monitor.scale_factor();
             let screen_w = size.width as f64 / scale;
-            let screen_h = size.height as f64 / scale;
             let win_w = 180.0;
-            let win_h = 48.0;
-            let bottom_margin = 24.0;
+            // ponytail: 32pt 顶部边距,清开 macOS 菜单栏/刘海;多显示器只看主屏
+            let top_margin = 32.0;
             let _ = window.set_position(tauri::LogicalPosition::new(
                 (screen_w - win_w) / 2.0,
-                screen_h - win_h - bottom_margin,
+                top_margin,
             ));
         }
 
@@ -58,11 +57,9 @@ pub fn show_indicator(app_handle: &tauri::AppHandle) {
             let size = m.size();
             let scale = m.scale_factor();
             let screen_w = size.width as f64 / scale;
-            let screen_h = size.height as f64 / scale;
             let win_w = 180.0;
-            let win_h = 48.0;
-            let bottom_margin = 24.0;
-            ((screen_w - win_w) / 2.0, screen_h - win_h - bottom_margin)
+            let top_margin = 32.0;
+            ((screen_w - win_w) / 2.0, top_margin)
         }
         None => (620.0, 700.0),
     };
@@ -122,13 +119,11 @@ pub fn emit_indicator_paste_failed(app_handle: &tauri::AppHandle) {
             let size = monitor.size();
             let scale = monitor.scale_factor();
             let screen_w = size.width as f64 / scale;
-            let screen_h = size.height as f64 / scale;
             let win_w = 280.0;
-            let win_h = 48.0;
-            let bottom_margin = 24.0;
+            let top_margin = 32.0;
             let _ = window.set_position(tauri::LogicalPosition::new(
                 (screen_w - win_w) / 2.0,
-                screen_h - win_h - bottom_margin,
+                top_margin,
             ));
         }
     }
