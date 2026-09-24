@@ -255,6 +255,38 @@ pub struct IntentRoutingConfig {
     pub enabled: bool,
 }
 
+/// Hook 扩展:识别"记录…"指令后,LLM 整理正文并 POST 到配置的后端
+/// (首个预设:滴答清单 Open API POST /open/v1/task,Bearer PAT 认证)
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(default)]
+pub struct HooksConfig {
+    pub enabled: bool,
+    pub url: String,
+    /// 每行一个 "Key: Value" 请求头,如 "Authorization: Bearer xxx"
+    pub headers: String,
+    /// body 模板,支持 {{raw}}/{{text}}/{{ts}}/{{app}},值做 JSON 转义
+    pub body_template: String,
+    /// LLM 整理指令(与 skill_ids 皆空则跳过整理,直接发送润色后文本)
+    pub prompt: String,
+    /// 关联 Skill id 列表,其 prompt 参与整理
+    pub skill_ids: Vec<String>,
+}
+
+impl Default for HooksConfig {
+    fn default() -> Self {
+        HooksConfig {
+            enabled: false,
+            url: String::new(),
+            headers: String::new(),
+            body_template: String::from(
+                "{\"raw\":\"{{raw}}\",\"text\":\"{{text}}\",\"ts\":\"{{ts}}\",\"app\":\"{{app}}\"}",
+            ),
+            prompt: String::new(),
+            skill_ids: Vec::new(),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Default)]
 #[serde(default)]
 pub struct FeaturesConfig {
@@ -265,6 +297,7 @@ pub struct FeaturesConfig {
     /// 个人术语表：纠正转写/翻译中的专有名词错误
     pub glossary: Vec<GlossaryEntry>,
     pub intent_routing: IntentRoutingConfig,
+    pub hooks: HooksConfig,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -302,6 +335,7 @@ impl Default for AppConfig {
                 recording: RecordingFeaturesConfig::default(),
                 glossary: Vec::new(),
                 intent_routing: IntentRoutingConfig::default(),
+                hooks: HooksConfig::default(),
             },
             onboarding_completed: false,
         }

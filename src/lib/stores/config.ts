@@ -76,6 +76,23 @@ export interface IntentRoutingConfig {
   enabled: boolean;
 }
 
+export interface HooksConfig {
+  enabled: boolean;
+  url: string;
+  headers: string;
+  body_template: string;
+  prompt: string;
+  skill_ids: string[];
+}
+
+/** 滴答清单预设:开放平台 developer.dida365.com 创建应用后生成 PAT */
+export const DIDA365_PRESET = {
+  url: 'https://api.dida365.com/open/v1/task',
+  headers: 'Authorization: Bearer 你的个人访问令牌',
+  body_template: '{"title":"{{text}}","content":"{{raw}}"}',
+  prompt: '把内容提炼成一句简洁的任务标题，保留关键信息（事项、时间、地点），去除语气词，只输出标题本身。'
+};
+
 export interface GlossaryEntry {
   wrong: string;
   correct: string;
@@ -88,6 +105,7 @@ export interface FeaturesConfig {
   recording: RecordingFeaturesConfig;
   glossary: GlossaryEntry[];
   intent_routing: IntentRoutingConfig;
+  hooks: HooksConfig;
 }
 
 export interface AppConfig {
@@ -206,6 +224,14 @@ function createConfigStore() {
       glossary: [],
       intent_routing: {
         enabled: false
+      },
+      hooks: {
+        enabled: false,
+        url: '',
+        headers: '',
+        body_template: '{"raw":"{{raw}}","text":"{{text}}","ts":"{{ts}}","app":"{{app}}"}',
+        prompt: '',
+        skill_ids: []
       }
     }
   });
@@ -220,6 +246,14 @@ function createConfigStore() {
         );
         config.features.glossary = config.features.glossary || [];
         config.features.intent_routing = config.features.intent_routing || { enabled: false };
+        config.features.hooks = config.features.hooks || {
+          enabled: false,
+          url: '',
+          headers: '',
+          body_template: '{"raw":"{{raw}}","text":"{{text}}","ts":"{{ts}}","app":"{{app}}"}',
+          prompt: '',
+          skill_ids: []
+        };
         set(config);
       } catch (error) {
         console.error('Failed to load config:', error);

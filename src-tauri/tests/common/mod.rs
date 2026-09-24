@@ -38,6 +38,7 @@ pub fn test_app_config() -> AppConfig {
             recording: RecordingFeaturesConfig { auto_mute: false },
             glossary: vec![],
             intent_routing: Default::default(),
+            hooks: Default::default(),
         },
         onboarding_completed: false,
     }

@@ -11,6 +11,7 @@ fn restore_tray(h: &tauri::AppHandle) {
     let icons = h.state::<crate::TrayIcons>();
     restore_default_tray(h, icons.default.clone());
 }
+use crate::hooks;
 use crate::intent::{self, Intent, IntentDecision};
 use crate::logger::Logger;
 use crate::providers::ProviderContext;
@@ -331,6 +332,19 @@ pub fn stop_recording(
                                     let mut final_text = decision.text.clone();
                                     let skills_elapsed = skills_start.elapsed().as_millis();
 
+                                    // hook 未启用/未配置 URL → 回退普通转写粘贴,内容不丢
+                                    if decision.intent == Intent::Hook {
+                                        let hooks_cfg = &app_config.features.hooks;
+                                        if !hooks_cfg.enabled || hooks_cfg.url.trim().is_empty() {
+                                            logger.warn(
+                                                "hook",
+                                                "Hook 未启用或未配置 URL，回退普通转写",
+                                                None,
+                                            );
+                                            decision.intent = Intent::Transcribe;
+                                        }
+                                    }
+
                                     let mut routed_translation = false;
 
                                     let original_text = if session.mode
@@ -460,6 +474,101 @@ pub fn stop_recording(
                                                 "has_answer": false,
                                             })),
                                         );
+                                        cleanup_esc(&h);
+                                        return;
+                                    } else if decision.intent == Intent::Hook {
+                                        // hook:整理正文并 POST 到配置的后端,不走剪贴板
+                                        let hooks_cfg = app_config.features.hooks.clone();
+
+                                        // 1) LLM 整理(未配置整理指令 → 用润色后文本)
+                                        let refined = match hooks::refine_content(
+                                            &logger,
+                                            &hooks_cfg,
+                                            &skills_config,
+                                            &app_config.features.transcription,
+                                            &skills_providers,
+                                            &final_text,
+                                            &h.state::<ProviderContext>(),
+                                        )
+                                        .await
+                                        {
+                                            Ok(t) => t,
+                                            Err(e) => {
+                                                logger.error(
+                                                    "hook",
+                                                    "内容整理失败，使用润色后文本",
+                                                    Some(serde_json::json!({ "error": e })),
+                                                );
+                                                final_text.clone()
+                                            }
+                                        };
+
+                                        // 2) 发送
+                                        let payload = hooks::HookPayload {
+                                            raw: raw_text_for_history.clone(),
+                                            text: refined.clone(),
+                                            app: saved_target_app
+                                                .clone()
+                                                .unwrap_or_else(|| "Unknown".to_string()),
+                                        };
+                                        let send_result =
+                                            hooks::send_to_hook(&logger, &hooks_cfg, &payload)
+                                                .await;
+
+                                        // 3) 通知
+                                        match &send_result {
+                                            Ok(()) => {
+                                                let preview: String =
+                                                    refined.chars().take(40).collect();
+                                                show_notification(&h, "已记录", &preview);
+                                            }
+                                            Err(e) => {
+                                                logger.error(
+                                                    "hook",
+                                                    "Hook 发送失败",
+                                                    Some(serde_json::json!({ "error": e })),
+                                                );
+                                                show_notification(&h, "记录发送失败", e);
+                                            }
+                                        }
+
+                                        // 4) 历史记录(发送失败也可回溯重发)
+                                        {
+                                            let data_dir =
+                                                h.path().app_data_dir().unwrap_or_default();
+                                            let entry = HistoryEntry {
+                                                ts: chrono::Local::now().to_rfc3339(),
+                                                mode: "hook".to_string(),
+                                                raw_text: raw_text_for_history.clone(),
+                                                final_text: refined.clone(),
+                                                audio_path: audio_path.display().to_string(),
+                                            };
+                                            if let Err(e) = history::append(&data_dir, &entry) {
+                                                logger.warn(
+                                                    "history",
+                                                    "历史记录写入失败",
+                                                    Some(serde_json::json!({ "error": e })),
+                                                );
+                                            }
+                                        }
+
+                                        let _ = h.emit(
+                                            "pipeline:complete",
+                                            serde_json::json!({
+                                                "text": &refined,
+                                                "mode": session.mode,
+                                                "original_text": null,
+                                            }),
+                                        );
+                                        logger.info(
+                                            "pipeline",
+                                            "hook 路由完成",
+                                            Some(serde_json::json!({
+                                                "total_ms": pipeline_start.elapsed().as_millis(),
+                                                "sent": send_result.is_ok(),
+                                            })),
+                                        );
+                                        restore_tray(&h);
                                         cleanup_esc(&h);
                                         return;
                                     }

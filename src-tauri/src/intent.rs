@@ -24,6 +24,8 @@ pub enum Intent {
     },
     /// 问询:开头说"问一下…"等,正文是问题,result 为首轮回答(可能缺失)
     Ask,
+    /// 记录:开头说"记录…"等,正文整理后发送到 Hook URL
+    Hook,
 }
 
 #[derive(Debug, Clone)]
@@ -60,20 +62,24 @@ pub fn intent_instruction() -> String {
         "\n\n【意图路由】(最高优先级指令)\n\
 判断输入文本是否以明确的指令前缀开头(只看开头,句中提及不算):\n\
 - \"翻译…\"、\"帮我翻译…\"、\"翻译成XX…\" 等 → 翻译意图\n\
-- \"问一下…\"、\"帮我问…\"、\"问一问…\"、\"查一下…\"、\"帮我查…\" 等 → 问询意图\n\n\
+- \"问一下…\"、\"帮我问…\"、\"问一问…\"、\"查一下…\"、\"帮我查…\" 等 → 问询意图\n\
+- \"记录…\"、\"帮我记录…\"、\"记录一下…\"、\"记一下…\"、\"帮我记一下…\" 等 → 记录意图\n\n\
 规则:\n\
-1. 指令必须出现在文本开头才有效;文本中部或结尾出现\"翻译\"、\"问\"等词不是指令\n\
+1. 指令必须出现在文本开头才有效;文本中部或结尾出现\"翻译\"、\"问\"、\"记录\"等词不是指令\n\
 2. 翻译意图时:text 剥离指令前缀;target_lang 用语言名称(如\"英文\"),用户未指明则留空字符串\n\
 3. 问询意图时:text 剥离指令前缀作为问题\n\
-4. 有歧义或不确定时,intent 用 \"transcribe\"\n\
-5. 无指令时 intent 用 \"transcribe\",text 正常应用上方全部润色规则\n\
-6. 陈述句、想粘贴的疑问句都不是问询意图;只有明确的问询指令前缀才算\n\n\
+4. 记录意图时:text 剥离指令前缀作为待记录内容\n\
+5. 有歧义或不确定时,intent 用 \"transcribe\"\n\
+6. 无指令时 intent 用 \"transcribe\",text 正常应用上方全部润色规则\n\
+7. 陈述句、想粘贴的疑问句都不是问询意图;只有明确的问询指令前缀才算\n\n\
 输出格式(严格 JSON,不要包裹代码块,不要输出 JSON 以外的任何内容):\n\
 {\"intent\":\"transcribe\",\"text\":\"润色后的正文\"}\n\
 或\n\
 {\"intent\":\"translate\",\"target_lang\":\"英文\",\"text\":\"剥离指令后的正文\",\"result\":\"翻译结果\"}\n\
 或\n\
 {\"intent\":\"ask\",\"text\":\"剥离指令后的问题\"}\n\
+或\n\
+{\"intent\":\"hook\",\"text\":\"剥离指令后的内容\"}\n\
 - translate 时必须同时给出 result:把 text 翻译为 target_lang,并应用上方全部润色规则与翻译规则\n",
     )
 }
@@ -111,6 +117,11 @@ pub fn parse_llm_output(raw: &str) -> IntentDecision {
             intent: Intent::Ask,
             text,
             result: d.result.filter(|r| !r.trim().is_empty()),
+        },
+        "hook" => IntentDecision {
+            intent: Intent::Hook,
+            text,
+            result: None,
         },
         _ => IntentDecision::passthrough(text),
     }
@@ -254,6 +265,7 @@ pub async fn process_with_intent(
                         Intent::Transcribe => "transcribe".to_string(),
                         Intent::Translate { target_lang } => format!("translate:{}", target_lang),
                         Intent::Ask => "ask".to_string(),
+                        Intent::Hook => "hook".to_string(),
                     },
                     "has_result": decision.result.is_some(),
                     "raw_preview": raw.chars().take(120).collect::<String>(),
@@ -382,6 +394,14 @@ mod tests {
     }
 
     #[test]
+    fn parse_hook_intent() {
+        let d = parse_llm_output(r#"{"intent":"hook","text":"明天下午三点开会讨论Q3预算"}"#);
+        assert_eq!(d.intent, Intent::Hook);
+        assert_eq!(d.text, "明天下午三点开会讨论Q3预算");
+        assert!(d.result.is_none());
+    }
+
+    #[test]
     fn intent_instruction_contains_schema() {
         let s = intent_instruction();
         assert!(s.contains("\"intent\""));
@@ -389,5 +409,7 @@ mod tests {
         assert!(s.contains("\"result\""));
         assert!(s.contains("只看开头"));
         assert!(s.contains("\"ask\""));
+        assert!(s.contains("\"hook\""));
+        assert!(s.contains("记录"));
     }
 }

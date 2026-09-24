@@ -41,6 +41,7 @@ function defaultConfig() {
       recording: { auto_mute: false },
       glossary: [],
       intent_routing: { enabled: false },
+      hooks: { enabled: false, url: '', headers: '', body_template: '', prompt: '', skill_ids: [] },
     },
   };
 }

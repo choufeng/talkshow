@@ -5,6 +5,7 @@ mod clipboard;
 mod commands;
 mod config;
 mod history;
+mod hooks;
 mod indicator;
 mod intent;
 mod llm_client;
