@@ -32,8 +32,8 @@ use tauri::{AppHandle, Emitter};
 
 /// 面板高(逻辑点)
 const PANEL_H: f64 = 48.0;
-/// 顶部边距,避开菜单栏/刘海
-const TOP_MARGIN: f64 = 32.0;
+/// 底部边距(默认停靠在屏幕底部居中)
+const BOTTOM_MARGIN: f64 = 16.0;
 /// 胶囊圆角(半高 = 全圆角)
 const CORNER: f64 = 24.0;
 /// paste-failed 提示自动隐藏时长
@@ -639,7 +639,7 @@ fn make_label(
     label
 }
 
-/// 按相位重排子控件 + 调整面板宽度并重新定位(主屏顶部居中)
+/// 按相位重排子控件 + 调整面板宽度并重新定位(主屏底部居中)
 fn layout(view: &IndicatorView, panel: &NSPanel, phase: Phase, mtm: MainThreadMarker) {
     let iv = view.ivars();
     let width = match phase {
@@ -700,13 +700,15 @@ fn layout(view: &IndicatorView, panel: &NSPanel, phase: Phase, mtm: MainThreadMa
         panel.setContentSize(NSSize::new(width, PANEL_H));
     }
 
-    // 主屏顶部居中(AppKit y 轴向上)
-    if let Some(screen) = unsafe { NSScreen::mainScreen(mtm) } {
+    // 主屏底部居中(AppKit y 轴向上);用户拖动过的会话内不重新定位
+    if !USER_POSITIONED.load(Ordering::Relaxed)
+        && let Some(screen) = unsafe { NSScreen::mainScreen(mtm) }
+    {
         let f = unsafe { screen.frame() };
         let x = f.origin.x + (f.size.width - width) / 2.0;
-        let y = f.origin.y + f.size.height - TOP_MARGIN - PANEL_H;
+        let y = f.origin.y + BOTTOM_MARGIN;
         unsafe {
-            panel.setFrameTopLeftPoint(NSPoint::new(x, y));
+            panel.setFrameTopLeftPoint(NSPoint::new(x, y + PANEL_H));
         }
     }
 }
