@@ -415,12 +415,13 @@ pub fn stop_recording(
                                         }
                                     } else if decision.intent == Intent::Ask {
                                         // ask:开 chat 窗体呈现首轮问答,不走剪贴板
-                                        let answer = decision.result.clone().unwrap_or_default();
+                                        // 首答统一由前端 chat_send(思考模式)生成,
+                                        // 不用合并调用的快速 result(无思考,质量弱)
                                         chat::show_chat(
                                             &h,
                                             ChatOpenPayload {
                                                 question: final_text.clone(),
-                                                answer: answer.clone(),
+                                                answer: String::new(),
                                             },
                                         );
 
@@ -456,7 +457,7 @@ pub fn stop_recording(
                                             "ask 路由完成,chat 窗体已打开",
                                             Some(serde_json::json!({
                                                 "total_ms": pipeline_start.elapsed().as_millis(),
-                                                "has_answer": !answer.is_empty(),
+                                                "has_answer": false,
                                             })),
                                         );
                                         cleanup_esc(&h);

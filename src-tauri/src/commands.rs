@@ -466,7 +466,8 @@ pub async fn chat_send(
             &transcription.polish_model,
             &provider,
             &app_handle.state::<ProviderContext>(),
-            ai::ThinkingMode::Disabled,
+            // 对话需要推理质量;转写/润色/翻译等延迟敏感路径保持 Disabled
+            ai::ThinkingMode::Enabled,
         ),
     )
     .await;

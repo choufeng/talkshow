@@ -64,7 +64,7 @@ pub fn intent_instruction() -> String {
 规则:\n\
 1. 指令必须出现在文本开头才有效;文本中部或结尾出现\"翻译\"、\"问\"等词不是指令\n\
 2. 翻译意图时:text 剥离指令前缀;target_lang 用语言名称(如\"英文\"),用户未指明则留空字符串\n\
-3. 问询意图时:text 剥离指令前缀作为问题;result 给出对问题的直接回答\n\
+3. 问询意图时:text 剥离指令前缀作为问题\n\
 4. 有歧义或不确定时,intent 用 \"transcribe\"\n\
 5. 无指令时 intent 用 \"transcribe\",text 正常应用上方全部润色规则\n\
 6. 陈述句、想粘贴的疑问句都不是问询意图;只有明确的问询指令前缀才算\n\n\
@@ -73,9 +73,8 @@ pub fn intent_instruction() -> String {
 或\n\
 {\"intent\":\"translate\",\"target_lang\":\"英文\",\"text\":\"剥离指令后的正文\",\"result\":\"翻译结果\"}\n\
 或\n\
-{\"intent\":\"ask\",\"text\":\"剥离指令后的问题\",\"result\":\"对问题的回答\"}\n\
-- translate 时必须同时给出 result:把 text 翻译为 target_lang,并应用上方全部润色规则与翻译规则\n\
-- ask 时必须同时给出 result:回答 text 中的问题",
+{\"intent\":\"ask\",\"text\":\"剥离指令后的问题\"}\n\
+- translate 时必须同时给出 result:把 text 翻译为 target_lang,并应用上方全部润色规则与翻译规则\n",
     )
 }
 
