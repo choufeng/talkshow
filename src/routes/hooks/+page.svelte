@@ -117,7 +117,7 @@
         </div>
 
         <div>
-          <label for="hook-template" class="block text-body text-foreground-alt mb-1.5">Body 模板（JSON，支持 <code>{'{raw}'}</code> <code>{'{text}'}</code> <code>{'{ts}'}</code> <code>{'{app}'}</code>）</label>
+          <label for="hook-template" class="block text-body text-foreground-alt mb-1.5">Body 模板（JSON，变量：<code>{'{raw}'}</code> <code>{'{text}'}</code> <code>{'{ts}'}</code> <code>{'{app}'}</code>，以及整理指令约定 LLM 输出的 JSON 字段名。LLM 未输出的字段自动整条删除；数字/布尔值统一写成 <code>"字段":"{'{{变量}}'}"</code>，发送前自动还原类型）</label>
           <textarea
             id="hook-template"
             class="flex min-h-[72px] w-full rounded-md border border-border-input bg-background px-3 py-2 text-body ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-foreground/20 focus-visible:ring-offset-1 resize-y font-mono"

@@ -89,8 +89,16 @@ export interface HooksConfig {
 export const DIDA365_PRESET = {
   url: 'https://api.dida365.com/open/v1/task',
   headers: 'Authorization: Bearer 你的个人访问令牌',
-  body_template: '{"title":"{{text}}","content":"{{raw}}"}',
-  prompt: '把内容提炼成一句简洁的任务标题，保留关键信息（事项、时间、地点），去除语气词，只输出标题本身。'
+  body_template:
+    '{"title":"{{title}}","content":"{{raw}}","dueDate":"{{dueDate}}","isAllDay":"{{isAllDay}}","priority":"{{priority}}"}',
+  prompt: [
+    '你是任务整理助手。从输入中提取信息，严格输出 JSON 对象（不要代码块，不要解释）：',
+    '{"title":"一句话任务标题","dueDate":"yyyy-MM-ddTHH:mm:ss+0800|null","isAllDay":false,"priority":0}',
+    '- title 必填：提炼成简洁任务标题，去除语气词',
+    '- dueDate：仅当输入明确提到时间/日期时，结合当前时间换算输出（如 2026-01-15T15:00:00+0800）；只有日期没时间则输出如 2026-01-15T09:00:00+0800 且 isAllDay 为 true；无时间信息输出 null',
+    '- priority：0 无，1 低，3 中，5 高；未提及输出 0',
+    '- 不得输出 JSON 以外的任何内容'
+  ].join('\n')
 };
 
 export interface GlossaryEntry {

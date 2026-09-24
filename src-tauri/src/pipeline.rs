@@ -480,7 +480,8 @@ pub fn stop_recording(
                                         // hook:整理正文并 POST 到配置的后端,不走剪贴板
                                         let hooks_cfg = app_config.features.hooks.clone();
 
-                                        // 1) LLM 整理(未配置整理指令 → 用润色后文本)
+                                        // 1) LLM 整理(未配置整理指令 → 用润色后文本;
+                                        //    整理指令约定输出 JSON 时,结果解析为模板变量池)
                                         let refined = match hooks::refine_content(
                                             &logger,
                                             &hooks_cfg,
@@ -492,24 +493,28 @@ pub fn stop_recording(
                                         )
                                         .await
                                         {
-                                            Ok(t) => t,
+                                            Ok(r) => r,
                                             Err(e) => {
                                                 logger.error(
                                                     "hook",
                                                     "内容整理失败，使用润色后文本",
                                                     Some(serde_json::json!({ "error": e })),
                                                 );
-                                                final_text.clone()
+                                                hooks::RefineResult {
+                                                    text: final_text.clone(),
+                                                    vars: Default::default(),
+                                                }
                                             }
                                         };
 
                                         // 2) 发送
                                         let payload = hooks::HookPayload {
                                             raw: raw_text_for_history.clone(),
-                                            text: refined.clone(),
+                                            text: refined.text.clone(),
                                             app: saved_target_app
                                                 .clone()
                                                 .unwrap_or_else(|| "Unknown".to_string()),
+                                            vars: refined.vars,
                                         };
                                         let send_result =
                                             hooks::send_to_hook(&logger, &hooks_cfg, &payload)
@@ -519,7 +524,7 @@ pub fn stop_recording(
                                         match &send_result {
                                             Ok(()) => {
                                                 let preview: String =
-                                                    refined.chars().take(40).collect();
+                                                    refined.text.chars().take(40).collect();
                                                 show_notification(&h, "已记录", &preview);
                                             }
                                             Err(e) => {
@@ -540,7 +545,7 @@ pub fn stop_recording(
                                                 ts: chrono::Local::now().to_rfc3339(),
                                                 mode: "hook".to_string(),
                                                 raw_text: raw_text_for_history.clone(),
-                                                final_text: refined.clone(),
+                                                final_text: refined.text.clone(),
                                                 audio_path: audio_path.display().to_string(),
                                             };
                                             if let Err(e) = history::append(&data_dir, &entry) {
@@ -555,7 +560,7 @@ pub fn stop_recording(
                                         let _ = h.emit(
                                             "pipeline:complete",
                                             serde_json::json!({
-                                                "text": &refined,
+                                                "text": &refined.text,
                                                 "mode": session.mode,
                                                 "original_text": null,
                                             }),

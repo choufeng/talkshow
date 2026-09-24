@@ -77,7 +77,11 @@ describe('Hooks Page Integration', () => {
     expect(headersInput.value).toContain('Authorization: Bearer');
 
     const templateInput = screen.getByLabelText(/Body 模板/) as HTMLTextAreaElement;
-    expect(templateInput.value).toContain('{{text}}');
+    expect(templateInput.value).toContain('{{title}}');
+    expect(templateInput.value).toContain('{{dueDate}}');
+
+    const promptInput = screen.getByLabelText('整理指令（可选，发送前由 LLM 整理）') as HTMLTextAreaElement;
+    expect(promptInput.value).toContain('JSON');
   });
 
   it('should toggle associated skill and save config', async () => {
