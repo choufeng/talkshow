@@ -574,17 +574,3 @@ pub async fn chat_record_stop(
     );
     Ok(text)
 }
-
-/// 前端就绪后拉取待展示的初始问答(双通道兑事件时序)
-#[tauri::command]
-pub fn chat_take_latest(
-    chat_state: tauri::State<'_, crate::chat::ChatState>,
-) -> Option<crate::chat::ChatOpenPayload> {
-    chat_state.pending.lock().ok().and_then(|mut p| p.take())
-}
-
-/// 隐藏 chat 窗体(Esc / 关闭按钮,保留对话状态)
-#[tauri::command]
-pub fn chat_hide(app_handle: tauri::AppHandle) {
-    crate::chat::hide_chat(&app_handle);
-}

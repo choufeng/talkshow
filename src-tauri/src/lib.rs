@@ -246,17 +246,13 @@ pub fn run() {
             commands::chat_send,
             commands::chat_record_start,
             commands::chat_record_stop,
-            commands::chat_take_latest,
-            commands::chat_hide
+            commands::chat_record_stop
         ])
         .setup(|app| {
             let app_data_dir = app.path().app_data_dir().unwrap_or_default();
             let _ = audio_control::cleanup_stale_state(&app_data_dir);
             let logger = Logger::new(&app_data_dir).expect("Failed to initialize logger");
             app.manage(SessionManager::new());
-            app.manage(chat::ChatState {
-                pending: std::sync::Mutex::new(None),
-            });
             app.manage(chat::ChatRecorderState {
                 recorder: std::sync::Arc::new(std::sync::Mutex::new(
                     recording::AudioRecorder::new(),
