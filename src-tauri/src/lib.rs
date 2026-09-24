@@ -1,5 +1,6 @@
 mod ai;
 mod audio_control;
+mod chat;
 mod clipboard;
 mod commands;
 mod config;
@@ -241,13 +242,26 @@ pub fn run() {
             commands::open_accessibility_settings,
             commands::probe_automation_permission,
             commands::get_history,
-            commands::analyze_history
+            commands::analyze_history,
+            commands::chat_send,
+            commands::chat_record_start,
+            commands::chat_record_stop,
+            commands::chat_take_latest,
+            commands::chat_hide
         ])
         .setup(|app| {
             let app_data_dir = app.path().app_data_dir().unwrap_or_default();
             let _ = audio_control::cleanup_stale_state(&app_data_dir);
             let logger = Logger::new(&app_data_dir).expect("Failed to initialize logger");
             app.manage(SessionManager::new());
+            app.manage(chat::ChatState {
+                pending: std::sync::Mutex::new(None),
+            });
+            app.manage(chat::ChatRecorderState {
+                recorder: std::sync::Arc::new(std::sync::Mutex::new(
+                    recording::AudioRecorder::new(),
+                )),
+            });
             let app_config = config::load_config(&app_data_dir);
             let shortcut_str = app_config.shortcut.clone();
             let recording_shortcut_str = app_config.recording_shortcut.clone();

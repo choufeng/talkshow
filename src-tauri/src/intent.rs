@@ -19,7 +19,11 @@ const INTENT_EXTRA_TIMEOUT_SECS: u64 = 10;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Intent {
     Transcribe,
-    Translate { target_lang: String },
+    Translate {
+        target_lang: String,
+    },
+    /// 问询:开头说"问一下…"等,正文是问题,result 为首轮回答(可能缺失)
+    Ask,
 }
 
 #[derive(Debug, Clone)]
@@ -55,17 +59,23 @@ pub fn intent_instruction() -> String {
     String::from(
         "\n\n【意图路由】(最高优先级指令)\n\
 判断输入文本是否以明确的指令前缀开头(只看开头,句中提及不算):\n\
-- \"翻译…\"、\"帮我翻译…\"、\"翻译成XX…\" 等 → 翻译意图\n\n\
+- \"翻译…\"、\"帮我翻译…\"、\"翻译成XX…\" 等 → 翻译意图\n\
+- \"问一下…\"、\"帮我问…\"、\"问一问…\"、\"查一下…\"、\"帮我查…\" 等 → 问询意图\n\n\
 规则:\n\
-1. 指令必须出现在文本开头才有效;文本中部或结尾出现\"翻译\"等词不是指令\n\
+1. 指令必须出现在文本开头才有效;文本中部或结尾出现\"翻译\"、\"问\"等词不是指令\n\
 2. 翻译意图时:text 剥离指令前缀;target_lang 用语言名称(如\"英文\"),用户未指明则留空字符串\n\
-3. 有歧义或不确定时,intent 用 \"transcribe\"\n\
-4. 无指令时 intent 用 \"transcribe\",text 正常应用上方全部润色规则\n\n\
+3. 问询意图时:text 剥离指令前缀作为问题;result 给出对问题的直接回答\n\
+4. 有歧义或不确定时,intent 用 \"transcribe\"\n\
+5. 无指令时 intent 用 \"transcribe\",text 正常应用上方全部润色规则\n\
+6. 陈述句、想粘贴的疑问句都不是问询意图;只有明确的问询指令前缀才算\n\n\
 输出格式(严格 JSON,不要包裹代码块,不要输出 JSON 以外的任何内容):\n\
 {\"intent\":\"transcribe\",\"text\":\"润色后的正文\"}\n\
 或\n\
 {\"intent\":\"translate\",\"target_lang\":\"英文\",\"text\":\"剥离指令后的正文\",\"result\":\"翻译结果\"}\n\
-- translate 时必须同时给出 result:把 text 翻译为 target_lang,并应用上方全部润色规则与翻译规则",
+或\n\
+{\"intent\":\"ask\",\"text\":\"剥离指令后的问题\",\"result\":\"对问题的回答\"}\n\
+- translate 时必须同时给出 result:把 text 翻译为 target_lang,并应用上方全部润色规则与翻译规则\n\
+- ask 时必须同时给出 result:回答 text 中的问题",
     )
 }
 
@@ -98,6 +108,11 @@ pub fn parse_llm_output(raw: &str) -> IntentDecision {
                 }
             }
         }
+        "ask" => IntentDecision {
+            intent: Intent::Ask,
+            text,
+            result: d.result.filter(|r| !r.trim().is_empty()),
+        },
         _ => IntentDecision::passthrough(text),
     }
 }
@@ -239,6 +254,7 @@ pub async fn process_with_intent(
                     "intent": match &decision.intent {
                         Intent::Transcribe => "transcribe".to_string(),
                         Intent::Translate { target_lang } => format!("translate:{}", target_lang),
+                        Intent::Ask => "ask".to_string(),
                     },
                     "has_result": decision.result.is_some(),
                     "raw_preview": raw.chars().take(120).collect::<String>(),
@@ -350,11 +366,29 @@ mod tests {
     }
 
     #[test]
+    fn parse_ask_with_answer() {
+        let d = parse_llm_output(
+            r#"{"intent":"ask","text":"蘑菇炒肉怎么做","result":"蘑菇炒肉做法如下…"}"#,
+        );
+        assert_eq!(d.intent, Intent::Ask);
+        assert_eq!(d.text, "蘑菇炒肉怎么做");
+        assert!(d.result.is_some());
+    }
+
+    #[test]
+    fn parse_ask_without_answer_keeps_intent() {
+        let d = parse_llm_output(r#"{"intent":"ask","text":"今天天气如何"}"#);
+        assert_eq!(d.intent, Intent::Ask);
+        assert!(d.result.is_none());
+    }
+
+    #[test]
     fn intent_instruction_contains_schema() {
         let s = intent_instruction();
         assert!(s.contains("\"intent\""));
         assert!(s.contains("\"target_lang\""));
         assert!(s.contains("\"result\""));
         assert!(s.contains("只看开头"));
+        assert!(s.contains("\"ask\""));
     }
 }

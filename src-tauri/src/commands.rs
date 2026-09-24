@@ -406,3 +406,185 @@ pub fn open_accessibility_settings(automation: Option<bool>) {
 pub fn probe_automation_permission() -> Result<(), String> {
     crate::permissions::probe_automation()
 }
+
+// ============ Chat 对话窗体 ============
+
+#[derive(serde::Deserialize)]
+pub struct ChatMessage {
+    pub role: String,
+    pub content: String,
+}
+
+/// 多轮对话:messages 格式化为对话 prompt,返回回答
+#[tauri::command]
+pub async fn chat_send(
+    app_handle: tauri::AppHandle,
+    messages: Vec<ChatMessage>,
+) -> Result<String, String> {
+    let logger = app_handle.state::<Logger>();
+    let data_dir = app_handle.path().app_data_dir().unwrap_or_default();
+    let app_config = config::load_config(&data_dir);
+    let transcription = &app_config.features.transcription;
+
+    if transcription.polish_provider_id.is_empty() || transcription.polish_model.is_empty() {
+        return Err("请先在设置中配置润色模型".to_string());
+    }
+    let provider = app_config
+        .ai
+        .providers
+        .iter()
+        .find(|p| p.id == transcription.polish_provider_id)
+        .cloned()
+        .ok_or_else(|| "未找到润色 Provider".to_string())?;
+
+    let mut prompt = String::from(
+        "你是一个语音问答助手。用户通过语音向你提问,回答要简洁实用,直接给出答案。使用与提问相同的语言回答。",
+    );
+    for m in &messages {
+        match m.role.as_str() {
+            "user" => prompt.push_str(&format!("\n\n用户:{}", m.content)),
+            "assistant" => prompt.push_str(&format!("\n\n助手:{}", m.content)),
+            _ => {}
+        }
+    }
+    prompt.push_str("\n\n助手:");
+
+    logger.info(
+        "chat",
+        "chat_send 开始",
+        Some(serde_json::json!({
+            "turns": messages.len(),
+            "model": transcription.polish_model,
+        })),
+    );
+
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(60),
+        ai::send_text_prompt(
+            &logger,
+            &prompt,
+            &transcription.polish_model,
+            &provider,
+            &app_handle.state::<ProviderContext>(),
+            ai::ThinkingMode::Disabled,
+        ),
+    )
+    .await;
+
+    match result {
+        Ok(Ok(text)) => {
+            logger.info("chat", "chat_send 成功", None);
+            Ok(text)
+        }
+        Ok(Err(e)) => Err(e.to_string()),
+        Err(_) => Err("回答超时,请重试".to_string()),
+    }
+}
+
+/// chat 窗体语音:开始录音(独立于全局快捷键管线)
+#[tauri::command]
+pub fn chat_record_start(
+    app_handle: tauri::AppHandle,
+    recorder: tauri::State<'_, crate::chat::ChatRecorderState>,
+) -> Result<(), String> {
+    // 并发守卫:全局录音进行中则拒绝
+    if app_handle
+        .state::<crate::session::SessionManager>()
+        .has_active()
+    {
+        return Err("全局录音进行中,请稍候".to_string());
+    }
+    let dir = app_handle.path().app_data_dir().unwrap_or_default();
+    let mut r = recorder.recorder.lock().map_err(|e| e.to_string())?;
+    if r.is_recording() {
+        return Ok(());
+    }
+    r.set_output_dir(dir);
+    r.start().map_err(|e| e.to_string())
+}
+
+/// chat 窗体语音:停止录音并转写,返回文本(不粘贴、不过意图路由)
+#[tauri::command]
+pub async fn chat_record_stop(
+    app_handle: tauri::AppHandle,
+    recorder: tauri::State<'_, crate::chat::ChatRecorderState>,
+) -> Result<String, String> {
+    let logger = app_handle.state::<Logger>();
+    let result = {
+        let mut r = recorder.recorder.lock().map_err(|e| e.to_string())?;
+        if !r.is_recording() {
+            return Err("未在录音".to_string());
+        }
+        r.stop().map_err(|e| e.to_string())?
+    };
+
+    logger.info(
+        "chat",
+        "chat 语音录音完成",
+        Some(serde_json::json!({
+            "path": result.path.display().to_string(),
+            "duration_secs": result.duration_secs,
+            "format": result.format,
+        })),
+    );
+
+    let data_dir = app_handle.path().app_data_dir().unwrap_or_default();
+    let app_config = config::load_config(&data_dir);
+    let transcription = &app_config.features.transcription;
+    let provider = app_config
+        .ai
+        .providers
+        .iter()
+        .find(|p| p.id == transcription.provider_id)
+        .cloned()
+        .ok_or_else(|| "未找到转写 Provider".to_string())?;
+
+    let audio_bytes = std::fs::read(&result.path).map_err(|e| e.to_string())?;
+    let media_type = if result.format == "wav" {
+        "audio/wav"
+    } else {
+        "audio/flac"
+    };
+    let prompt = "请将这段音频转录为文字，只输出转录结果，不要添加任何解释。";
+
+    let ctx = app_handle.state::<ProviderContext>();
+    let model = transcription.model.clone();
+    let text = tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        ai::send_audio_prompt_from_bytes(
+            &logger,
+            &audio_bytes,
+            media_type,
+            prompt,
+            &model,
+            &provider,
+            &ctx,
+        ),
+    )
+    .await
+    .map_err(|_| "转写超时,请重试".to_string())?
+    .map_err(|e| e.to_string())?;
+
+    let _ = std::fs::remove_file(&result.path);
+
+    logger.info(
+        "chat",
+        "chat 语音转写完成",
+        Some(serde_json::json!({ "text_preview": text.chars().take(50).collect::<String>() })),
+    );
+    Ok(text)
+}
+
+/// 前端就绪后拉取待展示的初始问答(双通道兑事件时序)
+#[tauri::command]
+pub fn chat_take_latest(
+    chat_state: tauri::State<'_, crate::chat::ChatState>,
+) -> Option<crate::chat::ChatOpenPayload> {
+    chat_state.pending.lock().ok().and_then(|mut p| p.take())
+}
+
+/// 隐藏 chat 窗体(Esc / 关闭按钮,保留对话状态)
+#[tauri::command]
+pub fn chat_hide(app_handle: tauri::AppHandle) {
+    crate::chat::hide_chat(&app_handle);
+}

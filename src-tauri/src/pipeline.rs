@@ -1,5 +1,6 @@
 use crate::ai;
 use crate::audio_control;
+use crate::chat::{self, ChatOpenPayload};
 use crate::clipboard;
 use crate::config;
 use crate::history::{self, HistoryEntry};
@@ -407,6 +408,55 @@ pub fn stop_recording(
                                                 }
                                             }
                                         }
+                                    } else if decision.intent == Intent::Ask {
+                                        // ask:开 chat 窗体呈现首轮问答,不走剪贴板
+                                        let answer = decision.result.clone().unwrap_or_default();
+                                        chat::show_chat(
+                                            &h,
+                                            ChatOpenPayload {
+                                                question: final_text.clone(),
+                                                answer: answer.clone(),
+                                            },
+                                        );
+
+                                        {
+                                            let data_dir =
+                                                h.path().app_data_dir().unwrap_or_default();
+                                            let entry = HistoryEntry {
+                                                ts: chrono::Local::now().to_rfc3339(),
+                                                mode: "chat".to_string(),
+                                                raw_text: raw_text_for_history.clone(),
+                                                final_text: final_text.clone(),
+                                                audio_path: audio_path.display().to_string(),
+                                            };
+                                            if let Err(e) = history::append(&data_dir, &entry) {
+                                                logger.warn(
+                                                    "history",
+                                                    "历史记录写入失败",
+                                                    Some(serde_json::json!({ "error": e })),
+                                                );
+                                            }
+                                        }
+
+                                        let _ = h.emit(
+                                            "pipeline:complete",
+                                            serde_json::json!({
+                                                "text": &final_text,
+                                                "mode": session.mode,
+                                                "original_text": null,
+                                            }),
+                                        );
+                                        logger.info(
+                                            "pipeline",
+                                            "ask 路由完成,chat 窗体已打开",
+                                            Some(serde_json::json!({
+                                                "total_ms": pipeline_start.elapsed().as_millis(),
+                                                "has_answer": !answer.is_empty(),
+                                            })),
+                                        );
+                                        emit_indicator(&h, "indicator:done");
+                                        cleanup_esc(&h);
+                                        return;
                                     }
 
                                     if mgr.is_cancelled(session.id) {
