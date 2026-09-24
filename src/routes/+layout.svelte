@@ -36,8 +36,6 @@
     return () => unsub?.();
   });
 
-  let isFloatingIndicator = $derived($page.url.pathname === '/recording');
-
   let activeMenu = $derived(
     $page.url.pathname === '/settings' ? 'settings' :
     $page.url.pathname === '/skills' ? 'skills' :
@@ -52,9 +50,7 @@
   }
 </script>
 
-{#if isFloatingIndicator}
-  {@render children()}
-{:else if isLoading}
+{#if isLoading}
   <div class="flex h-screen w-screen items-center justify-center bg-background">
     <div class="text-muted-foreground text-body">加载中...</div>
   </div>

@@ -32,9 +32,7 @@ pub use logger::Logger;
 pub use skills::{assemble_skills_prompt, process_with_skills_client};
 pub use translation::translate_text_client;
 
-use indicator::{
-    INDICATOR_LABEL, TRAY_ID, destroy_indicator, restore_default_tray, show_indicator,
-};
+use indicator::{TRAY_ID, restore_default_tray};
 use pipeline::{SenseVoiceState, play_sound, stop_recording};
 use providers::ProviderContext;
 use recording::AudioRecorder;
@@ -44,7 +42,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{Listener, Manager, WebviewWindow, WebviewWindowBuilder, image::Image, window::Color};
+use tauri::{Manager, WebviewWindow, image::Image};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Shortcut, ShortcutState};
 
 fn toggle_window(window: &WebviewWindow) {
@@ -136,7 +134,6 @@ fn begin_session(
     if let Some(tray) = app_handle.tray_by_id(TRAY_ID) {
         let _ = tray.set_icon(Some(recording_icon));
     }
-    show_indicator(app_handle);
     play_sound("Tink.aiff");
 
     // === Phase 2: 后台副作用(checkpoint = manager.is_active(session.id)) ===
@@ -342,34 +339,6 @@ pub fn run() {
             }
             let esc_id = esc_shortcut.id();
 
-            {
-                let app_handle_cancel = app.handle().clone();
-                let recorder_cancel = recorder.clone();
-                let recording_start_cancel = recording_start.clone();
-                let esc_cancel = esc_shortcut;
-                let _ = app.listen("indicator:cancel", move |_event| {
-                    let mgr = app_handle_cancel.state::<SessionManager>();
-                    if let Some(session) = mgr.signal_cancel() {
-                        // 录音中取消
-                        let h = app_handle_cancel.clone();
-                        let rec = recorder_cancel.clone();
-                        let start = recording_start_cancel.clone();
-                        std::thread::spawn(move || {
-                            stop_recording(&h, &rec, &start, "recording:cancel", session);
-                        });
-                    }
-                    destroy_indicator(&app_handle_cancel);
-                    play_sound("Pop.aiff");
-                    let h = app_handle_cancel.clone();
-                    let esc = esc_cancel;
-                    std::thread::spawn(move || {
-                        let _ = h.global_shortcut().unregister(esc);
-                    });
-                    let icons = app_handle_cancel.state::<TrayIcons>();
-                    restore_default_tray(&app_handle_cancel, icons.default.clone());
-                });
-            }
-
             let app_handle = app.handle().clone();
             let recording_start_handler = recording_start.clone();
             let recorder_handler = recorder.clone();
@@ -406,15 +375,10 @@ pub fn run() {
                                     });
                                     play_sound("Pop.aiff");
                                 }
-                                None if app_handle
-                                    .get_webview_window(INDICATOR_LABEL)
-                                    .is_some() =>
-                                {
+                                None => {
                                     // 处理中取消:signal_cancel 已标记 last_finished
-                                    destroy_indicator(&app_handle);
                                     play_sound("Pop.aiff");
                                 }
-                                None => return,
                             }
                             let h = app_handle.clone();
                             let esc = esc_shortcut_handler;
@@ -542,41 +506,6 @@ pub fn run() {
             }
 
             app.manage(logger);
-
-            // --- Pre-create indicator window for instant show ---
-            let indicator_url = tauri::WebviewUrl::App("/recording".into());
-            let indicator_window =
-                WebviewWindowBuilder::new(app.handle(), INDICATOR_LABEL, indicator_url)
-                    .inner_size(180.0, 48.0)
-                    .position(620.0, 700.0)
-                    .transparent(true)
-                    .decorations(false)
-                    .shadow(false)
-                    .background_color(Color(0, 0, 0, 0))
-                    .resizable(false)
-                    .always_on_top(true)
-                    .skip_taskbar(true)
-                    .visible(false)
-                    .focusable(false)
-                    .accept_first_mouse(true)
-                    .build();
-
-            #[cfg(target_os = "macos")]
-            {
-                if let Ok(w) = &indicator_window {
-                    let _ = macos::floating_panel::make_window_nonactivating(w);
-                }
-            }
-
-            if let Ok(w) = indicator_window {
-                let indicator_close = w.clone();
-                w.on_window_event(move |event| {
-                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                        api.prevent_close();
-                        let _ = indicator_close.hide();
-                    }
-                });
-            }
 
             Ok(())
         })

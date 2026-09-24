@@ -4,7 +4,13 @@ use crate::chat::{self, ChatOpenPayload};
 use crate::clipboard;
 use crate::config;
 use crate::history::{self, HistoryEntry};
-use crate::indicator::{destroy_indicator, emit_indicator, emit_indicator_paste_failed};
+use crate::indicator::restore_default_tray;
+
+/// 会话终态统一恢复托盘图标
+fn restore_tray(h: &tauri::AppHandle) {
+    let icons = h.state::<crate::TrayIcons>();
+    restore_default_tray(h, icons.default.clone());
+}
 use crate::intent::{self, Intent, IntentDecision};
 use crate::logger::Logger;
 use crate::providers::ProviderContext;
@@ -117,7 +123,6 @@ pub fn stop_recording(
                             show_notification(app_handle, "FLAC 编码不可用", "已保存为 WAV 格式");
                         }
                         let _ = app_handle.emit("recording:complete", &result);
-                        emit_indicator(app_handle, "indicator:processing");
 
                         if let Some(ref lg) = logger {
                             lg.info(
@@ -173,7 +178,7 @@ pub fn stop_recording(
                                     if let Some(lg) = h.try_state::<Logger>() {
                                         lg.error("ai", "未找到配置的 AI 提供商", None);
                                     }
-                                    destroy_indicator(&h);
+                                    restore_tray(&h);
                                     cleanup_esc(&h);
                                     return;
                                 }
@@ -183,7 +188,7 @@ pub fn stop_recording(
                                 if let Some(lg) = h.try_state::<Logger>() {
                                     lg.info("pipeline", "流水线已取消 (AI请求前)", None);
                                 }
-                                destroy_indicator(&h);
+                                restore_tray(&h);
                                 cleanup_esc(&h);
                                 return;
                             }
@@ -361,7 +366,7 @@ pub fn stop_recording(
                                                 Err(e) => {
                                                     logger.error("translation", &e, None);
                                                     show_notification(&h, "翻译失败", &e);
-                                                    destroy_indicator(&h);
+                                                    restore_tray(&h);
                                                     cleanup_esc(&h);
                                                     return;
                                                 }
@@ -372,7 +377,7 @@ pub fn stop_recording(
                                                 "翻译失败",
                                                 "请先启用润色并配置润色模型",
                                             );
-                                            destroy_indicator(&h);
+                                            restore_tray(&h);
                                             cleanup_esc(&h);
                                             return;
                                         }
@@ -401,7 +406,7 @@ pub fn stop_recording(
                                                     Err(e) => {
                                                         logger.error("translation", &e, None);
                                                         show_notification(&h, "翻译失败", &e);
-                                                        destroy_indicator(&h);
+                                                        restore_tray(&h);
                                                         cleanup_esc(&h);
                                                         return;
                                                     }
@@ -454,14 +459,13 @@ pub fn stop_recording(
                                                 "has_answer": !answer.is_empty(),
                                             })),
                                         );
-                                        emit_indicator(&h, "indicator:done");
                                         cleanup_esc(&h);
                                         return;
                                     }
 
                                     if mgr.is_cancelled(session.id) {
                                         logger.info("pipeline", "流水线已取消", None);
-                                        destroy_indicator(&h);
+                                        restore_tray(&h);
                                         cleanup_esc(&h);
                                         return;
                                     }
@@ -551,7 +555,6 @@ pub fn stop_recording(
                                                     "clipboard_ms": clipboard_elapsed,
                                                 })),
                                             );
-                                            emit_indicator(&h, "indicator:done");
                                             cleanup_esc(&h);
                                         }
                                         Ok(Err(e)) => {
@@ -560,7 +563,8 @@ pub fn stop_recording(
                                                 "剪贴板写入/粘贴失败",
                                                 Some(serde_json::json!({ "error": e })),
                                             );
-                                            emit_indicator_paste_failed(&h);
+                                            show_notification(&h, "粘贴失败", "请手动 Cmd+V 粘贴");
+                                            restore_tray(&h);
                                         }
                                         Err(_) => {
                                             logger.error(
@@ -570,7 +574,8 @@ pub fn stop_recording(
                                                     "text_length": final_text.len(),
                                                 })),
                                             );
-                                            emit_indicator_paste_failed(&h);
+                                            show_notification(&h, "粘贴失败", "请手动 Cmd+V 粘贴");
+                                            restore_tray(&h);
                                         }
                                     }
                                 }
@@ -584,7 +589,7 @@ pub fn stop_recording(
                                         })),
                                     );
                                     show_notification(&h, "AI 处理失败", &e);
-                                    destroy_indicator(&h);
+                                    restore_tray(&h);
                                     cleanup_esc(&h);
                                 }
                             }
@@ -602,7 +607,7 @@ pub fn stop_recording(
                             duration_secs: duration,
                         };
                         let _ = app_handle.emit("recording:cancel", cancelled);
-                        destroy_indicator(app_handle);
+                        restore_tray(app_handle);
                         cleanup_esc(app_handle);
                     }
                     Err(e) => {
@@ -614,14 +619,14 @@ pub fn stop_recording(
                             );
                         }
                         let _ = app_handle.emit("recording:error", e.to_string());
-                        destroy_indicator(app_handle);
+                        restore_tray(app_handle);
                         cleanup_esc(app_handle);
                     }
                 }
             }
             Err(_) => {
                 let _ = app_handle.emit("recording:error", "Recording lock poisoned");
-                destroy_indicator(app_handle);
+                restore_tray(app_handle);
                 cleanup_esc(app_handle);
             }
         },
@@ -650,7 +655,7 @@ pub fn stop_recording(
                 duration_secs: duration,
             };
             let _ = app_handle.emit("recording:cancel", cancelled);
-            destroy_indicator(app_handle);
+            restore_tray(app_handle);
         }
         _ => {}
     }
