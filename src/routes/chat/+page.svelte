@@ -17,11 +17,8 @@
     });
   }
 
-  async function send(text: string) {
-    const content = text.trim();
-    if (!content || sending) return;
-    messages.push({ role: 'user', content });
-    input = '';
+  // 请求层:用当前 messages 取回答(不 push user,调用方负责)
+  async function invokeReply() {
     sending = true;
     scrollToBottom();
     try {
@@ -33,6 +30,14 @@
       sending = false;
       scrollToBottom();
     }
+  }
+
+  async function send(text: string) {
+    const content = text.trim();
+    if (!content || sending) return;
+    messages.push({ role: 'user', content });
+    input = '';
+    await invokeReply();
   }
 
   async function toggleVoice() {
@@ -62,7 +67,7 @@
       messages.push({ role: 'assistant', content: p.answer });
       scrollToBottom();
     } else {
-      await send(p.question);
+      await invokeReply();
     }
   }
 
