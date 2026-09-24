@@ -4,13 +4,13 @@ use crate::clipboard;
 use crate::config;
 use crate::history::{self, HistoryEntry};
 use crate::indicator::{destroy_indicator, emit_indicator, emit_indicator_paste_failed};
+use crate::intent::{self, Intent, IntentDecision};
 use crate::logger::Logger;
 use crate::providers::ProviderContext;
 use crate::recording;
 use crate::recording::AudioRecorder;
 use crate::sensevoice::SenseVoiceEngine;
 use crate::session::{Session, SessionManager};
-use crate::skills;
 use crate::translation;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -303,8 +303,9 @@ pub fn stop_recording(
 
                                     let skills_start = Instant::now();
                                     let raw_text_for_history = text.clone();
-                                    let mut final_text = skills::process_with_skills(
+                                    let mut decision = intent::process_with_intent(
                                         &logger,
+                                        &app_config.features.intent_routing,
                                         &skills_config,
                                         &app_config.features.transcription,
                                         &skills_providers,
@@ -315,20 +316,25 @@ pub fn stop_recording(
                                     .await
                                     .unwrap_or_else(|e| {
                                         logger.error(
-                                            "skills",
-                                            &format!("Skills 处理异常，使用原始文字: {}", e),
+                                            "intent",
+                                            &format!("语义路由异常，使用原始文字: {}", e),
                                             None,
                                         );
-                                        text
+                                        IntentDecision::passthrough(text.clone())
                                     });
+                                    let mut final_text = decision.text.clone();
                                     let skills_elapsed = skills_start.elapsed().as_millis();
 
-                                    let original_text =
-                                        if session.mode == crate::session::MODE_TRANSLATION {
-                                            Some(final_text.clone())
-                                        } else {
-                                            None
-                                        };
+                                    let mut routed_translation = false;
+
+                                    let original_text = if session.mode
+                                        == crate::session::MODE_TRANSLATION
+                                        || matches!(decision.intent, Intent::Translate { .. })
+                                    {
+                                        Some(final_text.clone())
+                                    } else {
+                                        None
+                                    };
 
                                     if session.mode == crate::session::MODE_TRANSLATION {
                                         if transcription.polish_enabled
@@ -369,6 +375,38 @@ pub fn stop_recording(
                                             cleanup_esc(&h);
                                             return;
                                         }
+                                    } else if let Intent::Translate { target_lang } =
+                                        &decision.intent
+                                    {
+                                        // 语义路由命中翻译:优先用合并调用的译文,缺失时独立翻译兑底
+                                        routed_translation = true;
+                                        match decision.result.take() {
+                                            Some(translated) => final_text = translated,
+                                            None => {
+                                                match translation::translate_text(
+                                                    &logger,
+                                                    &final_text,
+                                                    target_lang,
+                                                    &skills_config,
+                                                    &transcription.polish_provider_id,
+                                                    &transcription.polish_model,
+                                                    &skills_providers,
+                                                    &h.state::<ProviderContext>(),
+                                                    &glossary,
+                                                )
+                                                .await
+                                                {
+                                                    Ok(translated) => final_text = translated,
+                                                    Err(e) => {
+                                                        logger.error("translation", &e, None);
+                                                        show_notification(&h, "翻译失败", &e);
+                                                        destroy_indicator(&h);
+                                                        cleanup_esc(&h);
+                                                        return;
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
 
                                     if mgr.is_cancelled(session.id) {
@@ -399,6 +437,7 @@ pub fn stop_recording(
                                             ts: chrono::Local::now().to_rfc3339(),
                                             mode: if session.mode
                                                 == crate::session::MODE_TRANSLATION
+                                                || routed_translation
                                             {
                                                 "translation".to_string()
                                             } else {

@@ -23,6 +23,7 @@ function defaultConfig(): AppConfig {
       skills: { enabled: true, skills: [] },
       recording: { auto_mute: false },
       glossary: [],
+      intent_routing: { enabled: false },
     },
   };
 }

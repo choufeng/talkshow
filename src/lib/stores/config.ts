@@ -72,6 +72,10 @@ export interface RecordingFeaturesConfig {
   auto_mute: boolean;
 }
 
+export interface IntentRoutingConfig {
+  enabled: boolean;
+}
+
 export interface GlossaryEntry {
   wrong: string;
   correct: string;
@@ -83,6 +87,7 @@ export interface FeaturesConfig {
   skills: SkillsConfig;
   recording: RecordingFeaturesConfig;
   glossary: GlossaryEntry[];
+  intent_routing: IntentRoutingConfig;
 }
 
 export interface AppConfig {
@@ -198,7 +203,10 @@ function createConfigStore() {
       recording: {
         auto_mute: false
       },
-      glossary: []
+      glossary: [],
+      intent_routing: {
+        enabled: false
+      }
     }
   });
 
@@ -211,6 +219,7 @@ function createConfigStore() {
           migrateModels(config.ai.providers || [])
         );
         config.features.glossary = config.features.glossary || [];
+        config.features.intent_routing = config.features.intent_routing || { enabled: false };
         set(config);
       } catch (error) {
         console.error('Failed to load config:', error);

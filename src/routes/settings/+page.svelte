@@ -31,6 +31,14 @@
     })));
   }
 
+  function toggleIntentRouting() {
+    const routing = $config.features?.intent_routing ?? { enabled: false };
+    config.save(updateFeature($config, 'intent_routing', () => ({
+      ...routing,
+      enabled: !routing.enabled
+    })));
+  }
+
   const THEME_OPTIONS: { value: Theme; label: string; icon: typeof Sun }[] = [
     { value: 'light', label: '浅色', icon: Sun },
     { value: 'dark', label: '深色', icon: Moon },
@@ -66,6 +74,23 @@
         <Lightbulb size={15} class="inline -align-[2px] mr-1" />
         提示：点击"修改"按钮后，直接按下键盘上的组合键即可完成设置。按 Esc 取消录制。
       </p>
+    </div>
+  </section>
+
+  <section class="mb-10">
+    <div class="text-caption text-muted-foreground uppercase tracking-wider mb-3">语音指令</div>
+    <div class="rounded-xl border border-border bg-background-alt p-5 mb-4">
+      <div class="flex items-center justify-between gap-4">
+        <div>
+          <div class="text-[15px] font-semibold text-foreground mb-1">语义路由</div>
+          <div class="text-body text-foreground-alt">录音结束后自动识别开头的指令：说"翻译成英文…"则翻译后粘贴，无指令则正常转写。需要已配置润色模型</div>
+        </div>
+        <Toggle
+          checked={$config.features?.intent_routing?.enabled ?? false}
+          onCheckedChange={() => toggleIntentRouting()}
+          ariaLabel="语义路由"
+        />
+      </div>
     </div>
   </section>
 

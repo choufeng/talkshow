@@ -5,6 +5,7 @@ mod commands;
 mod config;
 mod history;
 mod indicator;
+mod intent;
 mod llm_client;
 mod logger;
 #[cfg(target_os = "macos")]

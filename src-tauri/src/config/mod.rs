@@ -247,6 +247,14 @@ pub struct RecordingFeaturesConfig {
     pub auto_mute: bool,
 }
 
+/// 语义路由:转写快捷键录音结束后,由润色 LLM 调用同时识别意图
+/// (如开头说"翻译成英文…")并路由,无指令则按普通转写处理
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(default)]
+pub struct IntentRoutingConfig {
+    pub enabled: bool,
+}
+
 #[derive(Serialize, Deserialize, Clone, Default)]
 #[serde(default)]
 pub struct FeaturesConfig {
@@ -256,6 +264,7 @@ pub struct FeaturesConfig {
     pub recording: RecordingFeaturesConfig,
     /// 个人术语表：纠正转写/翻译中的专有名词错误
     pub glossary: Vec<GlossaryEntry>,
+    pub intent_routing: IntentRoutingConfig,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -292,6 +301,7 @@ impl Default for AppConfig {
                 skills: SkillsConfig::default(),
                 recording: RecordingFeaturesConfig::default(),
                 glossary: Vec::new(),
+                intent_routing: IntentRoutingConfig::default(),
             },
             onboarding_completed: false,
         }

@@ -6,13 +6,18 @@ use crate::providers::ProviderContext;
 const SKILLS_BASE_TIMEOUT_SECS: u64 = 15;
 const SKILLS_PER_SKILL_TIMEOUT_SECS: u64 = 5;
 
+/// LLM 超时公式(供 intent 复用)
+pub fn llm_timeout_secs(skill_count: usize) -> u64 {
+    SKILLS_BASE_TIMEOUT_SECS + (skill_count as u64) * SKILLS_PER_SKILL_TIMEOUT_SECS
+}
+
 #[cfg(target_os = "macos")]
 fn escape_applescript_string(s: &str) -> String {
     s.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
 #[cfg(target_os = "macos")]
-fn get_frontmost_app() -> Result<(String, String), String> {
+pub fn get_frontmost_app() -> Result<(String, String), String> {
     let app_name = crate::sys::frontmost_app_name()
         .ok_or_else(|| "Failed to get frontmost app".to_string())?;
 
@@ -26,7 +31,7 @@ fn get_frontmost_app() -> Result<(String, String), String> {
 }
 
 #[cfg(not(target_os = "macos"))]
-fn get_frontmost_app() -> Result<(String, String), String> {
+pub fn get_frontmost_app() -> Result<(String, String), String> {
     Ok(("Unknown".to_string(), "unknown".to_string()))
 }
 
@@ -57,8 +62,6 @@ pub fn assemble_skills_prompt(
     for skill in skills {
         system_prompt.push_str(&format!("\n---\n【{}】\n{}", skill.name, skill.prompt));
     }
-
-    system_prompt.push_str("\n\n请只输出处理后的纯文本。不要添加任何解释、标注或前缀。");
 
     let user_message = transcription.to_string();
 
@@ -150,6 +153,10 @@ pub async fn process_with_skills(
         &bundle_id,
         glossary,
     );
+    let system_prompt = format!(
+        "{}\n\n请只输出处理后的纯文本。不要添加任何解释、标注或前缀。",
+        system_prompt
+    );
 
     logger.info(
         "skills",
@@ -178,8 +185,7 @@ pub async fn process_with_skills(
 
     let full_prompt = format!("{}\n\n输入文本：\n{}", system_prompt, user_message);
 
-    let timeout_secs =
-        SKILLS_BASE_TIMEOUT_SECS + (skills_owned.len() as u64) * SKILLS_PER_SKILL_TIMEOUT_SECS;
+    let timeout_secs = llm_timeout_secs(skills_owned.len());
 
     let result = tokio::time::timeout(
         std::time::Duration::from_secs(timeout_secs),
@@ -284,11 +290,14 @@ pub async fn process_with_skills_client(
         get_frontmost_app().unwrap_or(("Unknown".to_string(), "unknown".to_string()));
     let (system_prompt, user_message) =
         assemble_skills_prompt(&skills_owned, transcription, &app_name, &bundle_id, &[]);
+    let system_prompt = format!(
+        "{}\n\n请只输出处理后的纯文本。不要添加任何解释、标注或前缀。",
+        system_prompt
+    );
 
     let full_prompt = format!("{}\n\n输入文本：\n{}", system_prompt, user_message);
 
-    let timeout_secs =
-        SKILLS_BASE_TIMEOUT_SECS + (skills_owned.len() as u64) * SKILLS_PER_SKILL_TIMEOUT_SECS;
+    let timeout_secs = llm_timeout_secs(skills_owned.len());
 
     let start = std::time::Instant::now();
 

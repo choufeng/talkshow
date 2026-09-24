@@ -21,6 +21,7 @@ function configWithSkills() {
       },
       recording: { auto_mute: false },
       glossary: [],
+      intent_routing: { enabled: false },
     },
   };
 }
@@ -37,6 +38,7 @@ function configWithoutSkills() {
       skills: { enabled: false, skills: [] },
       recording: { auto_mute: false },
       glossary: [],
+      intent_routing: { enabled: false },
     },
   };
 }
