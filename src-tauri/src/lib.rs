@@ -33,7 +33,9 @@ pub use logger::Logger;
 pub use skills::{assemble_skills_prompt, process_with_skills_client};
 pub use translation::translate_text_client;
 
-use indicator::{TRAY_ID, restore_default_tray};
+use indicator::{
+    TRAY_ID, hide_indicator, restore_default_tray, show_indicator, show_processing,
+};
 use pipeline::{SenseVoiceState, play_sound, stop_recording};
 use providers::ProviderContext;
 use recording::AudioRecorder;
@@ -43,7 +45,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{Manager, WebviewWindow, image::Image};
+use tauri::{Listener, Manager, WebviewWindow, image::Image};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Shortcut, ShortcutState};
 
 fn toggle_window(window: &WebviewWindow) {
@@ -136,6 +138,7 @@ fn begin_session(
         let _ = tray.set_icon(Some(recording_icon));
     }
     play_sound("Tink.aiff");
+    show_indicator(app_handle);
 
     // === Phase 2: 后台副作用(checkpoint = manager.is_active(session.id)) ===
     let h = app_handle.clone();
@@ -204,6 +207,38 @@ fn end_session(
     });
     let icons = app_handle.state::<TrayIcons>();
     restore_default_tray(app_handle, icons.default.clone());
+    // 录音结束 → 转写/润色中,指示条切处理中相位
+    show_processing(app_handle);
+}
+
+/// 取消当前活动会话:录音中→停止并走 cancel pipeline;处理中→标记取消。
+/// ESC 快捷键与指示条 ✕ 按钮共用。
+fn cancel_active_session(
+    app_handle: &tauri::AppHandle,
+    recorder: &Arc<Mutex<AudioRecorder>>,
+    recording_start: &Arc<Mutex<Option<Instant>>>,
+    esc_shortcut: Shortcut,
+) {
+    let mgr = app_handle.state::<SessionManager>();
+    match mgr.signal_cancel() {
+        Some(session) => {
+            let h = app_handle.clone();
+            let rec = recorder.clone();
+            let start = recording_start.clone();
+            std::thread::spawn(move || {
+                stop_recording(&h, &rec, &start, "recording:cancel", session);
+            });
+            play_sound("Pop.aiff");
+        }
+        None => play_sound("Pop.aiff"),
+    }
+    let h = app_handle.clone();
+    std::thread::spawn(move || {
+        let _ = h.global_shortcut().unregister(esc_shortcut);
+    });
+    let icons = app_handle.state::<TrayIcons>();
+    restore_default_tray(app_handle, icons.default.clone());
+    hide_indicator(app_handle);
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -358,36 +393,12 @@ pub fn run() {
 
                         // --- ESC ---
                         if id == esc_id {
-                            let mgr = app_handle.state::<SessionManager>();
-                            match mgr.signal_cancel() {
-                                Some(session) => {
-                                    // 录音中取消
-                                    let h = app_handle.clone();
-                                    let rec = recorder_handler.clone();
-                                    let start = recording_start_handler.clone();
-                                    std::thread::spawn(move || {
-                                        stop_recording(
-                                            &h,
-                                            &rec,
-                                            &start,
-                                            "recording:cancel",
-                                            session,
-                                        );
-                                    });
-                                    play_sound("Pop.aiff");
-                                }
-                                None => {
-                                    // 处理中取消:signal_cancel 已标记 last_finished
-                                    play_sound("Pop.aiff");
-                                }
-                            }
-                            let h = app_handle.clone();
-                            let esc = esc_shortcut_handler;
-                            std::thread::spawn(move || {
-                                let _ = h.global_shortcut().unregister(esc);
-                            });
-                            let icons = app_handle.state::<TrayIcons>();
-                            restore_default_tray(&app_handle, icons.default.clone());
+                            cancel_active_session(
+                                &app_handle,
+                                &recorder_handler,
+                                &recording_start_handler,
+                                esc_shortcut_handler,
+                            );
                             return;
                         }
 
@@ -446,6 +457,17 @@ pub fn run() {
                 && let Err(e) = app.global_shortcut().register(sc)
             {
                 eprintln!("Failed to register translate shortcut: {}", e);
+            }
+
+            // --- 指示条 ✕ 按钮 → 取消会话(与 ESC 等价) ---
+            {
+                let h = app.handle().clone();
+                let rec = recorder.clone();
+                let start = recording_start.clone();
+                let esc = esc_shortcut;
+                let _ = app.listen("indicator:cancel", move |_event| {
+                    cancel_active_session(&h, &rec, &start, esc);
+                });
             }
 
             // --- Tooltip update loop ---

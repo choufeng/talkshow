@@ -6,10 +6,11 @@ use crate::config;
 use crate::history::{self, HistoryEntry};
 use crate::indicator::restore_default_tray;
 
-/// 会话终态统一恢复托盘图标
+/// 会话终态统一恢复托盘图标并隐藏指示条
 fn restore_tray(h: &tauri::AppHandle) {
     let icons = h.state::<crate::TrayIcons>();
     restore_default_tray(h, icons.default.clone());
+    crate::indicator::hide_indicator(h);
 }
 use crate::hooks;
 use crate::intent::{self, Intent, IntentDecision};
@@ -475,6 +476,7 @@ pub fn stop_recording(
                                             })),
                                         );
                                         cleanup_esc(&h);
+                                        crate::indicator::hide_indicator(&h);
                                         return;
                                     } else if decision.intent == Intent::Hook {
                                         // hook:整理正文并 POST 到配置的后端,不走剪贴板
@@ -671,6 +673,7 @@ pub fn stop_recording(
                                                 })),
                                             );
                                             cleanup_esc(&h);
+                                            crate::indicator::hide_indicator(&h);
                                         }
                                         Ok(Err(e)) => {
                                             logger.error(
@@ -680,6 +683,7 @@ pub fn stop_recording(
                                             );
                                             show_notification(&h, "粘贴失败", "请手动 Cmd+V 粘贴");
                                             restore_tray(&h);
+                                            crate::indicator::show_paste_failed(&h);
                                         }
                                         Err(_) => {
                                             logger.error(
@@ -691,6 +695,7 @@ pub fn stop_recording(
                                             );
                                             show_notification(&h, "粘贴失败", "请手动 Cmd+V 粘贴");
                                             restore_tray(&h);
+                                            crate::indicator::show_paste_failed(&h);
                                         }
                                     }
                                 }

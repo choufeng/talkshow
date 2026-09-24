@@ -1,6 +1,7 @@
-//! 托盘图标管理(录音指示窗已移除,状态反馈 = 托盘图标 + 音效 + 系统通知)
+//! 托盘图标管理 + 录音指示条入口(macOS 走原生 NSPanel,其他平台 no-op)
 
 use tauri::image::Image;
+use tauri::AppHandle;
 
 pub const TRAY_ID: &str = "main";
 
@@ -9,4 +10,32 @@ pub fn restore_default_tray(app_handle: &tauri::AppHandle, default_icon: Image) 
         let _ = tray.set_icon(Some(default_icon));
         let _ = tray.set_tooltip(Some("TalkShow"));
     }
+}
+
+pub fn show_indicator(app_handle: &AppHandle) {
+    #[cfg(target_os = "macos")]
+    crate::macos::indicator_panel::show_recording(app_handle);
+    #[cfg(not(target_os = "macos"))]
+    let _ = app_handle;
+}
+
+pub fn show_processing(app_handle: &AppHandle) {
+    #[cfg(target_os = "macos")]
+    crate::macos::indicator_panel::show_processing(app_handle);
+    #[cfg(not(target_os = "macos"))]
+    let _ = app_handle;
+}
+
+pub fn show_paste_failed(app_handle: &AppHandle) {
+    #[cfg(target_os = "macos")]
+    crate::macos::indicator_panel::show_paste_failed(app_handle);
+    #[cfg(not(target_os = "macos"))]
+    let _ = app_handle;
+}
+
+pub fn hide_indicator(app_handle: &AppHandle) {
+    #[cfg(target_os = "macos")]
+    crate::macos::indicator_panel::hide(app_handle);
+    #[cfg(not(target_os = "macos"))]
+    let _ = app_handle;
 }
