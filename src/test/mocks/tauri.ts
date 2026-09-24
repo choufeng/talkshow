@@ -71,6 +71,15 @@ vi.mock('@tauri-apps/api/event', () => ({
   emit: vi.fn(),
 }));
 
+// Mock @tauri-apps/api/window(可按测试切换窗口 label)
+let mockWindowLabel = 'main';
+vi.mock('@tauri-apps/api/window', () => ({
+  getCurrentWindow: () => ({ label: mockWindowLabel }),
+}));
+export function setMockWindowLabel(label: string) {
+  mockWindowLabel = label;
+};
+
 // Mock @tauri-apps/plugin-global-shortcut
 vi.mock('@tauri-apps/plugin-global-shortcut', () => ({}));
 

@@ -6,6 +6,7 @@
   import type { Snippet } from 'svelte';
   import { House, Settings, Bot, ScrollText, Sparkles, History, MessageCircle } from 'lucide-svelte';
   import { listen } from '@tauri-apps/api/event';
+  import { getCurrentWindow } from '@tauri-apps/api/window';
   import { onboarding } from '$lib/stores/onboarding';
   import { chatOpen, type ChatOpenPayload } from '$lib/stores/chat';
   import OnboardingWizard from '$lib/components/onboarding/OnboardingWizard.svelte';
@@ -23,6 +24,10 @@
 
   // 语义路由 ask:唤起主窗体后导航到对话栏目,payload 存 store 供对话页消费
   onMount(() => {
+    // Tauri v2 坑:前端 listen 默认 target=Any,emit_to 定向事件会投给所有
+    // 注册了同名监听器的窗口。不加守卫,indicator 窗口也会 goto('/chat'),
+    // route 被污染后录音指示条变成主窗体侧栏。仅主窗体消费 chat:open。
+    if (getCurrentWindow().label !== 'main') return;
     let unsub: (() => void) | null = null;
     listen<ChatOpenPayload>('chat:open', (e) => {
       chatOpen.set(e.payload);
