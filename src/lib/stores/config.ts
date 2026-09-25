@@ -166,6 +166,7 @@ export const BUILTIN_PROVIDERS: ProviderConfig[] = [
     api_key: '',
     endpoint: 'https://open.bigmodel.cn/api/paas/v4',
     models: [
+      { name: 'glm-asr', capabilities: ['transcription'] },
       { name: 'glm-4.7-flash', capabilities: ['chat'] },
       { name: 'glm-4.7', capabilities: ['chat'] },
       { name: 'glm-5', capabilities: ['chat'] }

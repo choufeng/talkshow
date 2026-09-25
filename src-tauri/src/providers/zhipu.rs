@@ -2,6 +2,7 @@ use crate::config::ModelConfig;
 use crate::logger::Logger;
 use crate::providers::{Provider, ProviderError, ThinkingMode};
 use async_trait::async_trait;
+use reqwest::multipart;
 
 const DEFAULT_BASE_URL: &str = "https://open.bigmodel.cn/api/paas/v4";
 
@@ -35,15 +36,81 @@ impl ZhipuProvider {
 impl Provider for ZhipuProvider {
     async fn transcribe(
         &self,
-        _logger: &Logger,
-        _audio_bytes: &[u8],
-        _media_type: &str,
+        logger: &Logger,
+        audio_bytes: &[u8],
+        media_type: &str,
         _prompt: &str,
-        _model: &str,
+        model: &str,
     ) -> Result<String, ProviderError> {
-        Err(ProviderError::UnsupportedOperation(
-            "智谱 AI 不支持语音转写".to_string(),
-        ))
+        let api_key = self.get_api_key()?;
+        let extension = media_type.split('/').next_back().unwrap_or("wav");
+
+        logger.info(
+            "zhipu",
+            "准备发送转写请求",
+            Some(serde_json::json!({
+                "model": model,
+                "media_type": media_type,
+                "audio_size_bytes": audio_bytes.len(),
+                "base_url": self.base_url,
+            })),
+        );
+
+        // GLM-ASR：/audio/transcriptions multipart，字段 file+model（官方限制：单文件 ≤25MB、时长 ≤30s）
+        let file_part = multipart::Part::bytes(audio_bytes.to_vec())
+            .file_name(format!("audio.{}", extension))
+            .mime_str(media_type)
+            .map_err(|e| ProviderError::RequestError(e.to_string()))?;
+
+        let form = multipart::Form::new()
+            .part("file", file_part)
+            .text("model", model.to_string());
+
+        let client = reqwest::Client::new();
+        let response = client
+            .post(format!("{}/audio/transcriptions", self.base_url))
+            .header("Authorization", format!("Bearer {}", api_key))
+            .multipart(form)
+            .send()
+            .await
+            .map_err(|e| {
+                logger.error(
+                    "zhipu",
+                    "转写请求失败",
+                    Some(serde_json::json!({ "error": e.to_string() })),
+                );
+                ProviderError::RequestError(e.to_string())
+            })?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            let err = format!("HTTP {} - {}", status, body);
+            logger.error(
+                "zhipu",
+                "转写请求失败",
+                Some(serde_json::json!({ "error": &err })),
+            );
+            return Err(ProviderError::RequestError(err));
+        }
+
+        #[derive(serde::Deserialize)]
+        struct TranscriptionResponse {
+            text: String,
+        }
+
+        let resp: TranscriptionResponse = response
+            .json()
+            .await
+            .map_err(|e| ProviderError::RequestError(format!("Failed to parse response: {}", e)))?;
+
+        logger.info(
+            "zhipu",
+            "转写请求成功",
+            Some(serde_json::json!({ "response_length": resp.text.len() })),
+        );
+
+        Ok(resp.text)
     }
 
     async fn complete_text(
@@ -149,5 +216,27 @@ impl Provider for ZhipuProvider {
             capabilities: vec!["chat".to_string()],
             verified: None,
         }]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 真网验证：cargo test zhipu -- --ignored（需 ZHIPU_API_KEY；样本 ≤30s）
+    #[tokio::test]
+    #[ignore = "真网调用，需 ZHIPU_API_KEY"]
+    async fn zhipu_live_transcribe() {
+        let key = std::env::var("ZHIPU_API_KEY").expect("需 ZHIPU_API_KEY");
+        let provider = ZhipuProvider::new(Some(key), None);
+        let dir = tempfile::tempdir().unwrap();
+        let logger = Logger::new(dir.path()).unwrap();
+        let wav = std::fs::read("/tmp/asr_test.wav").expect("先跑 python3 /tmp/asr_test.py 下载样本");
+        let text = provider
+            .transcribe(&logger, &wav, "audio/wav", "", "glm-asr")
+            .await
+            .unwrap();
+        assert!(!text.is_empty(), "空结果");
+        assert!(text.contains("阿里巴巴"), "实际结果: {}", text);
     }
 }
