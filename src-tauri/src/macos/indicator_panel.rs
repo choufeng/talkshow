@@ -20,15 +20,14 @@ use std::time::{Duration, Instant};
 
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
-use objc2::runtime::Sel;
 use objc2::{define_class, msg_send, sel, DeclaredClass, MainThreadMarker};
 use objc2_app_kit::{
-    NSBackingStoreType, NSBezierPath, NSButton, NSColor, NSEvent, NSFont, NSGradient, NSLineCapStyle,
+    NSBackingStoreType, NSBezierPath, NSColor, NSEvent, NSFont, NSGradient, NSLineCapStyle,
     NSPanel, NSScreen, NSTextField, NSView, NSWindowCollectionBehavior, NSWindowStyleMask,
     NSFloatingWindowLevel,
 };
 use objc2_foundation::{NSPoint, NSRect, NSSize, NSString, NSTimer};
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
 
 /// 面板高(逻辑点)
 const PANEL_H: f64 = 48.0;
@@ -60,7 +59,6 @@ static SEQ: AtomicU64 = AtomicU64::new(0);
 static USER_POSITIONED: AtomicBool = AtomicBool::new(false);
 
 /// 取消按钮点击时取 AppHandle(面板单实例,创建时写入)
-static CANCEL_TARGET: Mutex<Option<AppHandle>> = Mutex::new(None);
 
 // ============ RingView:状态图标(环/点/警告) ============
 
@@ -420,7 +418,6 @@ struct IVars {
     timer_label: Retained<NSTextField>,
     rec_label: Retained<NSTextField>,
     status_label: Retained<NSTextField>,
-    cancel_btn: Retained<NSButton>,
     timer: RefCell<Option<Retained<NSTimer>>>,
     start: RefCell<Option<Instant>>,
     breath: RefCell<Option<Retained<NSTimer>>>,
@@ -450,16 +447,6 @@ define_class! {
             if !in_capsule {
                 return std::ptr::null_mut();
             }
-            // 取消按钮优先
-            let btn = &self.ivars().cancel_btn;
-            let bf = unsafe { btn.frame() };
-            if bf.origin.x <= local.x
-                && local.x <= bf.origin.x + bf.size.width
-                && bf.origin.y <= local.y
-                && local.y <= bf.origin.y + bf.size.height
-            {
-                return Retained::as_ptr(btn) as *mut NSView;
-            }
             self as *const Self as *mut NSView
         }
 
@@ -478,16 +465,7 @@ define_class! {
             path.stroke();
         }
 
-        #[unsafe(method(cancelClicked:))]
-        fn cancel_clicked(&self, _sender: Option<&AnyObject>) {
-            // 走 Tauri 事件,由 lib.rs 的 listener 执行与 ESC 等价的取消逻辑
-            let handle = CANCEL_TARGET.lock().ok().and_then(|g| g.clone());
-            if let Some(h) = handle {
-                let _ = h.emit("indicator:cancel", ());
-            }
-        }
-
-        /// 左键按住拖动移动面板(✕ 按钮区域除外,按钮自处理点击)
+        /// 左键按住拖动移动面板
         #[unsafe(method(mouseDown:))]
         fn mouse_down(&self, event: &NSEvent) {
             self.ivars().drag_loc.set(unsafe { event.locationInWindow() });
@@ -643,19 +621,18 @@ fn make_label(
 fn layout(view: &IndicatorView, panel: &NSPanel, phase: Phase, mtm: MainThreadMarker) {
     let iv = view.ivars();
     let width = match phase {
-        Phase::Recording => 180.0,
-        Phase::Processing => 150.0,
-        Phase::PasteFailed => 260.0,
+        Phase::Recording => 122.0,
+        Phase::Processing => 130.0,
+        Phase::PasteFailed => 244.0,
     };
 
-    let (ring_f, jelly_f, timer_f, rec_f, status_f, btn_f) = match phase {
+    let (ring_f, jelly_f, timer_f, rec_f, status_f) = match phase {
         Phase::Recording => (
             NSRect::new(NSPoint::new(14.0, 15.0), NSSize::new(18.0, 18.0)),
             NSRect::ZERO,
             NSRect::new(NSPoint::new(36.0, 15.0), NSSize::new(44.0, 18.0)),
             NSRect::new(NSPoint::new(82.0, 15.0), NSSize::new(26.0, 12.0)),
             NSRect::ZERO,
-            NSRect::new(NSPoint::new(146.0, 12.0), NSSize::new(22.0, 24.0)),
         ),
         Phase::Processing => (
             NSRect::ZERO,
@@ -663,7 +640,6 @@ fn layout(view: &IndicatorView, panel: &NSPanel, phase: Phase, mtm: MainThreadMa
             NSRect::ZERO,
             NSRect::ZERO,
             NSRect::new(NSPoint::new(44.0, 15.0), NSSize::new(72.0, 18.0)),
-            NSRect::new(NSPoint::new(118.0, 12.0), NSSize::new(22.0, 24.0)),
         ),
         Phase::PasteFailed => (
             NSRect::new(NSPoint::new(14.0, 14.0), NSSize::new(20.0, 20.0)),
@@ -671,7 +647,6 @@ fn layout(view: &IndicatorView, panel: &NSPanel, phase: Phase, mtm: MainThreadMa
             NSRect::ZERO,
             NSRect::ZERO,
             NSRect::new(NSPoint::new(40.0, 15.0), NSSize::new(190.0, 18.0)),
-            NSRect::new(NSPoint::new(234.0, 12.0), NSSize::new(22.0, 24.0)),
         ),
     };
 
@@ -686,7 +661,6 @@ fn layout(view: &IndicatorView, panel: &NSPanel, phase: Phase, mtm: MainThreadMa
         iv.rec_label.setHidden(phase != Phase::Recording);
         iv.status_label.setFrame(status_f);
         iv.status_label.setHidden(phase == Phase::Recording);
-        iv.cancel_btn.setFrame(btn_f);
     }
 
     // 图标样式随相位切换(processing 用水母,ring 隐藏)
@@ -714,10 +688,7 @@ fn layout(view: &IndicatorView, panel: &NSPanel, phase: Phase, mtm: MainThreadMa
 }
 
 /// 惰性创建面板(必须主线程调用)。返回 (panel, view)。
-fn ensure_panel(
-    app: &AppHandle,
-    mtm: MainThreadMarker,
-) -> Option<(Retained<NSPanel>, Retained<IndicatorView>)> {
+fn ensure_panel(mtm: MainThreadMarker) -> Option<(Retained<NSPanel>, Retained<IndicatorView>)> {
     if let Some(p) = PANEL.lock().ok()?.as_ref() {
         // SAFETY: 仅主线程访问;指针由创建路径构造且常驻
         unsafe {
@@ -734,21 +705,6 @@ fn ensure_panel(
     let timer_label = make_label(mtm, "0:00", 13.0, true, (1.0, 1.0, 1.0, 0.9), NSRect::ZERO);
     let rec_label = make_label(mtm, "REC", 8.0, true, (1.0, 1.0, 1.0, 0.55), NSRect::ZERO);
     let status_label = make_label(mtm, "处理中…", 12.0, true, CYAN, NSRect::ZERO);
-    let cancel_btn = unsafe {
-        NSButton::buttonWithTitle_target_action(
-            &NSString::from_str("✕"),
-            None,
-            Some(sel!(cancelClicked:) as Sel),
-            mtm,
-        )
-    };
-    unsafe {
-        cancel_btn.setBordered(false);
-        let c = NSColor::colorWithSRGBRed_green_blue_alpha(0.55, 0.6, 0.66, 1.0);
-        cancel_btn.setContentTintColor(Some(&c));
-        let font = NSFont::systemFontOfSize(11.0);
-        cancel_btn.setFont(Some(&font));
-    }
 
     // --- contentView(先 set_ivars 再经 super init) ---
     let content_rect = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(180.0, PANEL_H));
@@ -758,7 +714,6 @@ fn ensure_panel(
         timer_label: timer_label.clone(),
         rec_label: rec_label.clone(),
         status_label: status_label.clone(),
-        cancel_btn: cancel_btn.clone(),
         timer: RefCell::new(None),
         start: RefCell::new(None),
         breath: RefCell::new(None),
@@ -776,7 +731,6 @@ fn ensure_panel(
         view.addSubview(&timer_label);
         view.addSubview(&rec_label);
         view.addSubview(&status_label);
-        view.addSubview(&cancel_btn);
     }
 
     // --- 面板 ---
@@ -803,12 +757,6 @@ fn ensure_panel(
         panel.setReleasedWhenClosed(false);
         panel.setContentView(Some(&view));
     }
-    // 取消按钮 target 指向 contentView(NSControl 对 target 是 weak 引用,无环)
-    {
-        let btn = &view.ivars().cancel_btn;
-        let target: &AnyObject = unsafe { &*(Retained::as_ptr(btn) as *const AnyObject) };
-        unsafe { btn.setTarget(Some(target)) };
-    }
 
     if let Ok(mut g) = PANEL.lock() {
         *g = Some(PanelPtrs {
@@ -816,21 +764,17 @@ fn ensure_panel(
             view: Retained::into_raw(view.clone()),
         });
     }
-    if let Ok(mut g) = CANCEL_TARGET.lock() {
-        *g = Some(app.clone());
-    }
 
     Some((panel, view))
 }
 
 fn set_phase(app: &AppHandle, phase: Phase) -> u64 {
     let seq = SEQ.fetch_add(1, Ordering::SeqCst) + 1;
-    let h = app.clone();
     let _ = app.run_on_main_thread(move || {
         let Some(mtm) = MainThreadMarker::new() else {
             return;
         };
-        let Some((panel, view)) = ensure_panel(&h, mtm) else {
+        let Some((panel, view)) = ensure_panel(mtm) else {
             return;
         };
         match phase {

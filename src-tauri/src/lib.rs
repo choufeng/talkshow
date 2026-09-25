@@ -45,7 +45,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{Listener, Manager, WebviewWindow, image::Image};
+use tauri::{Manager, WebviewWindow, image::Image};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Shortcut, ShortcutState};
 
 fn toggle_window(window: &WebviewWindow) {
@@ -457,17 +457,6 @@ pub fn run() {
                 && let Err(e) = app.global_shortcut().register(sc)
             {
                 eprintln!("Failed to register translate shortcut: {}", e);
-            }
-
-            // --- 指示条 ✕ 按钮 → 取消会话(与 ESC 等价) ---
-            {
-                let h = app.handle().clone();
-                let rec = recorder.clone();
-                let start = recording_start.clone();
-                let esc = esc_shortcut;
-                let _ = app.listen("indicator:cancel", move |_event| {
-                    cancel_active_session(&h, &rec, &start, esc);
-                });
             }
 
             // --- Tooltip update loop ---
