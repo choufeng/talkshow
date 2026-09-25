@@ -3,7 +3,7 @@
   import { config } from '$lib/stores/config';
   import { onMount } from 'svelte';
   import KeyBadge from '$lib/components/ui/key-badge/index.svelte';
-  import { parseKeys } from '$lib/utils/shortcut';
+  import { parseKeys, parseShortcutList } from '$lib/utils/shortcut';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import { Mic, Loader2, CheckCircle2, AlertCircle, RotateCcw } from 'lucide-svelte';
 
@@ -51,7 +51,7 @@
     onboarding.setStepValid(5, true);
   }
 
-  let recordingKeys = $derived(parseKeys($config.recording_shortcut));
+  let recordingGroups = $derived(parseShortcutList($config.recording_shortcut).map(parseKeys));
 
   onMount(() => {
     (async () => {
@@ -144,8 +144,13 @@
     <div class="flex items-center justify-center gap-2 mt-4">
       <span class="text-caption text-foreground-alt">按下</span>
       <div class="flex items-center gap-1">
-        {#each recordingKeys as key}
-          <KeyBadge label={key} />
+        {#each recordingGroups as keys, gi (gi)}
+          {#each keys as key (key + gi)}
+            <KeyBadge label={key} />
+          {/each}
+          {#if gi < recordingGroups.length - 1}
+            <span class="text-caption text-muted-foreground mx-1">或</span>
+          {/if}
         {/each}
       </div>
       <span class="text-caption text-foreground-alt">开始录音，再次按下停止</span>

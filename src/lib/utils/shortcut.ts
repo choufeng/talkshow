@@ -18,3 +18,15 @@ export function parseKeys(shortcut: string): string[] {
     return key.replace('Key', '').replace('Digit', '');
   });
 }
+
+/** 逗号分隔的多组快捷键 → 单组字符串数组 */
+export function parseShortcutList(shortcuts: string): string[] {
+  return shortcuts
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
+export function joinShortcuts(list: string[]): string {
+  return list.join(',');
+}

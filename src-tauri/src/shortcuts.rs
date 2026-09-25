@@ -5,15 +5,15 @@ use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
 pub static LAST_REC_PRESS: Mutex<Option<Instant>> = Mutex::new(None);
 
 pub struct ShortcutIds {
-    pub toggle: u32,
-    pub recording: u32,
-    pub translate: u32,
+    pub toggle: Vec<u32>,
+    pub recording: Vec<u32>,
+    pub translate: Vec<u32>,
 }
 
 pub static SHORTCUT_IDS: RwLock<ShortcutIds> = RwLock::new(ShortcutIds {
-    toggle: 0,
-    recording: 0,
-    translate: 0,
+    toggle: Vec::new(),
+    recording: Vec::new(),
+    translate: Vec::new(),
 });
 
 pub fn parse_shortcut(shortcut_str: &str) -> Option<Shortcut> {
@@ -36,6 +36,20 @@ pub fn parse_shortcut(shortcut_str: &str) -> Option<Shortcut> {
     }
 
     key_code.map(|code| Shortcut::new(Some(modifiers), code))
+}
+
+/// 解析逗号分隔的多组快捷键: "Control+Shift+Quote,Alt+Q" → 两组 Shortcut
+pub fn parse_shortcuts(shortcut_str: &str) -> Vec<Shortcut> {
+    shortcut_str
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .filter_map(parse_shortcut)
+        .collect()
+}
+
+pub fn shortcut_ids(shortcuts: &[Shortcut]) -> Vec<u32> {
+    shortcuts.iter().map(|s| s.id()).collect()
 }
 
 #[cfg(test)]
@@ -77,5 +91,28 @@ mod tests {
         let cmd_result = parse_shortcut("Command+KeyA");
         let super_result = parse_shortcut("Super+KeyA");
         assert_eq!(cmd_result.is_some(), super_result.is_some());
+    }
+
+    #[test]
+    fn test_parse_shortcuts_multiple() {
+        let result = parse_shortcuts("Control+Shift+Quote, Alt+KeyQ");
+        assert_eq!(result.len(), 2);
+    }
+
+    #[test]
+    fn test_parse_shortcuts_single_no_comma() {
+        let result = parse_shortcuts("Control+Backslash");
+        assert_eq!(result.len(), 1);
+    }
+
+    #[test]
+    fn test_parse_shortcuts_skips_invalid_and_empty() {
+        let result = parse_shortcuts("Control+Shift, , Control+KeyA");
+        assert_eq!(result.len(), 1);
+    }
+
+    #[test]
+    fn test_parse_shortcuts_empty() {
+        assert!(parse_shortcuts("").is_empty());
     }
 }

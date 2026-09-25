@@ -56,7 +56,7 @@ fn test_validate_config_accepts_empty_shortcut() {
 #[test]
 fn test_validate_config_rejects_too_long_shortcut() {
     let mut config = test_app_config();
-    config.shortcut = "A".repeat(101);
+    config.shortcut = "A".repeat(301);
     let result = validate_config(&config);
     assert!(result.is_err());
 }

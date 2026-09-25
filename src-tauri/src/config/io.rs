@@ -167,13 +167,14 @@ pub fn validate_config(config: &AppConfig) -> Result<(), String> {
         }
     }
 
-    if config.shortcut.len() > 100 {
+    // 多组快捷键逗号分隔,上限放宽
+    if config.shortcut.len() > 300 {
         return Err("Shortcut string too long".to_string());
     }
-    if config.recording_shortcut.len() > 100 {
+    if config.recording_shortcut.len() > 300 {
         return Err("Recording shortcut string too long".to_string());
     }
-    if config.translate_shortcut.len() > 100 {
+    if config.translate_shortcut.len() > 300 {
         return Err("Translate shortcut string too long".to_string());
     }
 

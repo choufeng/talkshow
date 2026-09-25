@@ -4,16 +4,16 @@
   import { onMount } from 'svelte';
   import { Keyboard } from 'lucide-svelte';
   import KeyBadge from '$lib/components/ui/key-badge/index.svelte';
-  import { parseKeys } from '$lib/utils/shortcut';
+  import { parseKeys, parseShortcutList } from '$lib/utils/shortcut';
 
   onMount(() => {
     onboarding.setStepValid(4, true);
   });
 
   const shortcuts = $derived([
-    { label: '窗口切换', desc: '显示或隐藏主窗口', keys: parseKeys($config.shortcut) },
-    { label: '录音控制', desc: '开始或结束录音', keys: parseKeys($config.recording_shortcut) },
-    { label: 'AI 翻译', desc: '录音并翻译为目标语言', keys: parseKeys($config.translate_shortcut) },
+    { label: '窗口切换', desc: '显示或隐藏主窗口', groups: parseShortcutList($config.shortcut) },
+    { label: '录音控制', desc: '开始或结束录音', groups: parseShortcutList($config.recording_shortcut) },
+    { label: 'AI 翻译', desc: '录音并翻译为目标语言', groups: parseShortcutList($config.translate_shortcut) },
   ]);
 </script>
 
@@ -36,8 +36,13 @@
           <div class="text-caption text-foreground-alt">{s.desc}</div>
         </div>
         <div class="flex items-center gap-1">
-          {#each s.keys as key}
-            <KeyBadge label={key} />
+          {#each s.groups as group, gi (gi)}
+            {#each parseKeys(group) as key (key + gi)}
+              <KeyBadge label={key} />
+            {/each}
+            {#if gi < s.groups.length - 1}
+              <span class="text-caption text-muted-foreground mx-1">或</span>
+            {/if}
           {/each}
         </div>
       </div>
