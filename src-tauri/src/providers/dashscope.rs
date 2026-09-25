@@ -338,4 +338,21 @@ mod tests {
             "data:audio/wav;base64,UklGRg=="
         );
     }
+
+    /// 真网验证：cargo test dashscope -- --ignored（需 DASHSCOPE_API_KEY）
+    #[tokio::test]
+    #[ignore = "真网调用，需 DASHSCOPE_API_KEY"]
+    async fn asr_live_transcribe() {
+        let key = std::env::var("DASHSCOPE_API_KEY").expect("需 DASHSCOPE_API_KEY");
+        let provider = DashScopeProvider::new(Some(key));
+        let dir = tempfile::tempdir().unwrap();
+        let logger = Logger::new(dir.path()).unwrap();
+        let wav =
+            std::fs::read("/tmp/asr_test.wav").expect("先跑 python3 /tmp/asr_test.py 下载样本");
+        let text = provider
+            .transcribe(&logger, &wav, "audio/wav", "", "qwen3-asr-flash")
+            .await
+            .unwrap();
+        assert!(text.contains("hello world"), "实际结果: {}", text);
+    }
 }
