@@ -57,6 +57,17 @@ fn builtin_providers() -> Vec<ProviderConfig> {
             }],
         },
         ProviderConfig {
+            id: "litellm".to_string(),
+            name: "LiteLLM".to_string(),
+            api_key: Some(String::new()),
+            endpoint: Some("http://localhost:4000/v1".to_string()),
+            models: vec![ModelConfig {
+                name: "whisper-1".to_string(),
+                capabilities: vec!["transcription".to_string(), "chat".to_string()],
+                verified: None,
+            }],
+        },
+        ProviderConfig {
             id: "zhipu".to_string(),
             name: "智谱 AI".to_string(),
             api_key: Some(String::new()),
@@ -436,7 +447,20 @@ mod tests {
         assert!(ids.contains(&"vertex"));
         assert!(ids.contains(&"dashscope"));
         assert!(ids.contains(&"sensevoice"));
+        assert!(ids.contains(&"litellm"));
         assert!(ids.contains(&"custom"));
+    }
+
+    #[test]
+    fn test_litellm_default_endpoint() {
+        let litellm = builtin_providers()
+            .into_iter()
+            .find(|p| p.id == "litellm")
+            .expect("litellm builtin");
+        assert_eq!(
+            litellm.endpoint.as_deref(),
+            Some("http://localhost:4000/v1")
+        );
     }
 
     #[test]

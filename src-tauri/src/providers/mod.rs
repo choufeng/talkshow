@@ -98,6 +98,11 @@ pub fn create_provider(
             config.api_key.clone(),
             config.endpoint.clone(),
         ))),
+        // LiteLLM 为 OpenAI 兼容代理，直接复用 OpenAIProvider（日志标签显示 openai，靠 base_url 区分）
+        "litellm" => Ok(Box::new(openai::OpenAIProvider::new(
+            config.api_key.clone(),
+            config.endpoint.clone(),
+        ))),
         "vertex" => Ok(Box::new(vertex::VertexAIProvider::new(
             ctx.vertex_token_cache.clone(),
         ))),

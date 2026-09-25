@@ -154,6 +154,13 @@ export const BUILTIN_PROVIDERS: ProviderConfig[] = [
     models: [{ name: 'SenseVoice-Small', capabilities: ['transcription'] }]
   },
   {
+    id: 'litellm',
+    name: 'LiteLLM',
+    api_key: '',
+    endpoint: 'http://localhost:4000/v1',
+    models: [{ name: 'whisper-1', capabilities: ['transcription', 'chat'] }]
+  },
+  {
     id: 'zhipu',
     name: '智谱 AI',
     api_key: '',
@@ -170,9 +177,9 @@ export function isBuiltinProvider(id: string): boolean {
   return BUILTIN_PROVIDERS.some((p) => p.id === id);
 }
 
-export const PROVIDERS_REQUIRING_KEY = ['dashscope', 'openai', 'zhipu'];
+export const PROVIDERS_REQUIRING_KEY = ['dashscope', 'openai', 'zhipu', 'litellm'];
 
-export const PROVIDERS_WITH_ENDPOINT = ['openai', 'zhipu'];
+export const PROVIDERS_WITH_ENDPOINT = ['openai', 'zhipu', 'litellm'];
 export function needsApiKey(providerId: string): boolean {
   return PROVIDERS_REQUIRING_KEY.includes(providerId);
 }
