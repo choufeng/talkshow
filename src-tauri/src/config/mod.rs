@@ -74,6 +74,11 @@ fn builtin_providers() -> Vec<ProviderConfig> {
             endpoint: Some("https://open.bigmodel.cn/api/paas/v4".to_string()),
             models: vec![
                 ModelConfig {
+                    name: "glm-asr".to_string(),
+                    capabilities: vec!["transcription".to_string()],
+                    verified: None,
+                },
+                ModelConfig {
                     name: "glm-4.7-flash".to_string(),
                     capabilities: vec!["chat".to_string()],
                     verified: None,
