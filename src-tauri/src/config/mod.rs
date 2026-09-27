@@ -269,6 +269,8 @@ pub struct RecordingFeaturesConfig {
 #[serde(default)]
 pub struct IntentRoutingConfig {
     pub enabled: bool,
+    /// 禁用的意图列表(取值 "translate"/"ask"/"hook"),空 = 全部启用
+    pub disabled: Vec<String>,
 }
 
 /// Hook 扩展:识别"记录…"指令后,LLM 整理正文并 POST 到配置的后端

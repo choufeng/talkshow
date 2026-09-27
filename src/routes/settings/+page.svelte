@@ -32,10 +32,25 @@
   }
 
   function toggleIntentRouting() {
-    const routing = $config.features?.intent_routing ?? { enabled: false };
+    const routing = $config.features?.intent_routing ?? { enabled: false, disabled: [] as string[] };
     config.save(updateFeature($config, 'intent_routing', () => ({
       ...routing,
       enabled: !routing.enabled
+    })));
+  }
+
+  const INTENT_KINDS: { kind: string; label: string; desc: string }[] = [
+    { kind: 'translate', label: '翻译指令', desc: '说“翻译成英文…”识别后直接给出译文' },
+    { kind: 'ask', label: '问询指令', desc: '说“问一下…”打开对话窗口' },
+    { kind: 'hook', label: '记录指令', desc: '说“记录…”发送到 Hook 后端' }
+  ];
+
+  function toggleIntentKind(kind: string) {
+    const routing = $config.features?.intent_routing ?? { enabled: false, disabled: [] as string[] };
+    const disabled = routing.disabled ?? [];
+    config.save(updateFeature($config, 'intent_routing', () => ({
+      ...routing,
+      disabled: disabled.includes(kind) ? disabled.filter((k) => k !== kind) : [...disabled, kind]
     })));
   }
 
@@ -91,6 +106,23 @@
           ariaLabel="语义路由"
         />
       </div>
+      {#if $config.features?.intent_routing?.enabled}
+        <div class="mt-4 pt-4 border-t border-border flex flex-col gap-3">
+          {#each INTENT_KINDS as item (item.kind)}
+            <div class="flex items-center justify-between gap-4">
+              <div>
+                <div class="text-[14px] font-medium text-foreground">{item.label}</div>
+                <div class="text-sm text-foreground-alt">{item.desc}</div>
+              </div>
+              <Toggle
+                checked={!($config.features?.intent_routing?.disabled ?? []).includes(item.kind)}
+                onCheckedChange={() => toggleIntentKind(item.kind)}
+                ariaLabel={item.label}
+              />
+            </div>
+          {/each}
+        </div>
+      {/if}
     </div>
   </section>
 

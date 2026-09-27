@@ -74,6 +74,8 @@ export interface RecordingFeaturesConfig {
 
 export interface IntentRoutingConfig {
   enabled: boolean;
+  /** 禁用的意图 ("translate"/"ask"/"hook"),空 = 全部启用 */
+  disabled: string[];
 }
 
 export interface HooksConfig {
@@ -239,7 +241,8 @@ function createConfigStore() {
       },
       glossary: [],
       intent_routing: {
-        enabled: false
+        enabled: false,
+        disabled: []
       },
       hooks: {
         enabled: false,
@@ -261,7 +264,8 @@ function createConfigStore() {
           migrateModels(config.ai.providers || [])
         );
         config.features.glossary = config.features.glossary || [];
-        config.features.intent_routing = config.features.intent_routing || { enabled: false };
+        config.features.intent_routing = config.features.intent_routing || { enabled: false, disabled: [] };
+        config.features.intent_routing.disabled = config.features.intent_routing.disabled || [];
         config.features.hooks = config.features.hooks || {
           enabled: false,
           url: '',

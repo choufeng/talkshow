@@ -57,35 +57,78 @@ struct RawDecision {
 }
 
 /// 意图路由指令块,拼在 skills 基础 prompt 之后
+/// 意图路由指令块,拼在 skills 基础 prompt 之后(全部意图启用)
 pub fn intent_instruction() -> String {
-    String::from(
+    intent_instruction_disabled(&[])
+}
+
+/// 同 [`intent_instruction`],但被禁用的意图不进入指令块;全部禁用 → 空串
+/// (润色输出纯文本,parse 对纯文本天然回退 transcribe,无需路由指令)。
+pub fn intent_instruction_disabled(disabled: &[String]) -> String {
+    let on = |k: &str| !disabled.iter().any(|d| d == k);
+    if !on("translate") && !on("ask") && !on("hook") {
+        return String::new();
+    }
+
+    let mut s = String::from(
         "\n\n【意图路由】(最高优先级指令)\n\
-判断输入文本是否以明确的指令前缀开头(只看开头,句中提及不算):\n\
-- \"翻译…\"、\"帮我翻译…\"、\"翻译成XX…\" 等 → 翻译意图\n\
-- \"问一下…\"、\"帮我问…\"、\"问一问…\"、\"查一下…\"、\"帮我查…\" 等 → 问询意图\n\
-- \"记录…\"、\"帮我记录…\"、\"记录一下…\"、\"记一下…\"、\"帮我记一下…\" 等 → 记录意图\n\n\
-规则:\n\
-1. 指令必须出现在文本开头才有效;文本中部或结尾出现\"翻译\"、\"问\"、\"记录\"等词不是指令\n\
-2. 翻译意图时:text 剥离指令前缀;target_lang 用语言名称(如\"英文\"),用户未指明则留空字符串\n\
-3. 问询意图时:text 剥离指令前缀作为问题\n\
-4. 记录意图时:text 剥离指令前缀作为待记录内容\n\
-5. 有歧义或不确定时,intent 用 \"transcribe\"\n\
-6. 无指令时 intent 用 \"transcribe\",text 正常应用上方全部润色规则\n\
-7. 陈述句、想粘贴的疑问句都不是问询意图;只有明确的问询指令前缀才算\n\n\
-输出格式(严格 JSON,不要包裹代码块,不要输出 JSON 以外的任何内容):\n\
-{\"intent\":\"transcribe\",\"text\":\"润色后的正文\"}\n\
-或\n\
-{\"intent\":\"translate\",\"target_lang\":\"英文\",\"text\":\"剥离指令后的正文\",\"result\":\"翻译结果\"}\n\
-或\n\
-{\"intent\":\"ask\",\"text\":\"剥离指令后的问题\"}\n\
-或\n\
-{\"intent\":\"hook\",\"text\":\"剥离指令后的内容\"}\n\
-- translate 时必须同时给出 result:把 text 翻译为 target_lang,并应用上方全部润色规则与翻译规则\n",
-    )
+判断输入文本是否以明确的指令前缀开头(只看开头,句中提及不算):\n",
+    );
+    let mut rules: Vec<String> = vec![
+        "指令必须出现在文本开头才有效;文本中部或结尾出现的指令词不算".to_string(),
+    ];
+    let mut outputs: Vec<&str> = vec!["{\"intent\":\"transcribe\",\"text\":\"润色后的正文\"}"];
+    let mut extra = String::new();
+
+    if on("translate") {
+        s += "- \"翻译…\"、\"帮我翻译…\"、\"翻译成XX…\" 等 → 翻译意图\n";
+        rules.push(
+            "翻译意图时:text 剥离指令前缀;target_lang 用语言名称(如\"英文\"),用户未指明则留空字符串"
+                .to_string(),
+        );
+        outputs.push(
+            "{\"intent\":\"translate\",\"target_lang\":\"英文\",\"text\":\"剥离指令后的正文\",\"result\":\"翻译结果\"}",
+        );
+        extra.push_str(
+            "\n- translate 时必须同时给出 result:把 text 翻译为 target_lang,并应用上方全部润色规则与翻译规则",
+        );
+    }
+    if on("ask") {
+        s += "- \"问一下…\"、\"帮我问…\"、\"问一问…\"、\"查一下…\"、\"帮我查…\" 等 → 问询意图\n";
+        rules.push(
+            "问询意图时:text 剥离指令前缀作为问题;陈述句、想粘贴的疑问句都不是问询意图,只有明确的问询指令前缀才算"
+                .to_string(),
+        );
+        outputs.push("{\"intent\":\"ask\",\"text\":\"剥离指令后的问题\"}");
+    }
+    if on("hook") {
+        s += "- \"记录…\"、\"帮我记录…\"、\"记录一下…\"、\"记一下…\"、\"帮我记一下…\" 等 → 记录意图\n";
+        rules.push("记录意图时:text 剥离指令前缀作为待记录内容".to_string());
+        outputs.push("{\"intent\":\"hook\",\"text\":\"剥离指令后的内容\"}");
+    }
+
+    rules.push("有歧义或不确定时,intent 用 \"transcribe\"".to_string());
+    rules.push(
+        "无指令时 intent 用 \"transcribe\",text 正常应用上方全部润色规则".to_string(),
+    );
+
+    s += "\n\n规则:\n";
+    for (i, r) in rules.iter().enumerate() {
+        s += &format!("{}. {}\n", i + 1, r);
+    }
+    s += "\n\n输出格式(严格 JSON,不要包裹代码块,不要输出 JSON 以外的任何内容):\n";
+    s += &outputs.join("\n或\n");
+    s += &extra;
+    s
 }
 
 /// 从 LLM 输出中解析意图决策。任何失败 → 回退转写原文(保持旧路径行为)。
 pub fn parse_llm_output(raw: &str) -> IntentDecision {
+    parse_llm_output_disabled(raw, &[])
+}
+
+/// 同 [`parse_llm_output`],但被禁用的意图(即便模型输出)也回退转写。
+pub fn parse_llm_output_disabled(raw: &str, disabled: &[String]) -> IntentDecision {
     let Some(json_str) = extract_json(raw) else {
         return IntentDecision::passthrough(raw);
     };
@@ -99,7 +142,7 @@ pub fn parse_llm_output(raw: &str) -> IntentDecision {
         d.text
     };
 
-    match d.intent.trim() {
+    let decision = match d.intent.trim() {
         "translate" => {
             let lang = d.target_lang.trim().to_string();
             if lang.is_empty() {
@@ -124,8 +167,19 @@ pub fn parse_llm_output(raw: &str) -> IntentDecision {
             result: None,
         },
         _ => IntentDecision::passthrough(text),
+    };
+    let kind = match &decision.intent {
+        Intent::Translate { .. } => "translate",
+        Intent::Ask => "ask",
+        Intent::Hook => "hook",
+        Intent::Transcribe => return decision,
+    };
+    if disabled.iter().any(|d| d == kind) {
+        return IntentDecision::passthrough(decision.text);
     }
+    decision
 }
+
 
 /// 提取 JSON 对象:剥代码围栏,取首个 '{' 到最后一个 '}' 之间的内容
 fn extract_json(raw: &str) -> Option<&str> {
@@ -219,11 +273,10 @@ pub async fn process_with_intent(
         &bundle_id,
         glossary,
     );
+    let routing_instruction = intent_instruction_disabled(&routing.disabled);
     let full_prompt = format!(
         "{}{}\n\n输入文本：\n{}",
-        base_prompt,
-        intent_instruction(),
-        user_message
+        base_prompt, routing_instruction, user_message
     );
 
     let timeout_secs = skills::llm_timeout_secs(skills_owned.len()) + INTENT_EXTRA_TIMEOUT_SECS;
@@ -255,7 +308,7 @@ pub async fn process_with_intent(
     let elapsed_ms = start.elapsed().as_millis();
     match result {
         Ok(Ok(raw)) => {
-            let decision = parse_llm_output(&raw);
+            let decision = parse_llm_output_disabled(&raw, &routing.disabled);
             logger.info(
                 "intent",
                 "语义路由决策",
@@ -411,5 +464,59 @@ mod tests {
         assert!(s.contains("\"ask\""));
         assert!(s.contains("\"hook\""));
         assert!(s.contains("记录"));
+    }
+
+    #[test]
+    fn instruction_disabled_translate_omits_translate() {
+        let s = intent_instruction_disabled(&["translate".to_string()]);
+        assert!(!s.contains("翻译意图"));
+        assert!(!s.contains("\"translate\""));
+        assert!(s.contains("问询意图"));
+        assert!(s.contains("记录意图"));
+        assert!(!s.contains("结尾多余的或"));
+        assert!(s.ends_with("\"剥离指令后的内容\"}"));
+    }
+
+    #[test]
+    fn instruction_all_disabled_is_empty() {
+        let s = intent_instruction_disabled(
+            &["translate", "ask", "hook"]
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>(),
+        );
+        assert!(s.is_empty());
+    }
+
+    #[test]
+    fn parse_disabled_intent_falls_back_to_transcribe() {
+        let d = parse_llm_output_disabled(
+            r#"{"intent":"translate","target_lang":"英文","text":"你好","result":"Hello"}"#,
+            &["translate".to_string()],
+        );
+        assert_eq!(d.intent, Intent::Transcribe);
+        assert_eq!(d.text, "你好");
+        assert!(d.result.is_none());
+
+        let d = parse_llm_output_disabled(
+            r#"{"intent":"ask","text":"今天天气"}"#,
+            &["ask".to_string()],
+        );
+        assert_eq!(d.intent, Intent::Transcribe);
+
+        let d = parse_llm_output_disabled(
+            r#"{"intent":"hook","text":"明天开会"}"#,
+            &["hook".to_string()],
+        );
+        assert_eq!(d.intent, Intent::Transcribe);
+    }
+
+    #[test]
+    fn parse_disabled_other_kind_still_routed() {
+        let d = parse_llm_output_disabled(
+            r#"{"intent":"ask","text":"今天天气"}"#,
+            &["translate".to_string()],
+        );
+        assert_eq!(d.intent, Intent::Ask);
     }
 }
