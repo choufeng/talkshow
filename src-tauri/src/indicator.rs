@@ -1,7 +1,7 @@
 //! 托盘图标管理 + 录音指示条入口(macOS 走原生 NSPanel,其他平台 no-op)
 
-use tauri::image::Image;
 use tauri::AppHandle;
+use tauri::image::Image;
 
 pub const TRAY_ID: &str = "main";
 

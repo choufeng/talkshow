@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/svelte';
+import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 import { mockTauriInvoke, resetTauriMocks } from '../../test/mocks/tauri';
 import SettingsPage from './+page.svelte';
 import { config } from '$lib/stores/config';
@@ -21,9 +21,9 @@ function defaultConfig(): AppConfig {
       },
       translation: { target_lang: 'English' },
       skills: { enabled: true, skills: [] },
-      recording: { auto_mute: false },
+      recording: { auto_mute: false, input_device: '' },
       glossary: [],
-      intent_routing: { enabled: false },
+      intent_routing: { enabled: false, disabled: [] },
       hooks: { enabled: false, url: '', headers: '', body_template: '', prompt: '', skill_ids: [] },
     },
   };
@@ -98,6 +98,28 @@ describe('Settings Page Integration', () => {
     expect(invokeSpy).toHaveBeenCalledWith('get_config', undefined);
   });
 
+  it('should list audio devices and render the selector', async () => {
+    const invokeSpy = vi.fn(async (command: string) => {
+      if (command === 'get_config') return defaultConfig();
+      if (command === 'list_audio_devices')
+        return [
+          { name: 'MacBook Pro Microphone', is_default: true },
+          { name: 'AirPods Pro', is_default: false }
+        ];
+      return null;
+    });
+    mockTauriInvoke(invokeSpy);
+
+    render(SettingsPage);
+    await waitFor(() => {
+      expect(invokeSpy).toHaveBeenCalledWith('list_audio_devices', undefined);
+    });
+    await waitFor(() => {
+      expect(screen.getByText('麦克风输入')).toBeInTheDocument();
+      expect(screen.getByText('跟随系统默认')).toBeInTheDocument();
+    });
+  });
+
   it('should handle config load error gracefully', async () => {
     mockTauriInvoke(async () => {
       throw new Error('Failed to load config');
@@ -141,6 +163,32 @@ describe('Settings Page Integration', () => {
       config: expect.objectContaining({
         features: expect.objectContaining({
           recording: expect.objectContaining({ auto_mute: true })
+        })
+      })
+    }));
+  });
+
+  it('should show intent kind toggles only when routing enabled and persist disabled list', async () => {
+    let cfg = defaultConfig();
+    cfg.features.intent_routing = { enabled: true, disabled: [] };
+    const invokeSpy = vi.fn(async (command: string) => {
+      if (command === 'get_config') return cfg;
+      if (command === 'save_config_cmd') return;
+      return null;
+    });
+    mockTauriInvoke(invokeSpy);
+
+    render(SettingsPage);
+
+    expect(await screen.findByText('翻译指令')).toBeInTheDocument();
+    expect(screen.getByText('问询指令')).toBeInTheDocument();
+    expect(screen.getByText('记录指令')).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('switch', { name: '翻译指令' }));
+    expect(invokeSpy).toHaveBeenCalledWith('save_config_cmd', expect.objectContaining({
+      config: expect.objectContaining({
+        features: expect.objectContaining({
+          intent_routing: expect.objectContaining({ disabled: ['translate'] })
         })
       })
     }));

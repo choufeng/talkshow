@@ -261,6 +261,8 @@ pub struct GlossaryEntry {
 #[serde(default)]
 pub struct RecordingFeaturesConfig {
     pub auto_mute: bool,
+    /// 首选麦克风设备名,空 = 系统默认
+    pub input_device: String,
 }
 
 /// 语义路由:转写快捷键录音结束后,由润色 LLM 调用同时识别意图
@@ -269,6 +271,8 @@ pub struct RecordingFeaturesConfig {
 #[serde(default)]
 pub struct IntentRoutingConfig {
     pub enabled: bool,
+    /// 禁用的意图列表(取值 "translate"/"ask"/"hook"),空 = 全部启用
+    pub disabled: Vec<String>,
 }
 
 /// Hook 扩展:识别"记录…"指令后,LLM 整理正文并 POST 到配置的后端
@@ -348,7 +352,10 @@ impl Default for AppConfig {
                     target_lang: "English".to_string(),
                 },
                 skills: SkillsConfig::default(),
-                recording: RecordingFeaturesConfig::default(),
+                recording: RecordingFeaturesConfig {
+                    auto_mute: false,
+                    input_device: String::new(),
+                },
                 glossary: Vec::new(),
                 intent_routing: IntentRoutingConfig::default(),
                 hooks: HooksConfig::default(),

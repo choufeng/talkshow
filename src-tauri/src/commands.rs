@@ -9,6 +9,44 @@ use tauri::Manager;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
 #[tauri::command]
+pub fn list_audio_devices() -> Vec<crate::recording::AudioDeviceInfo> {
+    crate::recording::list_input_devices()
+}
+
+/// 切换首选麦克风:持久化配置并重建两路录音器(全局快捷键 + chat)
+#[tauri::command]
+pub fn set_audio_input_device(app_handle: tauri::AppHandle, device: String) -> Result<(), String> {
+    if app_handle
+        .state::<crate::session::SessionManager>()
+        .has_active()
+    {
+        return Err("录音进行中,请先结束录音再切换麦克风".to_string());
+    }
+    let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
+    let mut cfg = config::load_config(&app_data_dir);
+    cfg.features.recording.input_device = device.clone();
+    config::save_config(&app_data_dir, &cfg)?;
+
+    let name = if device.trim().is_empty() {
+        None
+    } else {
+        Some(device.as_str())
+    };
+    if let Some(state) = app_handle.try_state::<crate::RecorderState>()
+        && let Ok(mut r) = state.recorder.lock()
+    {
+        *r = crate::recording::AudioRecorder::new_with_device(name);
+    }
+    // ponytail: chat 录音进行中切换会丢弃当前片段(TooShort),低概率不守卫
+    if let Some(state) = app_handle.try_state::<crate::chat::ChatRecorderState>()
+        && let Ok(mut r) = state.recorder.lock()
+    {
+        *r = crate::recording::AudioRecorder::new_with_device(name);
+    }
+    Ok(())
+}
+
+#[tauri::command]
 pub fn get_config(app_handle: tauri::AppHandle) -> config::AppConfig {
     let app_data_dir = app_handle.path().app_data_dir().unwrap_or_default();
     config::load_config(&app_data_dir)

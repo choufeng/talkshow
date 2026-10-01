@@ -359,9 +359,23 @@
       <div class="border border-border rounded-xl overflow-hidden">
         <div class="max-h-[calc(100vh-200px)] overflow-y-auto font-mono text-body" bind:this={logContainer} onscroll={onLogScroll}>
           {#each filteredEntries as entry, i}
+            <!-- svelte-ignore a11y_no_noninteractive_tabindex (条件 role="button" 时才挂 tabindex,静态分析不认条件) -->
             <div
               class="flex gap-3 px-5 py-2 border-b border-border last:border-b-0 hover:bg-muted/30               {selectMode && selectedIds.includes(i) ? 'bg-muted/50' : ''} {selectMode ? 'cursor-pointer' : ''}"
-              onclick={(e) => { if (selectMode) { toggleEntrySelection(i, e); } }}
+              role={selectMode ? 'button' : undefined}
+              tabindex={selectMode ? 0 : undefined}
+              aria-pressed={selectMode ? selectedIds.includes(i) : undefined}
+              onclick={selectMode ? (e) => toggleEntrySelection(i, e) : undefined}
+              onkeydown={
+                selectMode
+                  ? (e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        toggleEntrySelection(i, e);
+                      }
+                    }
+                  : undefined
+              }
             >
               {#if selectMode}
                 <input

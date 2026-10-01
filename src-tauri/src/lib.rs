@@ -36,7 +36,7 @@ pub use translation::translate_text_client;
 use indicator::{TRAY_ID, hide_indicator, restore_default_tray, show_indicator, show_processing};
 use pipeline::{SenseVoiceState, play_sound, stop_recording};
 use providers::ProviderContext;
-use recording::AudioRecorder;
+use recording::{AudioRecorder, RecorderState};
 use session::{MODE_TRANSCRIPTION, MODE_TRANSLATION, SessionManager};
 use shortcuts::{LAST_REC_PRESS, SHORTCUT_IDS, parse_shortcuts, shortcut_ids};
 use std::sync::{Arc, Mutex};
@@ -69,6 +69,8 @@ struct TrayIcons {
     default: Image<'static>,
     recording: Image<'static>,
 }
+
+pub use commands::{list_audio_devices, set_audio_input_device};
 
 /// 按键去抖:500ms 内重复按压忽略。
 fn debounced() -> bool {
@@ -268,6 +270,8 @@ pub fn run() {
             sensevoice::delete_sensevoice_model,
             logger::get_log_sessions,
             logger::get_log_content,
+            commands::list_audio_devices,
+            commands::set_audio_input_device,
             commands::check_accessibility_permission,
             commands::reset_tcc_permissions,
             commands::open_accessibility_settings,
@@ -284,9 +288,21 @@ pub fn run() {
             let _ = audio_control::cleanup_stale_state(&app_data_dir);
             let logger = Logger::new(&app_data_dir).expect("Failed to initialize logger");
             app.manage(SessionManager::new());
+            let audio_device = {
+                let name = config::load_config(&app_data_dir)
+                    .features
+                    .recording
+                    .input_device;
+                if name.trim().is_empty() {
+                    None
+                } else {
+                    Some(name)
+                }
+            };
+            let audio_device = audio_device.as_deref();
             app.manage(chat::ChatRecorderState {
                 recorder: std::sync::Arc::new(std::sync::Mutex::new(
-                    recording::AudioRecorder::new(),
+                    recording::AudioRecorder::new_with_device(audio_device),
                 )),
             });
             let app_config = config::load_config(&app_data_dir);
@@ -353,8 +369,12 @@ pub fn run() {
             let recording_start: Arc<std::sync::Mutex<Option<Instant>>> =
                 Arc::new(std::sync::Mutex::new(None));
 
-            let recorder: Arc<std::sync::Mutex<AudioRecorder>> =
-                Arc::new(std::sync::Mutex::new(AudioRecorder::new()));
+            let recorder: Arc<std::sync::Mutex<AudioRecorder>> = Arc::new(std::sync::Mutex::new(
+                AudioRecorder::new_with_device(audio_device),
+            ));
+            app.manage(RecorderState {
+                recorder: recorder.clone(),
+            });
 
             // --- Global Shortcuts (single plugin instance) ---
             let toggle_shortcuts = parse_shortcuts(&shortcut_str);
