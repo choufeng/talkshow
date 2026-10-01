@@ -323,6 +323,23 @@ TalkShow 需要麦克风权限进行录音。在系统弹窗中点击「允许�
 
 自动粘贴依赖模拟 `Cmd+V` 按键。部分以管理员权限运行的应用可能不接受模拟输入，请尝试以普通用户权限运行目标应用。
 
+### 其他电脑安装 DMG 后提示「无法打开，因为无法验证开发者」？
+
+构建产物未做代码签名与公证，macOS Gatekeeper 会拦截（本机构建的包分发到其他电脑时出现）。在目标电脑上执行：
+
+```bash
+sudo xattr -r -d com.apple.quarantine /Applications/TalkShow.app
+
+# 若打开 DMG 时即被拦截，对 DMG 本身满除:
+xattr -d com.apple.quarantine ~/Downloads/TalkShow_0.1.0_aarch64.dmg
+```
+
+验证：`xattr -l /Applications/TalkShow.app` 无输出即干净。
+
+免命令行替代：首次运行时到「系统设置 → 隐私与安全性」底部点击「仍要打开」。
+
+若需正式分发他人，使用 Apple 开发者账号（$99/年）配置签名与公证：在 `tauri.conf.json` 设置 `app.macOS.signingIdentity`，`tauri build` 将自动完成 codesign + notarization。
+
 ## License
 
 [Apache License 2.0](LICENSE) &copy; 2026 Xia Jia
