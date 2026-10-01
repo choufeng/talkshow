@@ -56,8 +56,8 @@ struct RawDecision {
     result: Option<String>,
 }
 
-/// 意图路由指令块,拼在 skills 基础 prompt 之后
 /// 意图路由指令块,拼在 skills 基础 prompt 之后(全部意图启用)
+#[cfg(test)]
 pub fn intent_instruction() -> String {
     intent_instruction_disabled(&[])
 }
@@ -123,6 +123,7 @@ pub fn intent_instruction_disabled(disabled: &[String]) -> String {
 }
 
 /// 从 LLM 输出中解析意图决策。任何失败 → 回退转写原文(保持旧路径行为)。
+#[cfg(test)]
 pub fn parse_llm_output(raw: &str) -> IntentDecision {
     parse_llm_output_disabled(raw, &[])
 }

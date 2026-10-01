@@ -73,15 +73,21 @@ fn device_matches(name: &str, want: &str) -> bool {
 }
 
 pub enum AudioRecorder {
-    Ready {
+    /// 未持流:不占用麦克风(懒建流,macOS 状态栏不亮麦图标)
+    Idle {
+        device_name: Option<String>,
+        output_dir: Option<PathBuf>,
+    },
+    /// 录音中:持有激活的输入流,stop/cancel 后 drop 流释放设备
+    Recording {
         buffer: Arc<Mutex<Vec<i16>>>,
         stream: cpal::Stream,
         sample_rate: u32,
         channels: u16,
-        start_time: Option<Instant>,
+        start_time: Instant,
+        device_name: Option<String>,
         output_dir: Option<PathBuf>,
     },
-    Unavailable(String),
 }
 
 /// 全局快捷键管线的录音器,managed state 供 set_audio_input_device 运行时重建
@@ -223,10 +229,42 @@ where
 }
 
 impl AudioRecorder {
-    /// 按设备名创建录音器;None 或未匹配到时回落默认设备
+    /// 按设备名创建录音器。懒建流:只记住设备名,不打开麦克风;
+    /// 真正建流在 start(),stop/cancel 后 drop 流释放设备,
+    /// macOS 状态栏麦克风图标仅在录音期间显示。
     pub fn new_with_device(device_name: Option<&str>) -> Self {
+        AudioRecorder::Idle {
+            device_name: device_name
+                .filter(|n| !n.trim().is_empty())
+                .map(str::to_string),
+            output_dir: None,
+        }
+    }
+
+    pub fn start(&mut self) -> Result<(), RecordingError> {
+        match self {
+            AudioRecorder::Idle { .. } => self.open_and_play(),
+            AudioRecorder::Recording { start_time, .. } => {
+                // 已在录音:仅重置计时
+                *start_time = Instant::now();
+                Ok(())
+            }
+        }
+    }
+
+    /// 建流并播放。设备解析/建流/启动任一步失败即返回 Err,状态保持 Idle
+    fn open_and_play(&mut self) -> Result<(), RecordingError> {
+        let (device_name, output_dir) = match self {
+            AudioRecorder::Idle {
+                device_name,
+                output_dir,
+            } => (device_name.clone(), output_dir.clone()),
+            AudioRecorder::Recording { .. } => return Ok(()),
+        };
+
         let host = cpal::default_host();
         let device = match device_name
+            .as_deref()
             .filter(|n| !n.trim().is_empty())
             .and_then(|want| {
                 host.input_devices().ok().and_then(|mut ds| {
@@ -236,39 +274,38 @@ impl AudioRecorder {
             Some(d) => d,
             None => match host.default_input_device() {
                 Some(d) => {
-                    if let Some(want) = device_name.filter(|n| !n.trim().is_empty()) {
-                        eprintln!(
-                            "[TalkShow] Audio device '{}' not found, falling back to default",
-                            want
-                        );
+                    if let Some(ref want) = device_name {
+                        if !want.trim().is_empty() {
+                            eprintln!(
+                                "[TalkShow] Audio device '{}' not found, falling back to default",
+                                want
+                            );
+                        }
                     }
                     d
                 }
-                None => return AudioRecorder::Unavailable("No microphone device available".into()),
+                None => {
+                    return Err(RecordingError::MicrophoneUnavailable(
+                        "No microphone device available".into(),
+                    ))
+                }
             },
         };
 
-        let mut supported_configs = match device.supported_input_configs() {
-            Ok(configs) => configs,
-            Err(e) => {
-                return AudioRecorder::Unavailable(format!(
-                    "Failed to query microphone configs: {}",
-                    e
-                ));
-            }
-        };
+        let mut supported_configs = device.supported_input_configs().map_err(|e| {
+            RecordingError::MicrophoneUnavailable(format!(
+                "Failed to query microphone configs: {}",
+                e
+            ))
+        })?;
 
-        let supported_config = match supported_configs.next() {
-            Some(c) => c,
-            None => {
-                return AudioRecorder::Unavailable(
-                    "Microphone has no supported input configurations".into(),
-                );
-            }
-        };
+        let supported_config = supported_configs.next().ok_or(
+            RecordingError::MicrophoneUnavailable(
+                "Microphone has no supported input configurations".into(),
+            ),
+        )?;
 
         let config: cpal::StreamConfig = supported_config.with_max_sample_rate().into();
-
         let buffer: Arc<Mutex<Vec<i16>>> = Arc::new(Mutex::new(Vec::new()));
 
         let sample_format = supported_config.sample_format();
@@ -277,168 +314,148 @@ impl AudioRecorder {
             SampleFormat::I32 => build_stream::<i32>(&device, &config, buffer.clone()),
             SampleFormat::F32 => build_stream::<f32>(&device, &config, buffer.clone()),
             SampleFormat::F64 => build_stream::<f64>(&device, &config, buffer.clone()),
-            _ => {
-                return AudioRecorder::Unavailable(format!(
+            other => {
+                return Err(RecordingError::MicrophoneUnavailable(format!(
                     "Unsupported sample format: {:?}",
-                    sample_format
-                ));
+                    other
+                )))
             }
-        };
+        }
+        .map_err(RecordingError::AudioStreamError)?;
 
-        let stream = match stream {
-            Ok(s) => s,
-            Err(e) => {
-                return AudioRecorder::Unavailable(format!("Failed to create audio stream: {}", e));
-            }
-        };
+        stream
+            .play()
+            .map_err(|e| {
+                RecordingError::AudioStreamError(format!("Failed to start recording: {}", e))
+            })?;
 
-        AudioRecorder::Ready {
+        *self = AudioRecorder::Recording {
             buffer,
             stream,
             sample_rate: config.sample_rate.0,
             channels: config.channels,
-            start_time: None,
-            output_dir: None,
-        }
-    }
-
-    pub fn start(&mut self) -> Result<(), RecordingError> {
-        match self {
-            AudioRecorder::Ready {
-                buffer,
-                stream,
-                start_time,
-                ..
-            } => {
-                if let Ok(mut b) = buffer.lock() {
-                    b.clear()
-                }
-                stream.play().map_err(|e| {
-                    RecordingError::AudioStreamError(format!("Failed to start recording: {}", e))
-                })?;
-                *start_time = Some(Instant::now());
-                Ok(())
-            }
-            AudioRecorder::Unavailable(reason) => {
-                Err(RecordingError::MicrophoneUnavailable(reason.clone()))
-            }
-        }
+            start_time: Instant::now(),
+            device_name,
+            output_dir,
+        };
+        Ok(())
     }
 
     pub fn stop(&mut self) -> Result<RecordingResult, RecordingError> {
-        match self {
-            AudioRecorder::Ready {
-                buffer,
-                stream,
-                sample_rate,
-                channels,
-                start_time,
-                output_dir,
-            } => {
-                let _ = stream.pause();
+        let AudioRecorder::Recording {
+            buffer,
+            stream,
+            sample_rate,
+            channels,
+            start_time,
+            device_name,
+            output_dir,
+        } = self
+        else {
+            return Err(RecordingError::TooShort);
+        };
 
-                let duration_secs = start_time.map(|t| t.elapsed().as_secs()).unwrap_or(0);
+        let _ = stream.pause();
+        let duration_secs = start_time.elapsed().as_secs();
 
-                if duration_secs == 0 {
-                    if let Ok(mut b) = buffer.lock() {
-                        b.clear()
-                    }
-                    *start_time = None;
-                    return Err(RecordingError::TooShort);
-                }
-
-                let audio_data: Vec<i16> = {
-                    let mut buf = buffer.lock().unwrap_or_else(|e| e.into_inner());
-                    std::mem::take(&mut *buf)
-                };
-                *start_time = None;
-
-                let dir = if let Some(d) = &output_dir {
-                    ensure_recordings_dir_in(d).map_err(RecordingError::FileError)?
-                } else {
-                    ensure_recordings_dir().map_err(RecordingError::FileError)?
-                };
-                let flac_filename = generate_filename();
-                let flac_path = dir.join(&flac_filename);
-                let wav_path = flac_path.with_extension("wav");
-
-                let spec = hound::WavSpec {
-                    channels: *channels,
-                    sample_rate: *sample_rate,
-                    bits_per_sample: 16,
-                    sample_format: hound::SampleFormat::Int,
-                };
-
-                let mut writer = hound::WavWriter::create(&wav_path, spec).map_err(|e| {
-                    RecordingError::FileError(format!("Failed to create WAV file: {}", e))
-                })?;
-
-                for sample in &audio_data {
-                    writer.write_sample(*sample).map_err(|e| {
-                        RecordingError::FileError(format!("Failed to write WAV sample: {}", e))
-                    })?;
-                }
-                writer.finalize().map_err(|e| {
-                    RecordingError::FileError(format!("Failed to finalize WAV file: {}", e))
-                })?;
-
-                let (final_path, format) = match wav_to_flac(&wav_path, &flac_path) {
-                    Ok(()) => {
-                        let _ = std::fs::remove_file(&wav_path);
-                        (flac_path, "flac".to_string())
-                    }
-                    Err(_) => {
-                        let final_path = flac_path.with_extension("wav");
-                        if wav_path != final_path {
-                            let _ = std::fs::rename(&wav_path, &final_path);
-                        }
-                        (final_path, "wav".to_string())
-                    }
-                };
-
-                Ok(RecordingResult {
-                    path: final_path,
-                    duration_secs,
-                    format,
-                })
-            }
-            AudioRecorder::Unavailable(reason) => {
-                Err(RecordingError::MicrophoneUnavailable(reason.clone()))
-            }
+        if duration_secs == 0 {
+            // 过短:丢弃,直接回 Idle(drop 流释放设备)
+            *self = AudioRecorder::Idle {
+                device_name: device_name.clone(),
+                output_dir: output_dir.clone(),
+            };
+            return Err(RecordingError::TooShort);
         }
+
+        let audio_data: Vec<i16> = {
+            let mut buf = buffer.lock().unwrap_or_else(|e| e.into_inner());
+            std::mem::take(&mut *buf)
+        };
+
+        let dir = if let Some(d) = &output_dir {
+            ensure_recordings_dir_in(d).map_err(RecordingError::FileError)?
+        } else {
+            ensure_recordings_dir().map_err(RecordingError::FileError)?
+        };
+        let flac_filename = generate_filename();
+        let flac_path = dir.join(&flac_filename);
+        let wav_path = flac_path.with_extension("wav");
+
+        let spec = hound::WavSpec {
+            channels: *channels,
+            sample_rate: *sample_rate,
+            bits_per_sample: 16,
+            sample_format: hound::SampleFormat::Int,
+        };
+
+        let mut writer = hound::WavWriter::create(&wav_path, spec).map_err(|e| {
+            RecordingError::FileError(format!("Failed to create WAV file: {}", e))
+        })?;
+
+        for sample in &audio_data {
+            writer.write_sample(*sample).map_err(|e| {
+                RecordingError::FileError(format!("Failed to write WAV sample: {}", e))
+            })?;
+        }
+        writer.finalize().map_err(|e| {
+            RecordingError::FileError(format!("Failed to finalize WAV file: {}", e))
+        })?;
+
+        let (final_path, format) = match wav_to_flac(&wav_path, &flac_path) {
+            Ok(()) => {
+                let _ = std::fs::remove_file(&wav_path);
+                (flac_path, "flac".to_string())
+            }
+            Err(_) => {
+                let final_path = flac_path.with_extension("wav");
+                if wav_path != final_path {
+                    let _ = std::fs::rename(&wav_path, &final_path);
+                }
+                (final_path, "wav".to_string())
+            }
+        };
+
+        // 回 Idle:stream 随 Recording 分支销毁被 drop,麦克风释放
+        *self = AudioRecorder::Idle {
+            device_name: device_name.clone(),
+            output_dir: output_dir.clone(),
+        };
+
+        Ok(RecordingResult {
+            path: final_path,
+            duration_secs,
+            format,
+        })
     }
 
     pub fn cancel(&mut self) -> u64 {
         match self {
-            AudioRecorder::Ready {
-                buffer,
-                stream,
+            AudioRecorder::Recording {
                 start_time,
+                device_name,
+                output_dir,
                 ..
             } => {
-                let _ = stream.pause();
-                let duration_secs = start_time.map(|t| t.elapsed().as_secs()).unwrap_or(0);
-                if let Ok(mut b) = buffer.lock() {
-                    b.clear()
-                }
-                *start_time = None;
+                let duration_secs = start_time.elapsed().as_secs();
+                *self = AudioRecorder::Idle {
+                    device_name: device_name.clone(),
+                    output_dir: output_dir.clone(),
+                };
                 duration_secs
             }
-            AudioRecorder::Unavailable(_) => 0,
+            AudioRecorder::Idle { .. } => 0,
         }
     }
 
     #[allow(dead_code)]
     pub fn is_recording(&self) -> bool {
-        match self {
-            AudioRecorder::Ready { start_time, .. } => start_time.is_some(),
-            AudioRecorder::Unavailable(_) => false,
-        }
+        matches!(self, AudioRecorder::Recording { .. })
     }
 
     pub fn set_output_dir(&mut self, dir: PathBuf) {
-        if let AudioRecorder::Ready { output_dir, .. } = self {
-            *output_dir = Some(dir);
+        match self {
+            AudioRecorder::Idle { output_dir, .. } => *output_dir = Some(dir),
+            AudioRecorder::Recording { output_dir, .. } => *output_dir = Some(dir),
         }
     }
 }
@@ -540,5 +557,37 @@ mod tests {
         let devices = list_input_devices();
         assert!(devices.len() <= 32);
         assert!(devices.iter().filter(|d| d.is_default).count() <= 1);
+    }
+
+    #[test]
+    fn test_new_is_idle_no_stream() {
+        // 懒建流:构造后必须处于 Idle,不得占用麦克风
+        let r = AudioRecorder::new_with_device(None);
+        assert!(matches!(r, AudioRecorder::Idle { .. }));
+        assert!(!r.is_recording());
+
+        let r = AudioRecorder::new_with_device(Some("Some Device"));
+        match r {
+            AudioRecorder::Idle { device_name, .. } => {
+                assert_eq!(device_name.as_deref(), Some("Some Device"))
+            }
+            _ => panic!("expected Idle"),
+        }
+    }
+
+    #[test]
+    fn test_stop_cancel_when_idle() {
+        // 未录音时 stop/cancel 不 panic
+        let mut r = AudioRecorder::new_with_device(None);
+        assert!(matches!(r.stop(), Err(RecordingError::TooShort)));
+        assert_eq!(r.cancel(), 0);
+        assert!(matches!(r, AudioRecorder::Idle { .. }));
+
+        let mut r = AudioRecorder::new_with_device(Some("d"));
+        r.set_output_dir(std::env::temp_dir());
+        match r {
+            AudioRecorder::Idle { output_dir, .. } => assert!(output_dir.is_some()),
+            _ => panic!("expected Idle"),
+        }
     }
 }
