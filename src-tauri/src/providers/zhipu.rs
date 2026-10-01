@@ -231,7 +231,8 @@ mod tests {
         let provider = ZhipuProvider::new(Some(key), None);
         let dir = tempfile::tempdir().unwrap();
         let logger = Logger::new(dir.path()).unwrap();
-        let wav = std::fs::read("/tmp/asr_test.wav").expect("先跑 python3 /tmp/asr_test.py 下载样本");
+        let wav =
+            std::fs::read("/tmp/asr_test.wav").expect("先跑 python3 /tmp/asr_test.py 下载样本");
         let text = provider
             .transcribe(&logger, &wav, "audio/wav", "", "glm-asr")
             .await

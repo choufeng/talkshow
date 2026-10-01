@@ -2,8 +2,12 @@ use cpal::SampleFormat;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use dasp_sample::Sample as DaspSample;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
+
+/// 实时麦克风电平(最近一个 chunk 的 RMS,f32 bitcast),音频回调写、UI 定时器读,无锁
+pub static MIC_LEVEL: AtomicU32 = AtomicU32::new(0);
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct RecordingResult {
@@ -216,8 +220,16 @@ where
             config,
             move |data: &[T], _: &cpal::InputCallbackInfo| {
                 let mut buf = buffer.lock().unwrap_or_else(|e| e.into_inner());
+                let mut sum_sq = 0.0f64;
                 for &sample in data {
-                    buf.push(sample_to_i16(sample));
+                    let s = sample_to_i16(sample);
+                    buf.push(s);
+                    let f = f64::from(s) / 32768.0;
+                    sum_sq += f * f;
+                }
+                if !data.is_empty() {
+                    let rms = (sum_sq / data.len() as f64).sqrt() as f32;
+                    MIC_LEVEL.store(rms.to_bits(), Ordering::Relaxed);
                 }
             },
             |err| {
@@ -287,7 +299,7 @@ impl AudioRecorder {
                 None => {
                     return Err(RecordingError::MicrophoneUnavailable(
                         "No microphone device available".into(),
-                    ))
+                    ));
                 }
             },
         };
@@ -299,11 +311,12 @@ impl AudioRecorder {
             ))
         })?;
 
-        let supported_config = supported_configs.next().ok_or(
-            RecordingError::MicrophoneUnavailable(
-                "Microphone has no supported input configurations".into(),
-            ),
-        )?;
+        let supported_config =
+            supported_configs
+                .next()
+                .ok_or(RecordingError::MicrophoneUnavailable(
+                    "Microphone has no supported input configurations".into(),
+                ))?;
 
         let config: cpal::StreamConfig = supported_config.with_max_sample_rate().into();
         let buffer: Arc<Mutex<Vec<i16>>> = Arc::new(Mutex::new(Vec::new()));
@@ -318,16 +331,14 @@ impl AudioRecorder {
                 return Err(RecordingError::MicrophoneUnavailable(format!(
                     "Unsupported sample format: {:?}",
                     other
-                )))
+                )));
             }
         }
         .map_err(RecordingError::AudioStreamError)?;
 
-        stream
-            .play()
-            .map_err(|e| {
-                RecordingError::AudioStreamError(format!("Failed to start recording: {}", e))
-            })?;
+        stream.play().map_err(|e| {
+            RecordingError::AudioStreamError(format!("Failed to start recording: {}", e))
+        })?;
 
         *self = AudioRecorder::Recording {
             buffer,
@@ -388,9 +399,8 @@ impl AudioRecorder {
             sample_format: hound::SampleFormat::Int,
         };
 
-        let mut writer = hound::WavWriter::create(&wav_path, spec).map_err(|e| {
-            RecordingError::FileError(format!("Failed to create WAV file: {}", e))
-        })?;
+        let mut writer = hound::WavWriter::create(&wav_path, spec)
+            .map_err(|e| RecordingError::FileError(format!("Failed to create WAV file: {}", e)))?;
 
         for sample in &audio_data {
             writer.write_sample(*sample).map_err(|e| {
