@@ -558,7 +558,7 @@ mod tests {
     #[test]
     fn test_validate_config_rejects_too_long_shortcut() {
         let config = AppConfig {
-            shortcut: "A".repeat(101),
+            shortcut: "A".repeat(301),
             ..Default::default()
         };
         assert!(validate_config(&config).is_err());

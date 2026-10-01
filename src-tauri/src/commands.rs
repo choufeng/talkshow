@@ -3,7 +3,7 @@ use crate::config;
 use crate::history;
 use crate::logger::Logger;
 use crate::providers::ProviderContext;
-use crate::shortcuts::{SHORTCUT_IDS, parse_shortcut};
+use crate::shortcuts::{SHORTCUT_IDS, parse_shortcuts, shortcut_ids};
 use std::time::Instant;
 use tauri::Manager;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
@@ -92,40 +92,40 @@ pub fn update_shortcut(
 
     config::save_config(&app_data_dir, &app_config)?;
 
-    if let Some(sc) = parse_shortcut(&old_toggle) {
+    for sc in parse_shortcuts(&old_toggle) {
         let _ = app_handle.global_shortcut().unregister(sc);
     }
-    if let Some(sc) = parse_shortcut(&old_recording) {
+    for sc in parse_shortcuts(&old_recording) {
         let _ = app_handle.global_shortcut().unregister(sc);
     }
-    if let Some(sc) = parse_shortcut(&old_translate) {
+    for sc in parse_shortcuts(&old_translate) {
         let _ = app_handle.global_shortcut().unregister(sc);
     }
 
-    let new_toggle = parse_shortcut(&app_config.shortcut);
-    let new_rec = parse_shortcut(&app_config.recording_shortcut);
-    let new_translate = parse_shortcut(&app_config.translate_shortcut);
+    let new_toggle = parse_shortcuts(&app_config.shortcut);
+    let new_rec = parse_shortcuts(&app_config.recording_shortcut);
+    let new_translate = parse_shortcuts(&app_config.translate_shortcut);
 
     {
         let mut ids = SHORTCUT_IDS.write().unwrap();
-        ids.toggle = new_toggle.map(|s| s.id()).unwrap_or(0);
-        ids.recording = new_rec.map(|s| s.id()).unwrap_or(0);
-        ids.translate = new_translate.map(|s| s.id()).unwrap_or(0);
+        ids.toggle = shortcut_ids(&new_toggle);
+        ids.recording = shortcut_ids(&new_rec);
+        ids.translate = shortcut_ids(&new_translate);
     }
 
-    if let Some(sc) = new_toggle {
+    for sc in new_toggle {
         app_handle
             .global_shortcut()
             .register(sc)
             .map_err(|e| e.to_string())?;
     }
-    if let Some(sc) = new_rec {
+    for sc in new_rec {
         app_handle
             .global_shortcut()
             .register(sc)
             .map_err(|e| e.to_string())?;
     }
-    if let Some(sc) = new_translate {
+    for sc in new_translate {
         app_handle
             .global_shortcut()
             .register(sc)

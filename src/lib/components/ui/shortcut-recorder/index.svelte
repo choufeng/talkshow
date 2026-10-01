@@ -1,6 +1,7 @@
 <script lang="ts">
   import KeyBadge from '$lib/components/ui/key-badge/index.svelte';
-  import { parseKeys } from '$lib/utils/shortcut';
+  import { parseKeys, parseShortcutList, joinShortcuts } from '$lib/utils/shortcut';
+  import { Plus, X } from 'lucide-svelte';
 
   interface Props {
     label: string;
@@ -11,23 +12,23 @@
 
   let { label, description, value, onUpdate }: Props = $props();
 
-  let isRecording = $state(false);
-  let currentValue = $state<string>('');
+  /** 录制目标: -1 = 新增一组, >=0 = 替换该 index */
+  let recordingIndex = $state<number | null>(null);
   let error = $state<string | null>(null);
+  let groups = $state<string[]>([]);
 
   $effect(() => {
-    currentValue = value;
+    groups = parseShortcutList(value);
   });
 
   function handleKeydown(event: KeyboardEvent) {
-    if (!isRecording) return;
+    if (recordingIndex === null) return;
 
     event.preventDefault();
     event.stopPropagation();
 
     if (event.key === 'Escape') {
-      isRecording = false;
-      currentValue = value;
+      recordingIndex = null;
       return;
     }
 
@@ -57,29 +58,46 @@
       return;
     }
 
-    const shortcut = [...modifiers, key].join('+');
-    saveShortcut(shortcut);
+    saveShortcut([...modifiers, key].join('+'));
   }
 
   async function saveShortcut(shortcut: string) {
+    const index = recordingIndex;
+    if (index === null) return;
+
+    // 同事件内去重
+    if (groups.some((g, i) => i !== index && g === shortcut)) {
+      error = '该快捷键已绑定';
+      recordingIndex = null;
+      return;
+    }
+
+    const next =
+      index === -1 ? [...groups, shortcut] : groups.map((g, i) => (i === index ? shortcut : g));
+
     try {
       error = null;
-      await onUpdate(shortcut);
-      currentValue = shortcut;
-      isRecording = false;
+      await onUpdate(joinShortcuts(next));
+      recordingIndex = null;
+    } catch (e) {
+      error = e instanceof Error ? e.message : '保存失败';
+      recordingIndex = null;
+    }
+  }
+
+  async function removeGroup(index: number) {
+    if (groups.length <= 1) return;
+    try {
+      error = null;
+      await onUpdate(joinShortcuts(groups.filter((_, i) => i !== index)));
     } catch (e) {
       error = e instanceof Error ? e.message : '保存失败';
     }
   }
 
-  function startRecording() {
-    isRecording = true;
+  function startRecording(index: number) {
+    recordingIndex = index;
     error = null;
-  }
-
-  function cancelRecording() {
-    isRecording = false;
-    currentValue = value;
   }
 </script>
 
@@ -90,31 +108,59 @@
     <h4 class="text-subheading font-semibold text-foreground m-0">{label}</h4>
     <p class="text-body text-foreground-alt m-0 mt-1">{description}</p>
   </div>
-  <div class="flex items-center gap-3 mt-4">
-    {#if isRecording}
-      <div         class="rounded-md px-5 py-2.5 text-subheading min-w-[130px] text-center bg-gradient-to-b from-btn-primary-from to-btn-primary-to text-white shadow-btn-primary">
+  <div class="flex flex-wrap items-center gap-3 mt-4">
+    {#each groups as group, index (index)}
+      {#if recordingIndex === index}
+        <div class="rounded-md px-5 py-2.5 text-subheading min-w-[130px] text-center bg-gradient-to-b from-btn-primary-from to-btn-primary-to text-white shadow-btn-primary">
+          请按下快捷键...
+        </div>
+      {:else}
+        <div class="flex items-center gap-1">
+          {#each parseKeys(group) as key (key + index)}
+            <KeyBadge label={key} />
+          {/each}
+        </div>
+        <button
+          class="text-caption text-foreground-alt hover:text-foreground transition-colors"
+          onclick={() => startRecording(index)}
+          title="点击此组重新录制"
+        >
+          修改
+        </button>
+        {#if groups.length > 1}
+          <button
+            class="text-foreground-alt hover:text-destructive transition-colors"
+            onclick={() => removeGroup(index)}
+            aria-label="删除此组快捷键"
+            title="删除此组"
+          >
+            <X size={14} />
+          </button>
+        {/if}
+      {/if}
+      {#if index < groups.length - 1}
+        <span class="text-caption text-muted-foreground">或</span>
+      {/if}
+    {/each}
+    {#if recordingIndex === -1}
+      <div class="rounded-md px-5 py-2.5 text-subheading min-w-[130px] text-center bg-gradient-to-b from-btn-primary-from to-btn-primary-to text-white shadow-btn-primary">
         请按下快捷键...
       </div>
     {:else}
-      <div class="flex items-center gap-2">
-        {#each parseKeys(currentValue) as key}
-          <KeyBadge label={key} />
-        {/each}
-      </div>
+      <button
+        class="inline-flex items-center justify-center rounded-md bg-gradient-to-b from-btn-secondary-from to-btn-secondary-to border border-btn-secondary-border px-4 py-2.5 text-body font-medium text-accent-foreground transition-colors hover:opacity-90 shadow-btn-secondary"
+        onclick={() => startRecording(-1)}
+        title="添加一组快捷键"
+      >
+        <Plus size={15} class="inline -align-[2px]" />
+      </button>
     {/if}
-    {#if isRecording}
+    {#if recordingIndex !== null}
       <button
         class="inline-flex items-center justify-center rounded-md bg-gradient-to-b from-btn-secondary-from to-btn-secondary-to border border-btn-secondary-border px-5 py-2.5 text-body font-medium text-accent-foreground transition-colors hover:opacity-90 shadow-btn-secondary"
-        onclick={cancelRecording}
+        onclick={() => (recordingIndex = null)}
       >
         取消
-      </button>
-    {:else}
-      <button
-        class="inline-flex items-center justify-center rounded-md bg-gradient-to-b from-btn-primary-from to-btn-primary-to px-5 py-2.5 text-body font-medium text-white transition-colors hover:opacity-90 shadow-btn-primary"
-        onclick={startRecording}
-      >
-        修改
       </button>
     {/if}
   </div>

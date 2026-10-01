@@ -38,7 +38,7 @@ use pipeline::{SenseVoiceState, play_sound, stop_recording};
 use providers::ProviderContext;
 use recording::{AudioRecorder, RecorderState};
 use session::{MODE_TRANSCRIPTION, MODE_TRANSLATION, SessionManager};
-use shortcuts::{LAST_REC_PRESS, SHORTCUT_IDS, parse_shortcut};
+use shortcuts::{LAST_REC_PRESS, SHORTCUT_IDS, parse_shortcuts, shortcut_ids};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::menu::{Menu, MenuItem};
@@ -377,19 +377,16 @@ pub fn run() {
             });
 
             // --- Global Shortcuts (single plugin instance) ---
-            let toggle_shortcut = parse_shortcut(&shortcut_str);
-            let rec_shortcut = parse_shortcut(&recording_shortcut_str);
-            let translate_shortcut = parse_shortcut(&translate_shortcut_str);
+            let toggle_shortcuts = parse_shortcuts(&shortcut_str);
+            let rec_shortcuts = parse_shortcuts(&recording_shortcut_str);
+            let translate_shortcuts = parse_shortcuts(&translate_shortcut_str);
             let esc_shortcut = Shortcut::new(None, Code::Escape);
 
-            let toggle_id = toggle_shortcut.as_ref().map(|s| s.id()).unwrap_or(0);
-            let rec_id = rec_shortcut.as_ref().map(|s| s.id()).unwrap_or(0);
-            let translate_id = translate_shortcut.as_ref().map(|s| s.id()).unwrap_or(0);
             {
                 let mut ids = SHORTCUT_IDS.write().unwrap();
-                ids.toggle = toggle_id;
-                ids.recording = rec_id;
-                ids.translate = translate_id;
+                ids.toggle = shortcut_ids(&toggle_shortcuts);
+                ids.recording = shortcut_ids(&rec_shortcuts);
+                ids.translate = shortcut_ids(&translate_shortcuts);
             }
             let esc_id = esc_shortcut.id();
 
@@ -404,9 +401,13 @@ pub fn run() {
                             return;
                         }
                         let id = shortcut.id();
-                        let (current_toggle_id, current_rec_id, current_translate_id) = {
+                        let (toggle_ids, rec_ids, translate_ids) = {
                             let ids = SHORTCUT_IDS.read().unwrap();
-                            (ids.toggle, ids.recording, ids.translate)
+                            (
+                                ids.toggle.clone(),
+                                ids.recording.clone(),
+                                ids.translate.clone(),
+                            )
                         };
 
                         // --- ESC ---
@@ -421,11 +422,11 @@ pub fn run() {
                         }
 
                         // --- 录音键(转写/翻译合并) ---
-                        let mode = if current_rec_id != 0 && id == current_rec_id {
+                        let mode = if rec_ids.contains(&id) {
                             MODE_TRANSCRIPTION
-                        } else if current_translate_id != 0 && id == current_translate_id {
+                        } else if translate_ids.contains(&id) {
                             MODE_TRANSLATION
-                        } else if current_toggle_id != 0 && id == current_toggle_id {
+                        } else if toggle_ids.contains(&id) {
                             if let Some(window) = app_handle.get_webview_window("main") {
                                 toggle_window(&window);
                             }
@@ -461,20 +462,20 @@ pub fn run() {
                     .build(),
             )?;
 
-            if let Some(sc) = toggle_shortcut
-                && let Err(e) = app.global_shortcut().register(sc)
-            {
-                eprintln!("Failed to register toggle shortcut: {}", e);
+            for sc in toggle_shortcuts {
+                if let Err(e) = app.global_shortcut().register(sc) {
+                    eprintln!("Failed to register toggle shortcut: {}", e);
+                }
             }
-            if let Some(sc) = rec_shortcut
-                && let Err(e) = app.global_shortcut().register(sc)
-            {
-                eprintln!("Failed to register recording shortcut: {}", e);
+            for sc in rec_shortcuts {
+                if let Err(e) = app.global_shortcut().register(sc) {
+                    eprintln!("Failed to register recording shortcut: {}", e);
+                }
             }
-            if let Some(sc) = translate_shortcut
-                && let Err(e) = app.global_shortcut().register(sc)
-            {
-                eprintln!("Failed to register translate shortcut: {}", e);
+            for sc in translate_shortcuts {
+                if let Err(e) = app.global_shortcut().register(sc) {
+                    eprintln!("Failed to register translate shortcut: {}", e);
+                }
             }
 
             // --- Tooltip update loop ---
