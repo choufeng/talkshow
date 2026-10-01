@@ -18,7 +18,7 @@ function baseConfig() {
           { id: 'builtin-fillers', name: '语气词剔除', description: '去除语气词', prompt: '去除语气词', builtin: true, editable: false, enabled: true },
         ],
       },
-      recording: { auto_mute: false },
+      recording: { auto_mute: false, input_device: '' },
       glossary: [],
       intent_routing: { enabled: false, disabled: [] },
       hooks: { enabled: false, url: '', headers: '', body_template: '', prompt: '', skill_ids: [] },

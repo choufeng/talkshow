@@ -1,15 +1,57 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { Lightbulb, Sun, Moon, Monitor } from 'lucide-svelte';
+  import { invoke } from '@tauri-apps/api/core';
   import { config } from '$lib/stores/config';
   import { theme, type Theme } from '$lib/stores/theme';
   import ShortcutRecorder from '$lib/components/ui/shortcut-recorder/index.svelte';
   import Toggle from '$lib/components/ui/toggle/index.svelte';
   import { updateFeature } from '$lib/ai/shared';
+  import GroupedSelect from '$lib/components/ui/select/index.svelte';
 
-  onMount(() => {
+  interface AudioDevice {
+    name: string;
+    is_default: boolean;
+  }
+
+  let audioDevices: AudioDevice[] = [];
+  let deviceError = '';
+
+  onMount(async () => {
     config.load();
+    await refreshDevices();
   });
+
+  async function refreshDevices() {
+    try {
+      audioDevices = (await invoke<AudioDevice[]>('list_audio_devices')) ?? [];
+      deviceError = '';
+    } catch (e) {
+      deviceError = String(e);
+    }
+  }
+
+  async function handleSelectDevice(name: string) {
+    // 空 = 跟随系统默认;命令内部负责持久化 + 重建录音器,前端只需回拉
+    try {
+      await invoke('set_audio_input_device', { device: name });
+      await config.load();
+      deviceError = '';
+    } catch (e) {
+      deviceError = String(e);
+    }
+  }
+
+  function deviceGroups() {
+    const items = [
+      { value: '', label: '跟随系统默认' },
+      ...audioDevices.map((d) => ({
+        value: d.name,
+        label: d.is_default ? `${d.name}（默认）` : d.name
+      }))
+    ];
+    return [{ label: '', items }];
+  }
 
   async function handleUpdateToggle(shortcut: string) {
     await config.updateShortcut('toggle', shortcut);
@@ -24,7 +66,7 @@
   }
 
   function toggleAutoMute() {
-    const recording = $config.features?.recording ?? { auto_mute: false };
+    const recording = $config.features?.recording ?? { auto_mute: false, input_device: '' };
     config.save(updateFeature($config, 'recording', () => ({
       ...recording,
       auto_mute: !recording.auto_mute
@@ -128,7 +170,7 @@
 
   <section class="mb-10">
     <div class="text-caption text-muted-foreground uppercase tracking-wider mb-3">录音</div>
-    <div class="rounded-xl border border-border bg-background-alt p-5">
+    <div class="rounded-xl border border-border bg-background-alt p-5 mb-4">
       <div class="flex items-center justify-between gap-4">
         <div>
           <div class="text-[15px] font-semibold text-foreground mb-1">录音时自动静音</div>
@@ -140,6 +182,25 @@
           ariaLabel="录音时自动静音"
         />
       </div>
+    </div>
+    <div class="rounded-xl border border-border bg-background-alt p-5">
+      <div class="text-[15px] font-semibold text-foreground mb-1">麦克风输入</div>
+      <div class="text-body text-foreground-alt mb-4">选择录音使用的麦克风设备，切换后立即生效</div>
+      {#if audioDevices.length > 0}
+        <GroupedSelect
+          value={$config.features?.recording?.input_device ?? ''}
+          groups={deviceGroups()}
+          onChange={handleSelectDevice}
+          aria-label="麦克风输入设备"
+        />
+      {:else if deviceError}
+        <div class="text-sm text-red-500">{deviceError}</div>
+        <button class="mt-2 text-sm text-foreground-alt underline" onclick={() => refreshDevices()}>
+          重试
+        </button>
+      {:else}
+        <div class="text-body text-muted-foreground">未检测到可用麦克风设备</div>
+      {/if}
     </div>
   </section>
 

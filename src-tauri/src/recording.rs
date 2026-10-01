@@ -38,6 +38,40 @@ impl std::fmt::Display for RecordingError {
 
 const RECORDINGS_DIR_NAME: &str = "talkshow";
 
+/// 可用音频输入设备
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct AudioDeviceInfo {
+    pub name: String,
+    pub is_default: bool,
+}
+
+/// 枚举系统输入设备(cpal 默认 host),默认设备排在首位并带标记
+pub fn list_input_devices() -> Vec<AudioDeviceInfo> {
+    let host = cpal::default_host();
+    let default_name = host.default_input_device().and_then(|d| d.name().ok());
+    let mut infos: Vec<AudioDeviceInfo> = host
+        .input_devices()
+        .map(|devices| {
+            devices
+                .filter_map(|d| d.name().ok())
+                .map(|name| AudioDeviceInfo {
+                    is_default: Some(&name) == default_name.as_ref(),
+                    name,
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    // 默认设备置顶,前端首项即“跟随系统”的落点
+    infos.sort_by_key(|d| !d.is_default);
+    infos.dedup_by(|a, b| a.name == b.name);
+    infos
+}
+
+/// 设备名匹配:忽略首尾空白,大小写不敏感(系统名称大小写不稳定)
+fn device_matches(name: &str, want: &str) -> bool {
+    name.trim().eq_ignore_ascii_case(want.trim())
+}
+
 pub enum AudioRecorder {
     Ready {
         buffer: Arc<Mutex<Vec<i16>>>,
@@ -48,6 +82,11 @@ pub enum AudioRecorder {
         output_dir: Option<PathBuf>,
     },
     Unavailable(String),
+}
+
+/// 全局快捷键管线的录音器,managed state 供 set_audio_input_device 运行时重建
+pub struct RecorderState {
+    pub recorder: Arc<Mutex<AudioRecorder>>,
 }
 
 pub fn generate_filename() -> String {
@@ -184,11 +223,29 @@ where
 }
 
 impl AudioRecorder {
-    pub fn new() -> Self {
+    /// 按设备名创建录音器;None 或未匹配到时回落默认设备
+    pub fn new_with_device(device_name: Option<&str>) -> Self {
         let host = cpal::default_host();
-        let device = match host.default_input_device() {
+        let device = match device_name
+            .filter(|n| !n.trim().is_empty())
+            .and_then(|want| {
+                host.input_devices().ok().and_then(|mut ds| {
+                    ds.find(|d| d.name().map(|n| device_matches(&n, want)).unwrap_or(false))
+                })
+            }) {
             Some(d) => d,
-            None => return AudioRecorder::Unavailable("No microphone device available".into()),
+            None => match host.default_input_device() {
+                Some(d) => {
+                    if let Some(want) = device_name.filter(|n| !n.trim().is_empty()) {
+                        eprintln!(
+                            "[TalkShow] Audio device '{}' not found, falling back to default",
+                            want
+                        );
+                    }
+                    d
+                }
+                None => return AudioRecorder::Unavailable("No microphone device available".into()),
+            },
         };
 
         let mut supported_configs = match device.supported_input_configs() {
@@ -464,5 +521,24 @@ mod tests {
     fn test_ensure_recordings_dir() {
         let dir = ensure_recordings_dir().unwrap();
         assert!(dir.exists());
+    }
+
+    #[test]
+    fn test_device_matches() {
+        assert!(device_matches(
+            "MacBook Pro Microphone",
+            "macbook pro microphone"
+        ));
+        assert!(device_matches("  AirPods  ", "AirPods"));
+        assert!(!device_matches("AirPods Pro", "AirPods Max"));
+        assert!(device_matches("", ""));
+    }
+
+    #[test]
+    fn test_list_input_devices_smoke() {
+        // CI 无音频设备时应返回空表而非 panic
+        let devices = list_input_devices();
+        assert!(devices.len() <= 32);
+        assert!(devices.iter().filter(|d| d.is_default).count() <= 1);
     }
 }

@@ -104,6 +104,19 @@ fn test_transcription_config_serialization() {
     assert!(loaded.polish_enabled);
 }
 
+// 旧版 config.json 无 input_device 字段 → 回落空(系统默认麦克风)
+#[test]
+fn test_recording_config_backcompat_missing_input_device() {
+    let json = r#"{"auto_mute": true}"#;
+    let loaded: talkshow_lib::RecordingFeaturesConfig = serde_json::from_str(json).unwrap();
+    assert!(loaded.auto_mute);
+    assert_eq!(loaded.input_device, "");
+
+    let json = serde_json::to_string(&loaded).unwrap();
+    let back: talkshow_lib::RecordingFeaturesConfig = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.input_device, loaded.input_device);
+}
+
 #[test]
 fn test_app_config_full_serialization() {
     let config = test_app_config();
