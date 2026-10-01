@@ -74,9 +74,8 @@ pub fn intent_instruction_disabled(disabled: &[String]) -> String {
         "\n\n【意图路由】(最高优先级指令)\n\
 判断输入文本是否以明确的指令前缀开头(只看开头,句中提及不算):\n",
     );
-    let mut rules: Vec<String> = vec![
-        "指令必须出现在文本开头才有效;文本中部或结尾出现的指令词不算".to_string(),
-    ];
+    let mut rules: Vec<String> =
+        vec!["指令必须出现在文本开头才有效;文本中部或结尾出现的指令词不算".to_string()];
     let mut outputs: Vec<&str> = vec!["{\"intent\":\"transcribe\",\"text\":\"润色后的正文\"}"];
     let mut extra = String::new();
 
@@ -108,9 +107,7 @@ pub fn intent_instruction_disabled(disabled: &[String]) -> String {
     }
 
     rules.push("有歧义或不确定时,intent 用 \"transcribe\"".to_string());
-    rules.push(
-        "无指令时 intent 用 \"transcribe\",text 正常应用上方全部润色规则".to_string(),
-    );
+    rules.push("无指令时 intent 用 \"transcribe\",text 正常应用上方全部润色规则".to_string());
 
     s += "\n\n规则:\n";
     for (i, r) in rules.iter().enumerate() {
@@ -180,7 +177,6 @@ pub fn parse_llm_output_disabled(raw: &str, disabled: &[String]) -> IntentDecisi
     }
     decision
 }
-
 
 /// 提取 JSON 对象:剥代码围栏,取首个 '{' 到最后一个 '}' 之间的内容
 fn extract_json(raw: &str) -> Option<&str> {

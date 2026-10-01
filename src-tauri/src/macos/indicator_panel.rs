@@ -14,20 +14,28 @@
 #![allow(unused_unsafe)]
 
 use std::cell::{Cell, RefCell};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
-use objc2::{define_class, msg_send, sel, DeclaredClass, MainThreadMarker};
+use objc2::{DeclaredClass, MainThreadMarker, define_class, msg_send, sel};
 use objc2_app_kit::{
-    NSBackingStoreType, NSBezierPath, NSColor, NSEvent, NSFont, NSGradient, NSLineCapStyle,
-    NSPanel, NSScreen, NSTextField, NSView, NSWindowCollectionBehavior, NSWindowStyleMask,
-    NSFloatingWindowLevel,
+    NSBackingStoreType, NSBezierPath, NSColor, NSEvent, NSFloatingWindowLevel, NSFont, NSGradient,
+    NSLineCapStyle, NSPanel, NSScreen, NSTextField, NSView, NSWindowCollectionBehavior,
+    NSWindowStyleMask,
 };
 use objc2_foundation::{NSPoint, NSRect, NSSize, NSString, NSTimer};
+use objc2_quartz_core::{CATransaction, CATransform3D};
 use tauri::AppHandle;
+
+/// sRGB CGColor(供 CALayer shadowColor;NSColor 无 cgColor 绑定)
+fn cg_color_srgb(
+    rgb: (f64, f64, f64),
+) -> Option<objc2_core_foundation::CFRetained<objc2_core_graphics::CGColor>> {
+    Some(unsafe { objc2_core_graphics::CGColor::new_srgb(rgb.0, rgb.1, rgb.2, 1.0) })
+}
 
 /// 面板高(逻辑点)
 const PANEL_H: f64 = 48.0;
@@ -40,6 +48,21 @@ const PASTE_FAILED_TIMEOUT: Duration = Duration::from_secs(8);
 
 /// 呼吸动画帧间隔(60fps)
 const BREATH_INTERVAL: f64 = 1.0 / 60.0;
+
+/// 涟漪寿命(秒)与触发节流(音量超阈时最快两次涟漪间隔)
+const RIPPLE_LIFE: Duration = Duration::from_millis(450);
+const RIPPLE_MIN_GAP: Duration = Duration::from_millis(180);
+/// 涟漪触发音量阈值(包络值 0..1)
+const RIPPLE_THRESHOLD: f32 = 0.55;
+
+/// RMS → 感知电平:dB 对数映射(-50dB..-10dB → 0..1),人耳对数,线性映射会喧宾夺主
+fn perceptual(rms: f32) -> f32 {
+    if rms <= 1e-5 {
+        return 0.0;
+    }
+    let db = 20.0 * rms.log10();
+    ((db + 50.0) / 40.0).clamp(0.0, 1.0)
+}
 
 const RED: (f64, f64, f64, f64) = (1.0, 0.0, 0.33, 1.0); // #ff0055
 const CYAN: (f64, f64, f64, f64) = (0.0, 0.78, 1.0, 1.0); // #00c8ff
@@ -81,6 +104,11 @@ impl PartialEq for RingStyle {
 struct RingStyleState {
     style: Cell<RingStyle>,
     color: Cell<(f64, f64, f64, f64)>,
+    /// 音量包络(0..1,attack 快 release 慢平滑后),驱动中心点脉动
+    volume: Cell<f32>,
+    /// 活跃涟漪(起始时刻);过期项由 tick 清理
+    ripples: RefCell<Vec<Instant>>,
+    last_ripple: Cell<Option<Instant>>,
 }
 
 define_class! {
@@ -107,26 +135,62 @@ define_class! {
                 };
                 path.fill();
             } else if style == RingStyle::Ring {
-                // 外环(原版 r 7→9 呼吸由外层 opacity 动画近似)
+                // Recording 相位:bounds 为 48x48(涟漪容区),环画中心 14x14
+                let c = bounds.size.width / 2.0;
+                let (r, g, b, a) = iv.color.get();
+                // 外环(呼吸 opacity 由外层 layer 动画承担)
                 let ring = unsafe {
                     NSBezierPath::bezierPathWithOvalInRect(NSRect::new(
-                        NSPoint::new(2.0, 2.0),
-                        NSSize::new(bounds.size.width - 4.0, bounds.size.height - 4.0),
+                        NSPoint::new(c - 7.0, c - 7.0),
+                        NSSize::new(14.0, 14.0),
                     ))
                 };
-                ring.setLineWidth(1.5);
-                ring.stroke();
-                // 中心实心点
+                unsafe {
+                    let rc = NSColor::colorWithSRGBRed_green_blue_alpha(r, g, b, a);
+                    rc.set();
+                    ring.setLineWidth(1.5);
+                    ring.stroke();
+                }
+                // 中心实心点:半径随音量包络 3→7 弹性伸缩
+                let vol = iv.volume.get() as f64;
+                let pr = 3.0 + vol * 4.0;
                 let dot = unsafe {
                     NSBezierPath::bezierPathWithOvalInRect(NSRect::new(
-                        NSPoint::new(
-                            bounds.size.width / 2.0 - 3.0,
-                            bounds.size.height / 2.0 - 3.0,
-                        ),
-                        NSSize::new(6.0, 6.0),
+                        NSPoint::new(c - pr, c - pr),
+                        NSSize::new(pr * 2.0, pr * 2.0),
                     ))
                 };
                 dot.fill();
+                // 涟漪:从环向外扩散淡出的圆环(8→22pt,半径 < 半高 24 不越胶囊)
+                let now = Instant::now();
+                let alive: Vec<f64> = iv
+                    .ripples
+                    .borrow()
+                    .iter()
+                    .filter_map(|t0| {
+                        let age = now.duration_since(*t0);
+                        if age >= RIPPLE_LIFE {
+                            return None;
+                        }
+                        Some(age.as_secs_f64() / RIPPLE_LIFE.as_secs_f64())
+                    })
+                    .collect();
+                for t in alive {
+                    let rr = 8.0 + 14.0 * t;
+                    let alpha = (1.0 - t) * 0.45;
+                    let rc = NSColor::colorWithSRGBRed_green_blue_alpha(r, g, b, alpha);
+                    rc.set();
+                    let path = unsafe {
+                        NSBezierPath::bezierPathWithOvalInRect(NSRect::new(
+                            NSPoint::new(c - rr, c - rr),
+                            NSSize::new(rr * 2.0, rr * 2.0),
+                        ))
+                    };
+                    unsafe {
+                        path.setLineWidth(1.0);
+                        path.stroke();
+                    }
+                }
             } else {
                 // Warn:圆圈 + 感叹号
                 let circle = unsafe {
@@ -167,6 +231,9 @@ impl RingView {
         let this = mtm.alloc().set_ivars(RingStyleState {
             style: Cell::new(style),
             color: Cell::new(color),
+            volume: Cell::new(0.0),
+            ripples: RefCell::new(Vec::new()),
+            last_ripple: Cell::new(None),
         });
         let view: Retained<RingView> = unsafe { msg_send![super(this), initWithFrame: frame] };
         view
@@ -175,6 +242,9 @@ impl RingView {
     fn set_style(&self, style: RingStyle, color: (f64, f64, f64, f64)) {
         self.ivars().style.set(style);
         self.ivars().color.set(color);
+        self.ivars().volume.set(0.0);
+        self.ivars().ripples.borrow_mut().clear();
+        self.ivars().last_ripple.set(None);
         self.setNeedsDisplay(true);
     }
 }
@@ -312,11 +382,10 @@ define_class! {
 
 impl JellyfishView {
     fn new(mtm: MainThreadMarker, frame: NSRect) -> Retained<Self> {
-        let this = mtm
-            .alloc()
-            .set_ivars(JellyfishState { anim_start: Cell::new(None) });
-        let view: Retained<JellyfishView> =
-            unsafe { msg_send![super(this), initWithFrame: frame] };
+        let this = mtm.alloc().set_ivars(JellyfishState {
+            anim_start: Cell::new(None),
+        });
+        let view: Retained<JellyfishView> = unsafe { msg_send![super(this), initWithFrame: frame] };
         view
     }
 
@@ -362,9 +431,9 @@ impl JellyfishView {
         // 渐变填充(原版 radialGradient 青 0.3 → 0.05,线性近似)
         let g_from = NSColor::colorWithSRGBRed_green_blue_alpha(CYAN.0, CYAN.1, CYAN.2, 0.30);
         let g_to = NSColor::colorWithSRGBRed_green_blue_alpha(CYAN.0, CYAN.1, CYAN.2, 0.05);
-        if let Some(gradient) = unsafe {
-            NSGradient::initWithStartingColor_endingColor(mtm.alloc(), &g_from, &g_to)
-        } {
+        if let Some(gradient) =
+            unsafe { NSGradient::initWithStartingColor_endingColor(mtm.alloc(), &g_from, &g_to) }
+        {
             unsafe { gradient.drawInBezierPath_angle(&bell_path, 90.0) };
         }
         cyan.set();
@@ -400,7 +469,8 @@ impl JellyfishView {
                     NSPoint::new(c1.0, c1.1),
                     NSPoint::new(c2.0, c2.1),
                 );
-                let tc = NSColor::colorWithSRGBRed_green_blue_alpha(CYAN.0, CYAN.1, CYAN.2, spec.alpha);
+                let tc =
+                    NSColor::colorWithSRGBRed_green_blue_alpha(CYAN.0, CYAN.1, CYAN.2, spec.alpha);
                 tc.set();
                 path.setLineWidth(spec.width);
                 path.setLineCapStyle(NSLineCapStyle::Round);
@@ -504,7 +574,7 @@ define_class! {
             }
         }
 
-        /// 呼吸动画:layer.opacity 正弦插值(不重绘,GPU 合成) + 水母形变推进
+        /// 呼吸动画:layer.opacity 正弦插值(不重绘,GPU 合成) + 水母形变推进 + 音量驱动
         #[unsafe(method(breatheTick:))]
         fn breathe_tick(&self, _timer: *mut NSTimer) {
             // 水母形变动画(processing 相位)
@@ -526,6 +596,41 @@ define_class! {
             unsafe {
                 if let Some(layer) = self.ivars().ring.layer() {
                     layer.setOpacity(opacity);
+                }
+            }
+
+            // === 音量驱动:包络平滑 → 红点脉动 + 涟漪 + 光晕调制 ===
+            let ring = &self.ivars().ring;
+            let riv = ring.ivars();
+            let raw = f32::from_bits(crate::recording::MIC_LEVEL.load(Ordering::Relaxed));
+            let target = perceptual(raw);
+            let env = riv.volume.get();
+            // attack 快(30ms 级跟上) release 慢(~130ms 回落),避免静止语音间隙狂抖
+            let k = if target > env { 0.45 } else { 0.12 };
+            riv.volume.set(env + (target - env) * k);
+
+            let now = Instant::now();
+            // 涟漪触发(超阈 + 节流)
+            if riv.volume.get() > RIPPLE_THRESHOLD
+                && riv
+                    .last_ripple
+                    .get()
+                    .is_none_or(|t| now.duration_since(t) >= RIPPLE_MIN_GAP)
+            {
+                riv.ripples.borrow_mut().push(now);
+                riv.last_ripple.set(Some(now));
+            }
+            // 清理过期涟漪
+            riv.ripples
+                .borrow_mut()
+                .retain(|t| now.duration_since(*t) < RIPPLE_LIFE);
+            ring.setNeedsDisplay(true);
+
+            // 光晕强度随音量(说话变亮,静音回落到基础亮度)
+            let glow = 0.22 + riv.volume.get() * 0.30;
+            unsafe {
+                if let Some(layer) = self.layer() {
+                    layer.setShadowOpacity(glow);
                 }
             }
         }
@@ -563,6 +668,10 @@ impl IndicatorView {
             t.invalidate();
         }
         *self.ivars().breath_start.borrow_mut() = None;
+        let riv = self.ivars().ring.ivars();
+        riv.volume.set(0.0);
+        riv.ripples.borrow_mut().clear();
+        riv.last_ripple.set(None);
         if let Some(layer) = unsafe { self.ivars().ring.layer() } {
             layer.setOpacity(1.0);
         }
@@ -628,7 +737,8 @@ fn layout(view: &IndicatorView, panel: &NSPanel, phase: Phase, mtm: MainThreadMa
 
     let (ring_f, jelly_f, timer_f, rec_f, status_f) = match phase {
         Phase::Recording => (
-            NSRect::new(NSPoint::new(14.0, 15.0), NSSize::new(18.0, 18.0)),
+            // 48x48 容区:环居中,涟漪最大半径 22 不越胶囊(半高 24)
+            NSRect::new(NSPoint::new(-1.0, 0.0), NSSize::new(48.0, 48.0)),
             NSRect::ZERO,
             NSRect::new(NSPoint::new(36.0, 15.0), NSSize::new(44.0, 18.0)),
             NSRect::new(NSPoint::new(82.0, 15.0), NSSize::new(26.0, 12.0)),
@@ -758,6 +868,16 @@ fn ensure_panel(mtm: MainThreadMarker) -> Option<(Retained<NSPanel>, Retained<In
         panel.setContentView(Some(&view));
     }
 
+    // layer-backed + 外发光(颜色/强度由 set_phase 按相位设置,breathe_tick 随音量调制)
+    view.setWantsLayer(true);
+    unsafe {
+        if let Some(layer) = view.layer() {
+            layer.setShadowRadius(16.0);
+            layer.setShadowOffset(NSSize::new(0.0, 0.0));
+            layer.setShadowOpacity(0.0);
+        }
+    }
+
     if let Ok(mut g) = PANEL.lock() {
         *g = Some(PanelPtrs {
             panel: Retained::into_raw(panel.clone()),
@@ -804,8 +924,29 @@ fn set_phase(app: &AppHandle, phase: Phase) -> u64 {
                 .setStringValue(&NSString::from_str("自动粘贴失败，请手动粘贴"));
         }
         layout(&view, &panel, phase, mtm);
+
+        // 相位光晕色:录音红/处理青/警告琥珀(录音相位强度由 breathe_tick 随音量调制)
+        let (glow, glow_opacity) = match phase {
+            Phase::Recording => (RED, 0.22),
+            Phase::Processing => (CYAN, 0.18),
+            Phase::PasteFailed => (AMBER, 0.20),
+        };
+        unsafe {
+            if let Some(layer) = view.layer() {
+                if let Some(cg) = cg_color_srgb((glow.0, glow.1, glow.2)) {
+                    layer.setShadowColor(Some(&cg));
+                }
+                layer.setShadowOpacity(glow_opacity);
+            }
+        }
+
+        let was_hidden = !unsafe { panel.isVisible() };
         unsafe {
             panel.orderFrontRegardless();
+        }
+        // 面板从隐藏→显示时弹入(scale 0.7→1 + fade,180ms ease-out);相位切换不重复触发
+        if was_hidden {
+            unsafe { spring_in(&view) };
         }
     });
     seq
@@ -848,5 +989,27 @@ fn hide_sync() {
         (*p.view).ivars().jellyfish.stop_anim();
         (*p.panel).orderOut(None);
     }
+    // 残余电平清零,避免下次录音开始瞬间跳到旧值
+    crate::recording::MIC_LEVEL.store(0, Ordering::Relaxed);
     USER_POSITIONED.store(false, Ordering::Relaxed);
+}
+
+/// 弹入动画:先瞬间设初值(scale 0.7, alpha 0),再隐式动画回正(180ms)
+unsafe fn spring_in(view: &IndicatorView) {
+    let Some(layer) = (unsafe { view.layer() }) else {
+        return;
+    };
+    unsafe {
+        CATransaction::begin();
+        CATransaction::setDisableActions(true);
+        layer.setTransform(CATransform3D::new_scale(0.7, 0.7, 1.0));
+        layer.setOpacity(0.0);
+        CATransaction::commit();
+
+        CATransaction::begin();
+        CATransaction::setAnimationDuration(0.18);
+        layer.setTransform(CATransform3D::new_scale(1.0, 1.0, 1.0));
+        layer.setOpacity(1.0);
+        CATransaction::commit();
+    }
 }
