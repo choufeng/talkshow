@@ -18,7 +18,7 @@ function createTestConfig(): AppConfig {
       },
       translation: { target_lang: 'English' },
       skills: { enabled: true, skills: [] },
-      recording: { auto_mute: false },
+      recording: { auto_mute: false, input_device: '' },
       glossary: [],
       intent_routing: { enabled: false, disabled: [] },
       hooks: { enabled: false, url: '', headers: '', body_template: '', prompt: '', skill_ids: [] },

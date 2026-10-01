@@ -70,6 +70,8 @@ export interface SkillsConfig {
 
 export interface RecordingFeaturesConfig {
   auto_mute: boolean;
+  /** 首选麦克风设备名,空 = 系统默认 */
+  input_device: string;
 }
 
 export interface IntentRoutingConfig {
@@ -237,7 +239,8 @@ function createConfigStore() {
         skills: []
       },
       recording: {
-        auto_mute: false
+        auto_mute: false,
+        input_device: ''
       },
       glossary: [],
       intent_routing: {
@@ -264,6 +267,8 @@ function createConfigStore() {
           migrateModels(config.ai.providers || [])
         );
         config.features.glossary = config.features.glossary || [];
+        config.features.recording = config.features.recording || { auto_mute: false, input_device: '' };
+        config.features.recording.input_device = config.features.recording.input_device || '';
         config.features.intent_routing = config.features.intent_routing || { enabled: false, disabled: [] };
         config.features.intent_routing.disabled = config.features.intent_routing.disabled || [];
         config.features.hooks = config.features.hooks || {

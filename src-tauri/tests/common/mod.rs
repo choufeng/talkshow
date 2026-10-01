@@ -35,7 +35,10 @@ pub fn test_app_config() -> AppConfig {
                 target_lang: "English".to_string(),
             },
             skills: enabled_skills_config(),
-            recording: RecordingFeaturesConfig { auto_mute: false },
+            recording: RecordingFeaturesConfig {
+                auto_mute: false,
+                input_device: String::new(),
+            },
             glossary: vec![],
             intent_routing: Default::default(),
             hooks: Default::default(),
