@@ -45,6 +45,8 @@ const BOTTOM_MARGIN: f64 = 16.0;
 const CORNER: f64 = 24.0;
 /// paste-failed 提示自动隐藏时长
 const PASTE_FAILED_TIMEOUT: Duration = Duration::from_secs(8);
+/// 路由结果提示自动隐藏时长(看清去向即够)
+const RESULT_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// 呼吸动画帧间隔(60fps)
 const BREATH_INTERVAL: f64 = 1.0 / 60.0;
@@ -977,6 +979,68 @@ pub fn show_paste_failed(app: &AppHandle) {
 pub fn hide(app: &AppHandle) {
     SEQ.fetch_add(1, Ordering::SeqCst);
     let _ = app.run_on_main_thread(hide_sync);
+}
+
+/// 12pt monospacedDigit 字体近似文本宽(仅用于固定短句定面板宽度)
+fn est_text_width(text: &str) -> f64 {
+    text.chars()
+        .map(|c| {
+            let wide = matches!(c as u32, 0x3000..=0x303F | 0x4E00..=0x9FFF | 0xFF00..=0xFFEF);
+            if wide { 12.2 } else { 7.3 }
+        })
+        .sum()
+}
+
+/// pipeline 末段路由结果提示:显示去向文本(如"已发送至 Hook")后自动隐藏。
+/// 复用处理相位布局(水母静止 + 青色文本),按文本宽自适应面板宽度。
+pub fn show_result(app: &AppHandle, text: &str) {
+    let seq = set_phase(app, Phase::Processing);
+    let h = app.clone();
+    let text = text.to_string();
+    let _ = app.run_on_main_thread(move || {
+        let Some(mtm) = MainThreadMarker::new() else {
+            return;
+        };
+        let Some((panel, view)) = ensure_panel(mtm) else {
+            return;
+        };
+        // 处理已结束,水母停形变(静态图标 + 结果文本)
+        view.ivars().jellyfish.stop_anim();
+        let w = est_text_width(&text);
+        let panel_w = 44.0 + w + 16.0;
+        unsafe {
+            view.ivars()
+                .status_label
+                .setStringValue(&NSString::from_str(&text));
+            view.ivars().status_label.setFrame(NSRect::new(
+                NSPoint::new(44.0, 15.0),
+                NSSize::new(w + 4.0, 18.0),
+            ));
+            panel.setContentSize(NSSize::new(panel_w, PANEL_H));
+            // 与 layout 相同的底部居中(用户拖动过则不动)
+            if !USER_POSITIONED.load(Ordering::Relaxed)
+                && let Some(screen) = unsafe { NSScreen::mainScreen(mtm) }
+            {
+                let f = unsafe { screen.frame() };
+                let x = f.origin.x + (f.size.width - panel_w) / 2.0;
+                unsafe {
+                    panel.setFrameTopLeftPoint(NSPoint::new(
+                        x,
+                        f.origin.y + BOTTOM_MARGIN + PANEL_H,
+                    ));
+                }
+            }
+        }
+    });
+    std::thread::spawn(move || {
+        std::thread::sleep(RESULT_TIMEOUT);
+        let _ = h.run_on_main_thread(move || {
+            if SEQ.load(Ordering::SeqCst) != seq {
+                return; // 期间已有新相位/新会话,不隐藏
+            }
+            hide_sync();
+        });
+    });
 }
 
 fn hide_sync() {

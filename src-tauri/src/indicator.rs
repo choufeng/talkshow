@@ -33,6 +33,17 @@ pub fn show_paste_failed(app_handle: &AppHandle) {
     let _ = app_handle;
 }
 
+/// 路由结果提示:浮窗末段显示去向(语义路由/hook 分发结果)后自动隐藏
+pub fn show_result(app_handle: &AppHandle, text: &str) {
+    #[cfg(target_os = "macos")]
+    crate::macos::indicator_panel::show_result(app_handle, text);
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = app_handle;
+        let _ = text;
+    }
+}
+
 pub fn hide_indicator(app_handle: &AppHandle) {
     #[cfg(target_os = "macos")]
     crate::macos::indicator_panel::hide(app_handle);

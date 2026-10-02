@@ -476,7 +476,8 @@ pub fn stop_recording(
                                             })),
                                         );
                                         cleanup_esc(&h);
-                                        crate::indicator::hide_indicator(&h);
+                                        // 浮窗末段显示去向:ask 不走剪贴板,告知已转对话
+                                        crate::indicator::show_result(&h, "已转对话");
                                         return;
                                     } else if decision.intent == Intent::Hook {
                                         // hook:整理正文并 POST 到配置的后端,不走剪贴板
@@ -577,6 +578,12 @@ pub fn stop_recording(
                                         );
                                         restore_tray(&h);
                                         cleanup_esc(&h);
+                                        // 浮窗末段显示 hook 分发结果(不走剪贴板)
+                                        if send_result.is_ok() {
+                                            crate::indicator::show_result(&h, "已发送至 Hook");
+                                        } else {
+                                            crate::indicator::show_result(&h, "Hook 发送失败");
+                                        }
                                         return;
                                     }
 
@@ -673,7 +680,12 @@ pub fn stop_recording(
                                                 })),
                                             );
                                             cleanup_esc(&h);
-                                            crate::indicator::hide_indicator(&h);
+                                            // 语义路由命中翻译时告知去向;普通转写静默隐藏
+                                            if routed_translation {
+                                                crate::indicator::show_result(&h, "已翻译并粘贴");
+                                            } else {
+                                                crate::indicator::hide_indicator(&h);
+                                            }
                                         }
                                         Ok(Err(e)) => {
                                             logger.error(
