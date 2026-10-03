@@ -194,4 +194,27 @@ describe('Settings Page Integration', () => {
       })
     }));
   });
+
+  it('should show send-key picker only when review enabled and persist send_key', async () => {
+    let cfg = defaultConfig();
+    cfg.features.review = { enabled: true, send_key: 'enter' };
+    const invokeSpy = vi.fn(async (command: string) => {
+      if (command === 'get_config') return cfg;
+      if (command === 'save_config_cmd') return;
+      return null;
+    });
+    mockTauriInvoke(invokeSpy);
+
+    render(SettingsPage);
+
+    expect(await screen.findByText('⌘Enter')).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole('button', { name: '⌘Enter' }));
+    expect(invokeSpy).toHaveBeenCalledWith('save_config_cmd', expect.objectContaining({
+      config: expect.objectContaining({
+        features: expect.objectContaining({
+          review: { enabled: true, send_key: 'cmd_enter' }
+        })
+      })
+    }));
+  });
 });
