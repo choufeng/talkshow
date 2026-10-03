@@ -91,6 +91,7 @@ export interface HooksConfig {
 
 export interface ReviewConfig {
   enabled: boolean;
+  send_key: string;
 }
 
 /** 滴答清单预设:开放平台 developer.dida365.com 创建应用后生成 PAT */
@@ -261,7 +262,8 @@ function createConfigStore() {
         skill_ids: []
       },
       review: {
-        enabled: false
+        enabled: false,
+        send_key: 'enter'
       }
     }
   });
@@ -287,7 +289,8 @@ function createConfigStore() {
           prompt: '',
           skill_ids: []
         };
-        config.features.review = config.features.review || { enabled: false };
+        config.features.review = config.features.review || { enabled: false, send_key: 'enter' };
+        config.features.review.send_key = config.features.review.send_key || 'enter';
         set(config);
       } catch (error) {
         console.error('Failed to load config:', error);

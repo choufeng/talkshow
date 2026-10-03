@@ -22,7 +22,7 @@ function baseConfig() {
       glossary: [],
       intent_routing: { enabled: false, disabled: [] },
       hooks: { enabled: false, url: '', headers: '', body_template: '', prompt: '', skill_ids: [] },
-      review: { enabled: false },
+      review: { enabled: false, send_key: 'enter' },
     },
   };
 }
