@@ -207,8 +207,11 @@ pub async fn execute_confirm(h: &AppHandle, confirm: ReviewConfirm) -> Result<()
             Ok(())
         }
         Err(e) => {
-            // 失败放回请求,用户可改选去向或取消
-            *state.current.lock().unwrap_or_else(|e| e.into_inner()) = Some(req);
+            // 失败放回请求,用户可改选去向或取消;期间已有新请求则不覆盖
+            let mut g = state.current.lock().unwrap_or_else(|e| e.into_inner());
+            if g.is_none() {
+                *g = Some(req);
+            }
             Err(e)
         }
     }
