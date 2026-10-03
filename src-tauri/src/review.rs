@@ -67,7 +67,10 @@ pub struct ReviewState {
 impl ReviewState {
     /// 编辑模式判定:浮窗是否有待确认内容
     pub fn is_active(&self) -> bool {
-        self.current.lock().unwrap().is_some()
+        self.current
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_some()
     }
 }
 
@@ -96,7 +99,7 @@ pub fn assemble_candidates(
 /// 存请求 → 指示条切"待确认" → 建窗(或复用) → 广播
 pub fn open_review(h: &AppHandle, req: ReviewRequest) {
     let state = h.state::<ReviewState>();
-    *state.current.lock().unwrap() = Some(req.clone());
+    *state.current.lock().unwrap_or_else(|e| e.into_inner()) = Some(req.clone());
     crate::indicator::show_review(h);
 
     match h.get_webview_window("review") {
@@ -158,15 +161,17 @@ async fn paste(_h: &AppHandle, text: &str, target_app: Option<String>) -> Result
 pub async fn execute_confirm(h: &AppHandle, confirm: ReviewConfirm) -> Result<(), String> {
     let state = h.state::<ReviewState>();
     // 先比对 id 再取出,防止吞掉覆盖进来的新请求
-    {
-        let g = state.current.lock().unwrap();
-        match g.as_ref() {
-            Some(r) if r.id == confirm.id => {}
-            Some(_) => return Err("内容已更新，请查看新内容".to_string()),
+    let req = {
+        let mut g = state.current.lock().unwrap_or_else(|e| e.into_inner());
+        match g.take() {
+            Some(r) if r.id == confirm.id => r,
+            Some(other) => {
+                *g = Some(other);
+                return Err("内容已更新，请查看新内容".to_string());
+            }
             None => return Err("没有待确认的内容".to_string()),
         }
-    }
-    let req = state.current.lock().unwrap().take().expect("checked above");
+    };
 
     let logger = h.state::<Logger>();
     let data_dir = h.path().app_data_dir().unwrap_or_default();
@@ -185,7 +190,11 @@ pub async fn execute_confirm(h: &AppHandle, confirm: ReviewConfirm) -> Result<()
                 })),
             );
             // 期间有新请求进来(指示条在待确认)则不动指示条与浮窗
-            let superseded = state.current.lock().unwrap().is_some();
+            let superseded = state
+                .current
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .is_some();
             if !superseded {
                 if let Some(w) = h.get_webview_window("review") {
                     let _ = w.hide();
@@ -199,7 +208,7 @@ pub async fn execute_confirm(h: &AppHandle, confirm: ReviewConfirm) -> Result<()
         }
         Err(e) => {
             // 失败放回请求,用户可改选去向或取消
-            *state.current.lock().unwrap() = Some(req);
+            *state.current.lock().unwrap_or_else(|e| e.into_inner()) = Some(req);
             Err(e)
         }
     }
@@ -208,7 +217,7 @@ pub async fn execute_confirm(h: &AppHandle, confirm: ReviewConfirm) -> Result<()
 /// 取消:清状态 + 收指示条 + 藏浮窗
 pub fn dismiss(h: &AppHandle) {
     let state = h.state::<ReviewState>();
-    *state.current.lock().unwrap() = None;
+    *state.current.lock().unwrap_or_else(|e| e.into_inner()) = None;
     crate::indicator::hide_indicator(h);
     if let Some(w) = h.get_webview_window("review") {
         let _ = w.hide();

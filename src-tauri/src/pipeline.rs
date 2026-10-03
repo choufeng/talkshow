@@ -320,6 +320,20 @@ pub fn stop_recording(
                                     if app_config.features.review.enabled
                                         && h.state::<crate::review::ReviewState>().is_active()
                                     {
+                                        if mgr.is_cancelled(session.id) {
+                                            logger.info("pipeline", "编辑模式插入已取消", None);
+                                            restore_tray_only(&h);
+                                            cleanup_esc(&h);
+                                            return;
+                                        }
+                                        if mgr.has_active() {
+                                            logger.info(
+                                                "ai",
+                                                "录音已重新开始，丢弃当前 AI 结果",
+                                                None,
+                                            );
+                                            return;
+                                        }
                                         let _ = h.emit_to(
                                             "review",
                                             "review:insert",
