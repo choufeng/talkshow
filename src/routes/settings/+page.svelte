@@ -186,6 +186,24 @@
           ariaLabel="发送前人工确认"
         />
       </div>
+      {#if $config.features?.review?.enabled}
+        <div class="mt-4 border-t border-border pt-4">
+          <div class="text-body text-foreground-alt mb-2">浮窗发送键（校对浮窗内触发确认）</div>
+          <div class="flex gap-2">
+            {#each [{ v: 'enter', l: 'Enter' }, { v: 'cmd_enter', l: '⌘Enter' }] as opt (opt.v)}
+              <button
+                class="rounded-lg border px-4 py-2 text-sm transition-colors {($config.features?.review?.send_key ?? 'enter') === opt.v
+                  ? 'border-btn-primary-to bg-gradient-to-b from-btn-primary-from to-btn-primary-to text-white font-medium'
+                  : 'border-border bg-background text-foreground hover:bg-muted/50'}"
+                onclick={() => config.save(updateFeature($config, 'review', (r) => ({ ...r, send_key: opt.v })))}
+              >
+                {opt.l}
+              </button>
+            {/each}
+          </div>
+          <div class="mt-2 text-caption text-muted-foreground">另一变体在文本框中作为换行；Shift+Enter 恒为换行；Esc 取消</div>
+        </div>
+      {/if}
     </div>
   </section>
 
