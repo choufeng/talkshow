@@ -9,6 +9,26 @@ use tauri::Manager;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
 #[tauri::command]
+pub fn review_get(
+    state: tauri::State<'_, crate::review::ReviewState>,
+) -> Option<crate::review::ReviewRequest> {
+    state.current.lock().unwrap().clone()
+}
+
+#[tauri::command]
+pub async fn review_confirm(
+    app: tauri::AppHandle,
+    confirm: crate::review::ReviewConfirm,
+) -> Result<(), String> {
+    crate::review::execute_confirm(&app, confirm).await
+}
+
+#[tauri::command]
+pub fn review_dismiss(app: tauri::AppHandle) {
+    crate::review::dismiss(&app);
+}
+
+#[tauri::command]
 pub fn list_audio_devices() -> Vec<crate::recording::AudioDeviceInfo> {
     crate::recording::list_input_devices()
 }

@@ -12,6 +12,12 @@ fn restore_tray(h: &tauri::AppHandle) {
     restore_default_tray(h, icons.default.clone());
     crate::indicator::hide_indicator(h);
 }
+
+/// 仅恢复托盘图标(指示条保持待确认常驻,由 review 确认/取消收尾)
+fn restore_tray_only(h: &tauri::AppHandle) {
+    let icons = h.state::<crate::TrayIcons>();
+    restore_default_tray(h, icons.default.clone());
+}
 use crate::hooks;
 use crate::intent::{self, Intent, IntentDecision};
 use crate::logger::Logger;
@@ -347,6 +353,7 @@ pub fn stop_recording(
                                     }
 
                                     let mut routed_translation = false;
+                                    let mut routed_lang: Option<String> = None;
 
                                     let original_text = if session.mode
                                         == crate::session::MODE_TRANSLATION
@@ -401,6 +408,7 @@ pub fn stop_recording(
                                     {
                                         // 语义路由命中翻译:优先用合并调用的译文,缺失时独立翻译兑底
                                         routed_translation = true;
+                                        routed_lang = Some(target_lang.clone());
                                         match decision.result.take() {
                                             Some(translated) => final_text = translated,
                                             None => {
@@ -429,6 +437,34 @@ pub fn stop_recording(
                                             }
                                         }
                                     } else if decision.intent == Intent::Ask {
+                                        // 人工确认:拦截开窗校对,确认后才转对话
+                                        if app_config.features.review.enabled {
+                                            crate::review::open_review(
+                                                &h,
+                                                crate::review::ReviewRequest {
+                                                    id: session.id,
+                                                    raw_text: raw_text_for_history.clone(),
+                                                    text: final_text.clone(),
+                                                    original_text: None,
+                                                    target_lang: None,
+                                                    action: "ask".to_string(),
+                                                    target_app: saved_target_app.clone(),
+                                                    hook: None,
+                                                    can_hook: app_config.features.hooks.enabled
+                                                        && !app_config
+                                                            .features
+                                                            .hooks
+                                                            .url
+                                                            .trim()
+                                                            .is_empty(),
+                                                    audio_path: audio_path.display().to_string(),
+                                                },
+                                            );
+                                            logger.info("review", "ask 拦截待确认", None);
+                                            restore_tray_only(&h);
+                                            cleanup_esc(&h);
+                                            return;
+                                        }
                                         // ask:开 chat 窗体呈现首轮问答,不走剪贴板
                                         // 首答统一由前端 chat_send(思考模式)生成,
                                         // 不用合并调用的快速 result(无思考,质量弱)
@@ -509,6 +545,47 @@ pub fn stop_recording(
                                                 }
                                             }
                                         };
+
+                                        // 人工确认:拦截在发送前,展示整理结果+渲染预览
+                                        if app_config.features.review.enabled {
+                                            let payload_for_preview = hooks::HookPayload {
+                                                raw: raw_text_for_history.clone(),
+                                                text: refined.text.clone(),
+                                                app: saved_target_app
+                                                    .clone()
+                                                    .unwrap_or_else(|| "Unknown".to_string()),
+                                                vars: refined.vars.clone(),
+                                            };
+                                            let preview = hooks::render_body(
+                                                &hooks_cfg,
+                                                &payload_for_preview,
+                                            )
+                                            .ok()
+                                            .map(|body| crate::review::HookPreview {
+                                                url: hooks_cfg.url.clone(),
+                                                body,
+                                                vars: refined.vars.clone(),
+                                            });
+                                            crate::review::open_review(
+                                                &h,
+                                                crate::review::ReviewRequest {
+                                                    id: session.id,
+                                                    raw_text: raw_text_for_history.clone(),
+                                                    text: refined.text.clone(),
+                                                    original_text: None,
+                                                    target_lang: None,
+                                                    action: "hook".to_string(),
+                                                    target_app: saved_target_app.clone(),
+                                                    hook: preview,
+                                                    can_hook: true,
+                                                    audio_path: audio_path.display().to_string(),
+                                                },
+                                            );
+                                            logger.info("review", "hook 拦截待确认", None);
+                                            restore_tray_only(&h);
+                                            cleanup_esc(&h);
+                                            return;
+                                        }
 
                                         // 2) 发送
                                         let payload = hooks::HookPayload {
@@ -596,6 +673,50 @@ pub fn stop_recording(
 
                                     if mgr.has_active() {
                                         logger.info("ai", "录音已重新开始，丢弃当前 AI 结果", None);
+                                        return;
+                                    }
+
+                                    // 人工确认:拦截在粘贴前,展示译文/润色结果
+                                    if app_config.features.review.enabled {
+                                        let display_lang = if session.mode
+                                            == crate::session::MODE_TRANSLATION
+                                        {
+                                            Some(
+                                                app_config.features.translation.target_lang.clone(),
+                                            )
+                                        } else {
+                                            routed_lang.clone()
+                                        };
+                                        crate::review::open_review(
+                                            &h,
+                                            crate::review::ReviewRequest {
+                                                id: session.id,
+                                                raw_text: raw_text_for_history.clone(),
+                                                text: final_text.clone(),
+                                                original_text: original_text.clone(),
+                                                target_lang: display_lang,
+                                                action: "paste".to_string(),
+                                                target_app: saved_target_app.clone(),
+                                                hook: None,
+                                                can_hook: app_config.features.hooks.enabled
+                                                    && !app_config
+                                                        .features
+                                                        .hooks
+                                                        .url
+                                                        .trim()
+                                                        .is_empty(),
+                                                audio_path: audio_path.display().to_string(),
+                                            },
+                                        );
+                                        logger.info(
+                                            "review",
+                                            "粘贴前拦截待确认",
+                                            Some(serde_json::json!({
+                                                "translated": original_text.is_some(),
+                                            })),
+                                        );
+                                        restore_tray_only(&h);
+                                        cleanup_esc(&h);
                                         return;
                                     }
 

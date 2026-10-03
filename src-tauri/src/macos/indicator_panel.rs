@@ -991,9 +991,9 @@ fn est_text_width(text: &str) -> f64 {
         .sum()
 }
 
-/// pipeline 末段路由结果提示:显示去向文本(如"已发送至 Hook")后自动隐藏。
-/// 复用处理相位布局(水母静止 + 青色文本),按文本宽自适应面板宽度。
-pub fn show_result(app: &AppHandle, text: &str) {
+/// 状态文本展示:处理相位布局 + 自定义文本;timeout=Some 时 N 秒后自动隐藏。
+/// pipeline 末段路由结果提示与待确认常驻态共用。
+pub fn show_status(app: &AppHandle, text: &str, timeout: Option<Duration>) {
     let seq = set_phase(app, Phase::Processing);
     let h = app.clone();
     let text = text.to_string();
@@ -1032,15 +1032,26 @@ pub fn show_result(app: &AppHandle, text: &str) {
             }
         }
     });
-    std::thread::spawn(move || {
-        std::thread::sleep(RESULT_TIMEOUT);
-        let _ = h.run_on_main_thread(move || {
-            if SEQ.load(Ordering::SeqCst) != seq {
-                return; // 期间已有新相位/新会话,不隐藏
-            }
-            hide_sync();
+    if let Some(t) = timeout {
+        std::thread::spawn(move || {
+            std::thread::sleep(t);
+            let _ = h.run_on_main_thread(move || {
+                if SEQ.load(Ordering::SeqCst) != seq {
+                    return; // 期间已有新相位/新会话,不隐藏
+                }
+                hide_sync();
+            });
         });
-    });
+    }
+}
+
+pub fn show_result(app: &AppHandle, text: &str) {
+    show_status(app, text, Some(RESULT_TIMEOUT));
+}
+
+/// 人工确认待处理:常驻显示,由 review 确认/取消收尾
+pub fn show_review(app: &AppHandle) {
+    show_status(app, "待确认 · 校对发送内容", None);
 }
 
 fn hide_sync() {

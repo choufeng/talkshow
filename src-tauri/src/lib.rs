@@ -16,6 +16,7 @@ mod permissions;
 mod pipeline;
 mod providers;
 mod recording;
+mod review;
 mod sensevoice;
 mod session;
 mod shortcuts;
@@ -281,13 +282,16 @@ pub fn run() {
             commands::chat_send,
             commands::chat_record_start,
             commands::chat_record_stop,
-            commands::chat_record_stop
+            commands::review_get,
+            commands::review_confirm,
+            commands::review_dismiss
         ])
         .setup(|app| {
             let app_data_dir = app.path().app_data_dir().unwrap_or_default();
             let _ = audio_control::cleanup_stale_state(&app_data_dir);
             let logger = Logger::new(&app_data_dir).expect("Failed to initialize logger");
             app.manage(SessionManager::new());
+            app.manage(review::ReviewState::default());
             let audio_device = {
                 let name = config::load_config(&app_data_dir)
                     .features

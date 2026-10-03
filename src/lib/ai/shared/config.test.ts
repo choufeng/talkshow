@@ -22,6 +22,7 @@ function createTestConfig(): AppConfig {
       glossary: [],
       intent_routing: { enabled: false, disabled: [] },
       hooks: { enabled: false, url: '', headers: '', body_template: '', prompt: '', skill_ids: [] },
+      review: { enabled: false },
     },
   };
 }

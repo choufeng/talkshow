@@ -44,6 +44,16 @@ pub fn show_result(app_handle: &AppHandle, text: &str) {
     }
 }
 
+/// 人工确认待处理:常驻显示,由 review 确认/取消收尾
+pub fn show_review(app_handle: &AppHandle) {
+    #[cfg(target_os = "macos")]
+    crate::macos::indicator_panel::show_review(app_handle);
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = app_handle;
+    }
+}
+
 pub fn hide_indicator(app_handle: &AppHandle) {
     #[cfg(target_os = "macos")]
     crate::macos::indicator_panel::hide(app_handle);

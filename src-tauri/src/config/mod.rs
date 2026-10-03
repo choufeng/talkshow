@@ -307,6 +307,13 @@ impl Default for HooksConfig {
     }
 }
 
+/// 发送前人工确认:拦截 pipeline 产物,浮窗内编辑文本+选择去向
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(default)]
+pub struct ReviewConfig {
+    pub enabled: bool,
+}
+
 #[derive(Serialize, Deserialize, Clone, Default)]
 #[serde(default)]
 pub struct FeaturesConfig {
@@ -318,6 +325,7 @@ pub struct FeaturesConfig {
     pub glossary: Vec<GlossaryEntry>,
     pub intent_routing: IntentRoutingConfig,
     pub hooks: HooksConfig,
+    pub review: ReviewConfig,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -359,6 +367,7 @@ impl Default for AppConfig {
                 glossary: Vec::new(),
                 intent_routing: IntentRoutingConfig::default(),
                 hooks: HooksConfig::default(),
+                review: ReviewConfig::default(),
             },
             onboarding_completed: false,
         }

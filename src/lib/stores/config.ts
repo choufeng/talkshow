@@ -89,6 +89,10 @@ export interface HooksConfig {
   skill_ids: string[];
 }
 
+export interface ReviewConfig {
+  enabled: boolean;
+}
+
 /** 滴答清单预设:开放平台 developer.dida365.com 创建应用后生成 PAT */
 export const DIDA365_PRESET = {
   url: 'https://api.dida365.com/open/v1/task',
@@ -118,6 +122,7 @@ export interface FeaturesConfig {
   glossary: GlossaryEntry[];
   intent_routing: IntentRoutingConfig;
   hooks: HooksConfig;
+  review: ReviewConfig;
 }
 
 export interface AppConfig {
@@ -254,6 +259,9 @@ function createConfigStore() {
         body_template: '{"raw":"{{raw}}","text":"{{text}}","ts":"{{ts}}","app":"{{app}}"}',
         prompt: '',
         skill_ids: []
+      },
+      review: {
+        enabled: false
       }
     }
   });
@@ -279,6 +287,7 @@ function createConfigStore() {
           prompt: '',
           skill_ids: []
         };
+        config.features.review = config.features.review || { enabled: false };
         set(config);
       } catch (error) {
         console.error('Failed to load config:', error);

@@ -81,6 +81,14 @@
     })));
   }
 
+  function toggleReview() {
+    const review = $config.features?.review ?? { enabled: false };
+    config.save(updateFeature($config, 'review', () => ({
+      ...review,
+      enabled: !review.enabled
+    })));
+  }
+
   const INTENT_KINDS: { kind: string; label: string; desc: string }[] = [
     { kind: 'translate', label: '翻译指令', desc: '说“翻译成英文…”识别后直接给出译文' },
     { kind: 'ask', label: '问询指令', desc: '说“问一下…”打开对话窗口' },
@@ -165,6 +173,19 @@
           {/each}
         </div>
       {/if}
+    </div>
+    <div class="rounded-xl border border-border bg-background-alt p-5">
+      <div class="flex items-center justify-between gap-4">
+        <div>
+          <div class="text-[15px] font-semibold text-foreground mb-1">发送前人工确认</div>
+          <div class="text-body text-foreground-alt">录音处理完成后弹出手动校对浮窗：可编辑文字、查看即将发送的内容，并选择粘贴 / 翻译 / 问询 / Hook 去向后再执行</div>
+        </div>
+        <Toggle
+          checked={$config.features?.review?.enabled ?? false}
+          onCheckedChange={() => toggleReview()}
+          ariaLabel="发送前人工确认"
+        />
+      </div>
     </div>
   </section>
 

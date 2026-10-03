@@ -42,6 +42,7 @@ pub fn test_app_config() -> AppConfig {
             glossary: vec![],
             intent_routing: Default::default(),
             hooks: Default::default(),
+            review: Default::default(),
         },
         onboarding_completed: false,
     }
