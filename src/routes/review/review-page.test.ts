@@ -138,4 +138,27 @@ describe('review 浮窗页', () => {
     await new Promise((r) => setTimeout(r, 50));
     expect(confirmSpy).not.toHaveBeenCalled();
   });
+
+  it('review:insert 事件替换选中文本', async () => {
+    let insertCb: ((e: { payload: { text: string } }) => void) | null = null;
+    const { listen } = await import('@tauri-apps/api/event');
+    vi.mocked(listen).mockImplementation(
+      (async (name: string, cb: (e: { payload: { text: string } }) => void) => {
+        if (name === 'review:insert') insertCb = cb;
+        return { unlisten: () => {} } as never;
+      }) as never
+    );
+    mockTauriInvoke(async (cmd) => {
+      if (cmd === 'review_get') return sampleRequest({ primary: 'paste', hook: null, text: '原始内容待替换' });
+      if (cmd === 'get_config') return { features: { review: { send_key: 'enter' } } };
+      return null;
+    });
+    render(ReviewPage);
+    await waitFor(() => screen.getByDisplayValue('原始内容待替换'));
+    const ta = screen.getByRole('textbox') as HTMLTextAreaElement;
+    ta.focus();
+    ta.setSelectionRange(0, 4); // 选中「原始内容」
+    insertCb?.({ payload: { text: '新内容' } });
+    await waitFor(() => expect(screen.getByDisplayValue('新内容待替换')).toBeTruthy());
+  });
 });

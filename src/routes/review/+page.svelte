@@ -58,6 +58,15 @@
     if (r.target_lang) targetLang = r.target_lang;
     error = '';
     showMore = false;
+    // 浮窗常驻复用,每次请求刷新发送键(设置页中途修改后不重启也生效)
+    (async () => {
+      try {
+        const cfg = await invoke<{ features: { review: { send_key: string } } }>('get_config');
+        sendKey = cfg?.features?.review?.send_key === 'cmd_enter' ? 'cmd_enter' : 'enter';
+      } catch {
+        /* fallback: 保持当前值 */
+      }
+    })();
   }
 
   async function confirm() {
@@ -154,13 +163,6 @@
         else await invoke('review_dismiss').catch(() => {});
       } catch {
         /* 非 Tauri 环境 */
-      }
-      try {
-        const cfg = await invoke<{ features: { review: { send_key: string } } }>('get_config');
-        const k = cfg?.features?.review?.send_key;
-        if (k === 'cmd_enter') sendKey = 'cmd_enter';
-      } catch {
-        /* fallback: enter */
       }
     })();
     window.addEventListener('keydown', onKeydown);
