@@ -86,6 +86,8 @@
   }
 
   function onKeydown(e: KeyboardEvent) {
+    // IME 组合输入中(中文候选词上屏等):不触发发送/取消/快捷键
+    if (e.isComposing || e.keyCode === 229) return;
     if (e.key === 'Escape') {
       e.preventDefault();
       dismiss();
@@ -107,6 +109,8 @@
   }
 
   function onTextareaKeydown(e: KeyboardEvent) {
+    // IME 组合输入中(中文候选词上屏等):不触发发送/取消/快捷键
+    if (e.isComposing || e.keyCode === 229) return;
     // 非发送键变体的 Enter → 手动插入换行(native Cmd+Enter 不换行)
     const isSendCombo = e.metaKey === (sendKey === 'cmd_enter');
     if (e.key === 'Enter' && !e.shiftKey && !isSendCombo) {

@@ -108,7 +108,7 @@ describe('review 浮窗页', () => {
     render(ReviewPage);
     await waitFor(() => screen.getByDisplayValue('明天下午三点开会'));
     await fireEvent.click(screen.getByText('其他去向…'));
-    const hookBtn = screen.getByRole('button', { name: /发送到 Hook⌘4/ }) as HTMLButtonElement;
+    const hookBtn = screen.getByRole('button', { name: /发送到 Hook.*⌘4/ }) as HTMLButtonElement;
     expect(hookBtn.disabled).toBe(true);
   });
 
@@ -122,5 +122,20 @@ describe('review 浮窗页', () => {
     render(ReviewPage);
     await waitFor(() => expect(dismissSpy).toHaveBeenCalledTimes(1));
     expect(screen.getByText('没有待确认的内容')).toBeTruthy();
+  });
+
+  it('IME 组合输入中的 Enter 不触发发送', async () => {
+    const confirmSpy = vi.fn(async () => {});
+    mockTauriInvoke(async (cmd) => {
+      if (cmd === 'review_get') return sampleRequest({ primary: 'paste', hook: null });
+      if (cmd === 'get_config') return { features: { review: { send_key: 'enter' } } };
+      if (cmd === 'review_confirm') return confirmSpy();
+      return null;
+    });
+    render(ReviewPage);
+    await waitFor(() => screen.getByDisplayValue('明天下午三点开会'));
+    await fireEvent.keyDown(window, { key: 'Enter', isComposing: true });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(confirmSpy).not.toHaveBeenCalled();
   });
 });
