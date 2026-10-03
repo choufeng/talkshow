@@ -35,14 +35,16 @@ pub struct ReviewRequest {
     pub original_text: Option<String>,
     /// 译文语言(展示用)
     pub target_lang: Option<String>,
-    /// pipeline 判定动作 "paste"|"ask"|"hook"
-    pub action: String,
+    /// 模型首选动作 "paste"|"ask"|"hook"(翻译模式固定 "paste")
+    pub primary: String,
+    /// 歧义次选 kinds(已过滤:主同名/hook 可用性),仅 "hook"|"ask"
+    pub alternatives: Vec<String>,
+    /// 全量去向中当前可用的 kinds(前端禁用判断)
+    pub available: Vec<String>,
     /// 粘贴目标应用
     pub target_app: Option<String>,
     /// hook 动作时的发送预览
     pub hook: Option<HookPreview>,
-    /// Hook 去向可用(hooks 已启用且配置 URL)
-    pub can_hook: bool,
     /// 音频文件路径(history 回溯用)
     pub audio_path: String,
 }
@@ -60,6 +62,35 @@ pub struct ReviewConfirm {
 #[derive(Default)]
 pub struct ReviewState {
     pub current: Mutex<Option<ReviewRequest>>,
+}
+
+impl ReviewState {
+    /// 编辑模式判定:浮窗是否有待确认内容
+    pub fn is_active(&self) -> bool {
+        self.current.lock().unwrap().is_some()
+    }
+}
+
+/// 组装可用去向与过滤后的歧义候选
+pub fn assemble_candidates(
+    primary: &str,
+    raw_alternatives: &[String],
+    hook_configured: bool,
+) -> (Vec<String>, Vec<String>) {
+    let mut available = vec![
+        "paste".to_string(),
+        "translate".to_string(),
+        "ask".to_string(),
+    ];
+    if hook_configured {
+        available.push("hook".to_string());
+    }
+    let alternatives: Vec<String> = raw_alternatives
+        .iter()
+        .filter(|a| *a != primary && available.contains(a))
+        .cloned()
+        .collect();
+    (available, alternatives)
 }
 
 /// 存请求 → 指示条切"待确认" → 建窗(或复用) → 广播
@@ -149,7 +180,7 @@ pub async fn execute_confirm(h: &AppHandle, confirm: ReviewConfirm) -> Result<()
                 "人工确认执行完成",
                 Some(serde_json::json!({
                     "action": confirm.action,
-                    "from": req.action,
+                    "from": req.primary,
                     "text_edited": confirm.text != req.text,
                 })),
             );
@@ -328,5 +359,29 @@ async fn dispatch(
             Ok(Some("已发送至 Hook".to_string()))
         }
         other => Err(format!("未知去向: {}", other)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn assemble_filters_hook_when_unconfigured() {
+        let (available, alts) = assemble_candidates("paste", &["hook".into(), "ask".into()], false);
+        assert_eq!(available, vec!["paste", "translate", "ask"]);
+        assert_eq!(alts, vec!["ask".to_string()]);
+    }
+
+    #[test]
+    fn assemble_drops_primary_duplicate() {
+        let (_, alts) = assemble_candidates("hook", &["hook".into(), "ask".into()], true);
+        assert_eq!(alts, vec!["ask".to_string()]);
+    }
+
+    #[test]
+    fn assemble_hook_configured_available() {
+        let (available, _) = assemble_candidates("paste", &[], true);
+        assert_eq!(available, vec!["paste", "translate", "ask", "hook"]);
     }
 }

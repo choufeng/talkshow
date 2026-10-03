@@ -315,6 +315,29 @@ pub fn stop_recording(
                                     "response_preview": text.chars().take(100).collect::<String>(),
                                 })));
 
+                                    // 编辑模式:浮窗有待确认内容时,新录音一律纯转写插入浮窗,
+                                    // 跳过润色/语义路由/拦截(选区替换或光标插入由前端处理)
+                                    if app_config.features.review.enabled
+                                        && h.state::<crate::review::ReviewState>().is_active()
+                                    {
+                                        let _ = h.emit_to(
+                                            "review",
+                                            "review:insert",
+                                            serde_json::json!({ "text": text }),
+                                        );
+                                        logger.info(
+                                            "review",
+                                            "编辑模式语音插入",
+                                            Some(serde_json::json!({
+                                                "text_length": text.len(),
+                                            })),
+                                        );
+                                        crate::indicator::show_result(&h, "已插入");
+                                        restore_tray_only(&h);
+                                        cleanup_esc(&h);
+                                        return;
+                                    }
+
                                     let skills_start = Instant::now();
                                     let raw_text_for_history = text.clone();
                                     let mut decision = intent::process_with_intent(
@@ -439,6 +462,14 @@ pub fn stop_recording(
                                     } else if decision.intent == Intent::Ask {
                                         // 人工确认:拦截开窗校对,确认后才转对话
                                         if app_config.features.review.enabled {
+                                            let hook_configured = app_config.features.hooks.enabled
+                                                && !app_config.features.hooks.url.trim().is_empty();
+                                            let (available, alternatives) =
+                                                crate::review::assemble_candidates(
+                                                    "ask",
+                                                    &decision.alternatives,
+                                                    hook_configured,
+                                                );
                                             crate::review::open_review(
                                                 &h,
                                                 crate::review::ReviewRequest {
@@ -447,16 +478,11 @@ pub fn stop_recording(
                                                     text: final_text.clone(),
                                                     original_text: None,
                                                     target_lang: None,
-                                                    action: "ask".to_string(),
+                                                    primary: "ask".to_string(),
+                                                    alternatives,
+                                                    available,
                                                     target_app: saved_target_app.clone(),
                                                     hook: None,
-                                                    can_hook: app_config.features.hooks.enabled
-                                                        && !app_config
-                                                            .features
-                                                            .hooks
-                                                            .url
-                                                            .trim()
-                                                            .is_empty(),
                                                     audio_path: audio_path.display().to_string(),
                                                 },
                                             );
@@ -548,6 +574,12 @@ pub fn stop_recording(
 
                                         // 人工确认:拦截在发送前,展示整理结果+渲染预览
                                         if app_config.features.review.enabled {
+                                            let (available, alternatives) =
+                                                crate::review::assemble_candidates(
+                                                    "hook",
+                                                    &decision.alternatives,
+                                                    true,
+                                                );
                                             let payload_for_preview = hooks::HookPayload {
                                                 raw: raw_text_for_history.clone(),
                                                 text: refined.text.clone(),
@@ -574,10 +606,11 @@ pub fn stop_recording(
                                                     text: refined.text.clone(),
                                                     original_text: None,
                                                     target_lang: None,
-                                                    action: "hook".to_string(),
+                                                    primary: "hook".to_string(),
+                                                    alternatives,
+                                                    available,
                                                     target_app: saved_target_app.clone(),
                                                     hook: preview,
-                                                    can_hook: true,
                                                     audio_path: audio_path.display().to_string(),
                                                 },
                                             );
@@ -687,6 +720,14 @@ pub fn stop_recording(
                                         } else {
                                             routed_lang.clone()
                                         };
+                                        let hook_configured = app_config.features.hooks.enabled
+                                            && !app_config.features.hooks.url.trim().is_empty();
+                                        let (available, alternatives) =
+                                            crate::review::assemble_candidates(
+                                                "paste",
+                                                &decision.alternatives,
+                                                hook_configured,
+                                            );
                                         crate::review::open_review(
                                             &h,
                                             crate::review::ReviewRequest {
@@ -695,16 +736,11 @@ pub fn stop_recording(
                                                 text: final_text.clone(),
                                                 original_text: original_text.clone(),
                                                 target_lang: display_lang,
-                                                action: "paste".to_string(),
+                                                primary: "paste".to_string(),
+                                                alternatives,
+                                                available,
                                                 target_app: saved_target_app.clone(),
                                                 hook: None,
-                                                can_hook: app_config.features.hooks.enabled
-                                                    && !app_config
-                                                        .features
-                                                        .hooks
-                                                        .url
-                                                        .trim()
-                                                        .is_empty(),
                                                 audio_path: audio_path.display().to_string(),
                                             },
                                         );
