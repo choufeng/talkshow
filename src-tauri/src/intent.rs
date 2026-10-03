@@ -597,5 +597,7 @@ mod tests {
     fn intent_instruction_mentions_alternatives() {
         let s = intent_instruction();
         assert!(s.contains("alternatives"));
+        // 输出示例必须教模型空数组写法(省略/空皆可的契约)
+        assert!(s.contains("\"alternatives\":[]"));
     }
 }
