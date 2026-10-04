@@ -221,16 +221,8 @@ fn parse_json_vars(output: &str) -> HashMap<String, String> {
     vars
 }
 
-/// 渲染模板并 POST JSON 到 Hook URL。2xx 视为成功。
-pub async fn send_to_hook(
-    logger: &Logger,
-    hooks: &HooksConfig,
-    payload: &HookPayload,
-) -> Result<(), String> {
-    if hooks.url.trim().is_empty() {
-        return Err("Hook URL 未配置".to_string());
-    }
-
+/// 渲染模板为最终 body(含 clean pass)。发送与确认预览共用。
+pub fn render_body(hooks: &HooksConfig, payload: &HookPayload) -> Result<String, String> {
     let mut vars: HashMap<&str, String> = HashMap::new();
     vars.insert("raw", payload.raw.clone());
     vars.insert("text", payload.text.clone());
@@ -246,13 +238,17 @@ pub async fn send_to_hook(
     let mut json: serde_json::Value = serde_json::from_str(&body)
         .map_err(|e| format!("模板渲染结果不是合法 JSON: {} | body={}", e, body))?;
     clean_json(&mut json);
-    let body = serde_json::to_string(&json).unwrap_or_else(|_| body.clone());
+    Ok(serde_json::to_string(&json).unwrap_or_else(|_| body.clone()))
+}
 
+/// POST 已渲染 body 到 Hook URL。2xx 视为成功。
+pub async fn post_body(logger: &Logger, hooks: &HooksConfig, body: &str) -> Result<(), String> {
     let client = reqwest::Client::new();
     let mut req = client
         .post(hooks.url.trim())
         .timeout(std::time::Duration::from_secs(SEND_TIMEOUT_SECS))
-        .json(&json);
+        .header("Content-Type", "application/json")
+        .body(body.to_string());
     for (k, v) in parse_headers(&hooks.headers) {
         req = req.header(&k, &v);
     }
@@ -279,6 +275,19 @@ pub async fn send_to_hook(
     Ok(())
 }
 
+/// 渲染模板并 POST JSON 到 Hook URL。2xx 视为成功。
+pub async fn send_to_hook(
+    logger: &Logger,
+    hooks: &HooksConfig,
+    payload: &HookPayload,
+) -> Result<(), String> {
+    if hooks.url.trim().is_empty() {
+        return Err("Hook URL 未配置".to_string());
+    }
+    let body = render_body(hooks, payload)?;
+    post_body(logger, hooks, &body).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -286,6 +295,35 @@ mod tests {
 
     fn vars<'a>(pairs: &'a [(&'a str, &'a str)]) -> HashMap<&'a str, String> {
         pairs.iter().map(|(k, v)| (*k, v.to_string())).collect()
+    }
+
+    #[test]
+    fn render_body_combines_vars_and_clean() {
+        let hooks = HooksConfig {
+            enabled: true,
+            url: String::new(),
+            headers: String::new(),
+            body_template:
+                "{\"title\":\"{{title}}\",\"content\":\"{{text}}\",\"due\":\"{{dueDate}}\"}"
+                    .to_string(),
+            prompt: String::new(),
+            skill_ids: Vec::new(),
+        };
+        let mut vars = HashMap::new();
+        vars.insert("title".to_string(), "买牛奶".to_string());
+        // dueDate 缺失 → 占位符字段应被清理
+        let payload = HookPayload {
+            raw: "记录 买牛奶".to_string(),
+            text: "买牛奶".to_string(),
+            app: "Safari".to_string(),
+            vars,
+        };
+        let body = render_body(&hooks, &payload).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let obj = v.as_object().unwrap();
+        assert_eq!(obj.get("title").unwrap(), "买牛奶");
+        assert_eq!(obj.get("content").unwrap(), "买牛奶");
+        assert!(!obj.contains_key("due"));
     }
 
     #[test]

@@ -14,7 +14,24 @@
 
   let { children }: { children: Snippet } = $props();
 
+  // 窗口身份:review 校对浮窗免侧栏/引导,只渲染页面本体
+  function windowLabel(): string {
+    try {
+      return getCurrentWindow().label;
+    } catch {
+      return 'main';
+    }
+  }
+  const label = windowLabel();
+
   let isLoading = $state(true);
+
+  // review 窗口固定导航到校对页(SPA 初始路由是 /)
+  onMount(() => {
+    if (label === 'review' && $page.url.pathname !== '/review') {
+      goto('/review');
+    }
+  });
 
   onMount(() => {
     onboarding.load().then(() => {
@@ -51,7 +68,9 @@
   }
 </script>
 
-{#if isLoading}
+{#if label === 'review'}
+  {@render children()}
+{:else if isLoading}
   <div class="flex h-screen w-screen items-center justify-center bg-background">
     <div class="text-muted-foreground text-body">加载中...</div>
   </div>

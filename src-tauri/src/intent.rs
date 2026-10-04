@@ -35,6 +35,8 @@ pub struct IntentDecision {
     pub text: String,
     /// translate 且模型在同一次调用中完成翻译时的译文
     pub result: Option<String>,
+    /// 歧义候选 kinds(仅 "hook"/"ask";已过滤主意图同名/translate/未知/被禁用)
+    pub alternatives: Vec<String>,
 }
 
 impl IntentDecision {
@@ -43,6 +45,7 @@ impl IntentDecision {
             intent: Intent::Transcribe,
             text: text.into(),
             result: None,
+            alternatives: Vec::new(),
         }
     }
 }
@@ -54,6 +57,7 @@ struct RawDecision {
     target_lang: String,
     text: String,
     result: Option<String>,
+    alternatives: Vec<String>,
 }
 
 /// 意图路由指令块,拼在 skills 基础 prompt 之后(全部意图启用)
@@ -76,7 +80,8 @@ pub fn intent_instruction_disabled(disabled: &[String]) -> String {
     );
     let mut rules: Vec<String> =
         vec!["指令必须出现在文本开头才有效;文本中部或结尾出现的指令词不算".to_string()];
-    let mut outputs: Vec<&str> = vec!["{\"intent\":\"transcribe\",\"text\":\"润色后的正文\"}"];
+    let mut outputs: Vec<&str> =
+        vec!["{\"intent\":\"transcribe\",\"text\":\"润色后的正文\",\"alternatives\":[]}"];
     let mut extra = String::new();
 
     if on("translate") {
@@ -106,6 +111,9 @@ pub fn intent_instruction_disabled(disabled: &[String]) -> String {
         outputs.push("{\"intent\":\"hook\",\"text\":\"剥离指令后的内容\"}");
     }
 
+    rules.push(
+        "开头无明确指令、但句意可能指向记录或问询(如\"这个值得记一下\"),intent 判为 \"transcribe\",同时把可能的意图加入 alternatives 数组(如 [\"hook\"] 或 [\"ask\"]);开头有明确指令时 alternatives 为空数组或省略".to_string(),
+    );
     rules.push("有歧义或不确定时,intent 用 \"transcribe\"".to_string());
     rules.push("无指令时 intent 用 \"transcribe\",text 正常应用上方全部润色规则".to_string());
 
@@ -140,7 +148,7 @@ pub fn parse_llm_output_disabled(raw: &str, disabled: &[String]) -> IntentDecisi
         d.text
     };
 
-    let decision = match d.intent.trim() {
+    let mut decision = match d.intent.trim() {
         "translate" => {
             let lang = d.target_lang.trim().to_string();
             if lang.is_empty() {
@@ -151,6 +159,7 @@ pub fn parse_llm_output_disabled(raw: &str, disabled: &[String]) -> IntentDecisi
                     intent: Intent::Translate { target_lang: lang },
                     text,
                     result: d.result.filter(|r| !r.trim().is_empty()),
+                    alternatives: Vec::new(),
                 }
             }
         }
@@ -158,14 +167,17 @@ pub fn parse_llm_output_disabled(raw: &str, disabled: &[String]) -> IntentDecisi
             intent: Intent::Ask,
             text,
             result: d.result.filter(|r| !r.trim().is_empty()),
+            alternatives: Vec::new(),
         },
         "hook" => IntentDecision {
             intent: Intent::Hook,
             text,
             result: None,
+            alternatives: Vec::new(),
         },
         _ => IntentDecision::passthrough(text),
     };
+    decision.alternatives = filter_alternatives(&d.alternatives, &decision.intent, disabled);
     let kind = match &decision.intent {
         Intent::Translate { .. } => "translate",
         Intent::Ask => "ask",
@@ -186,6 +198,28 @@ fn extract_json(raw: &str) -> Option<&str> {
         return None;
     }
     Some(&raw[start..=end])
+}
+
+/// 过滤 LLM 报告的歧义候选:只留 hook/ask,去重,剔除与主意图同 kind 及被禁用 kind;
+/// translate 缺语言参数不参与歧义候选,直接忽略
+fn filter_alternatives(raw: &[String], primary: &Intent, disabled: &[String]) -> Vec<String> {
+    let primary_kind = match primary {
+        Intent::Transcribe | Intent::Translate { .. } => "paste",
+        Intent::Ask => "ask",
+        Intent::Hook => "hook",
+    };
+    let mut out: Vec<String> = Vec::new();
+    for a in raw {
+        let a = a.trim();
+        if (a == "hook" || a == "ask")
+            && a != primary_kind
+            && !disabled.iter().any(|d| d == a)
+            && !out.iter().any(|x| x == a)
+        {
+            out.push(a.to_string());
+        }
+    }
+    out
 }
 
 /// 语义路由入口。
@@ -515,5 +549,55 @@ mod tests {
             &["translate".to_string()],
         );
         assert_eq!(d.intent, Intent::Ask);
+    }
+
+    #[test]
+    fn parse_alternatives_field() {
+        let d = parse_llm_output(
+            r#"{"intent":"transcribe","text":"这条内容值得被记录下来","alternatives":["hook"]}"#,
+        );
+        assert_eq!(d.intent, Intent::Transcribe);
+        assert_eq!(d.alternatives, vec!["hook".to_string()]);
+    }
+
+    #[test]
+    fn parse_alternatives_filters_translate_and_unknown() {
+        let d = parse_llm_output(
+            r#"{"intent":"transcribe","text":"帮我看看","alternatives":["translate","open_url","ask","ask"]}"#,
+        );
+        assert_eq!(d.alternatives, vec!["ask".to_string()]);
+    }
+
+    #[test]
+    fn parse_alternatives_drops_primary_kind() {
+        let d = parse_llm_output(
+            r#"{"intent":"hook","text":"明天开会","alternatives":["hook","ask"]}"#,
+        );
+        assert_eq!(d.intent, Intent::Hook);
+        assert_eq!(d.alternatives, vec!["ask".to_string()]);
+    }
+
+    #[test]
+    fn parse_without_alternatives_is_empty() {
+        let d = parse_llm_output(r#"{"intent":"transcribe","text":"你好"}"#);
+        assert!(d.alternatives.is_empty());
+    }
+
+    #[test]
+    fn disabled_alternative_kind_is_dropped() {
+        let d = parse_llm_output_disabled(
+            r#"{"intent":"transcribe","text":"值得记录","alternatives":["hook"]}"#,
+            &["hook".to_string()],
+        );
+        assert_eq!(d.intent, Intent::Transcribe);
+        assert!(d.alternatives.is_empty());
+    }
+
+    #[test]
+    fn intent_instruction_mentions_alternatives() {
+        let s = intent_instruction();
+        assert!(s.contains("alternatives"));
+        // 输出示例必须教模型空数组写法(省略/空皆可的契约)
+        assert!(s.contains("\"alternatives\":[]"));
     }
 }
