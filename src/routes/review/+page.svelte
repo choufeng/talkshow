@@ -156,6 +156,8 @@
   }
 
   onMount(() => {
+    // 透明窗口:body 不画背景,由内容卡片自绘(圆角+阴影)
+    document.body.style.backgroundColor = 'transparent';
     (async () => {
       try {
         const r = await invoke<ReviewRequest | null>('review_get');
@@ -216,7 +218,14 @@
   });
 </script>
 
-<div class="flex h-screen w-screen flex-col bg-background text-foreground shadow-popover">
+<div class="h-screen w-screen">
+{#if !req}
+  <div class="flex h-full w-full items-center justify-center rounded-xl bg-background text-body text-muted-foreground shadow-popover">
+    没有待确认的内容
+  </div>
+{:else}
+  {#key req.id}
+  <div class="review-pop flex h-full w-full flex-col rounded-xl bg-background text-foreground shadow-popover">
   <!-- 标题栏(拖动区) -->
   <div class="flex items-center justify-between border-b border-border px-4 py-3" data-tauri-drag-region>
     <div class="flex items-center gap-2 text-[15px] font-semibold">
@@ -232,11 +241,6 @@
     </button>
   </div>
 
-  {#if !req}
-    <div class="flex flex-1 items-center justify-center text-body text-muted-foreground">
-      没有待确认的内容
-    </div>
-  {:else}
     <div class="flex flex-1 flex-col gap-4 overflow-y-auto p-4">
       <!-- 原始转写(折叠) -->
       <div>
@@ -401,5 +405,24 @@
         </button>
       </div>
     </div>
-  {/if}
+  </div>
+  {/key}
+{/if}
 </div>
+
+<style>
+  /* Dock 式展开:从录音指示条(窗口底部下方)方向放大长出 */
+  .review-pop {
+    animation: review-pop 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+    transform-origin: 50% calc(100% + 14px);
+  }
+  @keyframes review-pop {
+    from {
+      transform: scale(0.22);
+      opacity: 0;
+    }
+    40% {
+      opacity: 1;
+    }
+  }
+</style>

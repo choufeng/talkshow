@@ -158,7 +158,7 @@ describe('review 浮窗页', () => {
     const ta = screen.getByRole('textbox') as HTMLTextAreaElement;
     ta.focus();
     ta.setSelectionRange(0, 4); // 选中「原始内容」
-    insertCb?.({ payload: { text: '新内容' } });
+    (insertCb as unknown as (e: { payload: { text: string } }) => void)?.({ payload: { text: '新内容' } });
     await waitFor(() => expect(screen.getByDisplayValue('新内容待替换')).toBeTruthy());
   });
 });

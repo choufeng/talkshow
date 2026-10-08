@@ -59,6 +59,10 @@ pub struct ReviewConfirm {
     pub target_lang: Option<String>,
 }
 
+/// review 窗最小尺寸(builder 约束与 Dock 展开动画结束后恢复共用)
+const REVIEW_MIN_W: f64 = 480.0;
+const REVIEW_MIN_H: f64 = 420.0;
+
 #[derive(Default)]
 pub struct ReviewState {
     pub current: Mutex<Option<ReviewRequest>>,
@@ -108,20 +112,72 @@ pub fn open_review(h: &AppHandle, req: ReviewRequest) {
             let _ = w.set_focus();
         }
         None => {
+            // 透明窗口:内容层(圆角卡片+CSS 阴影)自绘,展开动画在前端 CSS 完成,
+            // 窗口 frame 永不动画(WKWebView 对 frame 动画/压缩敏感,会渲染挂起白屏)
             let _ = WebviewWindowBuilder::new(h, "review", WebviewUrl::App("index.html".into()))
                 .title("校对与发送")
                 .inner_size(560.0, 580.0)
-                .min_inner_size(480.0, 420.0)
+                .min_inner_size(REVIEW_MIN_W, REVIEW_MIN_H)
                 .decorations(false)
                 .always_on_top(true)
                 .resizable(true)
                 .skip_taskbar(true)
-                .shadow(true)
+                .transparent(true)
+                .shadow(false)
                 .focused(true)
                 .build();
         }
     }
+    // macOS:定位到录音指示条正上方居中(动效由前端 CSS 展开)
+    #[cfg(target_os = "macos")]
+    position_near_indicator(h);
     let _ = h.emit("review:open", &req);
+}
+
+/// macOS 定位:review 窗水平居中于录音指示条正上方(clamp 主屏可视区)。
+/// 坐标换算:AppKit(左下原点,y 向上) → Tauri Logical(左上原点,y 向下)。
+#[cfg(target_os = "macos")]
+fn position_near_indicator(h: &AppHandle) {
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::NSScreen;
+    use tauri::{LogicalPosition, Manager};
+
+    let h = h.clone();
+    let h_run = h.clone();
+    let _ = h_run.run_on_main_thread(move || {
+        let Some(mtm) = MainThreadMarker::new() else {
+            return;
+        };
+        let Some(tw) = h.get_webview_window("review") else {
+            return;
+        };
+        let anchor = crate::macos::indicator_panel::anchor_frame(mtm);
+        let Some(screen) = NSScreen::mainScreen(mtm) else {
+            return;
+        };
+        let sf = screen.frame();
+        let vf = screen.visibleFrame();
+
+        // Tauri 逻辑尺寸(outer_size 为物理像素)
+        let scale = tw.scale_factor().unwrap_or(1.0);
+        let size = tw.outer_size().unwrap_or_default();
+        let lw = size.width as f64 / scale;
+        let lh = size.height as f64 / scale;
+
+        // 水平:指示条水平中心,clamp 可视区
+        let cx = anchor.origin.x + anchor.size.width / 2.0;
+        let x = (cx - lw / 2.0).clamp(
+            vf.origin.x,
+            (vf.origin.x + vf.size.width - lw).max(vf.origin.x),
+        );
+        // 垂直:指示条上方 10pt,超高顶到可视区顶
+        let top_appkit = (anchor.origin.y + anchor.size.height + 10.0)
+            .min(vf.origin.y + vf.size.height - lh)
+            .max(vf.origin.y);
+        // AppKit y(窗口底边) → Tauri y(窗口顶边,屏幕顶为 0)
+        let y = (sf.origin.y + sf.size.height) - (top_appkit + lh);
+        let _ = tw.set_position(tauri::Position::Logical(LogicalPosition::new(x, y)));
+    });
 }
 
 fn write_history(h: &AppHandle, mode: &str, req: &ReviewRequest, final_text: &str) {
