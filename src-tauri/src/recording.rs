@@ -318,7 +318,15 @@ impl AudioRecorder {
                     "Microphone has no supported input configurations".into(),
                 ))?;
 
-        let config: cpal::StreamConfig = supported_config.with_max_sample_rate().into();
+        // 目标 16kHz：SenseVoice 原生采样率，转写零重采样；FLAC 体积 ~1/6。
+        // 设备不支持 16k 时取最近支持值，转写端 resample_to_16k 兜底。
+        let min_rate = supported_config.min_sample_rate().0;
+        let max_rate = supported_config.max_sample_rate().0;
+        let config = cpal::StreamConfig {
+            channels: supported_config.channels(),
+            sample_rate: cpal::SampleRate(16000.clamp(min_rate, max_rate)),
+            buffer_size: cpal::BufferSize::Default,
+        };
         let buffer: Arc<Mutex<Vec<i16>>> = Arc::new(Mutex::new(Vec::new()));
 
         let sample_format = supported_config.sample_format();
