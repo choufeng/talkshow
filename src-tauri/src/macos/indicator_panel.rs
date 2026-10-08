@@ -954,6 +954,38 @@ fn set_phase(app: &AppHandle, phase: Phase) -> u64 {
     seq
 }
 
+/// 校对浮窗展开锚点:当前指示条 frame(AppKit 逻辑点,y 向上;须主线程)。
+/// 面板未创建/隐藏时兜底主屏底部居中胶囊(与 Recording 相位同规格)。
+pub fn anchor_frame(mtm: MainThreadMarker) -> NSRect {
+    let live = PANEL.lock().ok().and_then(|g| {
+        let p = g.as_ref()?;
+        // SAFETY: 仅主线程访问,常驻指针
+        unsafe {
+            let panel = Retained::retain(p.panel)?;
+            if panel.isVisible() {
+                Some(panel.frame())
+            } else {
+                None
+            }
+        }
+    });
+    live.unwrap_or_else(|| {
+        let f = NSScreen::mainScreen(mtm)
+            .map(|s| unsafe { s.frame() })
+            .unwrap_or(NSRect::new(
+                NSPoint::new(0.0, 0.0),
+                NSSize::new(1440.0, 900.0),
+            ));
+        NSRect::new(
+            NSPoint::new(
+                f.origin.x + (f.size.width - 122.0) / 2.0,
+                f.origin.y + BOTTOM_MARGIN,
+            ),
+            NSSize::new(122.0, PANEL_H),
+        )
+    })
+}
+
 pub fn show_recording(app: &AppHandle) {
     set_phase(app, Phase::Recording);
 }

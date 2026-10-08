@@ -59,6 +59,10 @@ pub struct ReviewConfirm {
     pub target_lang: Option<String>,
 }
 
+/// review 窗最小尺寸(builder 约束与 Dock 展开动画结束后恢复共用)
+const REVIEW_MIN_W: f64 = 480.0;
+const REVIEW_MIN_H: f64 = 420.0;
+
 #[derive(Default)]
 pub struct ReviewState {
     pub current: Mutex<Option<ReviewRequest>>,
@@ -103,25 +107,125 @@ pub fn open_review(h: &AppHandle, req: ReviewRequest) {
     crate::indicator::show_review(h);
 
     match h.get_webview_window("review") {
-        Some(w) => {
-            let _ = w.show();
-            let _ = w.set_focus();
+        Some(_w) => {
+            #[cfg(not(target_os = "macos"))]
+            {
+                let _ = _w.show();
+                let _ = _w.set_focus();
+            }
         }
         None => {
-            let _ = WebviewWindowBuilder::new(h, "review", WebviewUrl::App("index.html".into()))
-                .title("校对与发送")
-                .inner_size(560.0, 580.0)
-                .min_inner_size(480.0, 420.0)
-                .decorations(false)
-                .always_on_top(true)
-                .resizable(true)
-                .skip_taskbar(true)
-                .shadow(true)
-                .focused(true)
-                .build();
+            #[allow(unused_mut)]
+            let mut b =
+                WebviewWindowBuilder::new(h, "review", WebviewUrl::App("index.html".into()))
+                    .title("校对与发送")
+                    .inner_size(560.0, 580.0)
+                    .min_inner_size(REVIEW_MIN_W, REVIEW_MIN_H)
+                    .decorations(false)
+                    .always_on_top(true)
+                    .resizable(true)
+                    .skip_taskbar(true)
+                    .shadow(true)
+                    .focused(true);
+            // macOS 由 Dock 展开动画负责定位+显示,建窗先不可见避免默认位置闪帧
+            #[cfg(target_os = "macos")]
+            {
+                b = b.visible(false);
+            }
+            let _ = b.build();
         }
     }
+    // macOS:贴指示条上方居中 + Dock 式展开动效;其余平台走默认显示
+    #[cfg(target_os = "macos")]
+    animate_open(h);
     let _ = h.emit("review:open", &req);
+}
+
+/// macOS 打开动效:锚定录音指示条,先瞬移到指示条位置,再以 animator
+/// setFrame 从胶囊尺寸展开到目标 frame(等效 Dock 点击展开)。同时完成
+/// 贴近指示条的定位(正上方居中,clamp 可视区)。
+#[cfg(target_os = "macos")]
+fn animate_open(h: &AppHandle) {
+    use objc2::rc::Retained;
+    use objc2::runtime::AnyObject;
+    use objc2::{MainThreadMarker, msg_send};
+    use objc2_app_kit::{NSAnimationContext, NSScreen, NSWindow};
+    use objc2_foundation::{NSPoint, NSRect, NSSize};
+    use objc2_quartz_core::{CAMediaTimingFunction, kCAMediaTimingFunctionEaseOut};
+
+    let h = h.clone();
+    let h_run = h.clone();
+    let _ = h_run.run_on_main_thread(move || {
+        let Some(mtm) = MainThreadMarker::new() else {
+            return;
+        };
+        let Some(tw) = h.get_webview_window("review") else {
+            return;
+        };
+        let Ok(ptr) = tw.ns_window() else {
+            return;
+        };
+        // SAFETY: NSWindow 由 Tauri 持有,与 WebviewWindow 同生命周期
+        let nsw: &NSWindow = unsafe { &*(ptr as *const NSWindow) };
+
+        // 锚点 = 录音指示条;目标 = 指示条正上方居中(clamp 主屏可视区内)
+        let anchor = crate::macos::indicator_panel::anchor_frame(mtm);
+        let cur = nsw.frame();
+        let (rw, rh) = (cur.size.width, cur.size.height);
+        let Some(screen) = NSScreen::mainScreen(mtm) else {
+            return;
+        };
+        let vf = screen.visibleFrame();
+        let cx = anchor.origin.x + anchor.size.width / 2.0;
+        let x = (cx - rw / 2.0).clamp(
+            vf.origin.x,
+            (vf.origin.x + vf.size.width - rw).max(vf.origin.x),
+        );
+        let y = (anchor.origin.y + anchor.size.height + 10.0)
+            .min(vf.origin.y + vf.size.height - rh)
+            .max(vf.origin.y);
+        let target = NSRect::new(NSPoint::new(x, y), NSSize::new(rw, rh));
+
+        unsafe {
+            // 展开起点(指示条尺寸)小于窗口最小尺寸约束,先放开,动画结束后恢复
+            nsw.setContentMinSize(NSSize::new(0.0, 0.0));
+            // 无动画瞬移到指示条位置(不可见时无闪烁;复用时等效重新长出)
+            NSAnimationContext::beginGrouping();
+            NSAnimationContext::currentContext().setDuration(0.0);
+            let proxy: Retained<AnyObject> = msg_send![nsw, animator];
+            let _: () = msg_send![&*proxy, setFrame: anchor, display: false];
+            NSAnimationContext::endGrouping();
+
+            nsw.makeKeyAndOrderFront(None);
+
+            // Dock 式展开:指示条胶囊 → 目标 frame(320ms ease-out)
+            let ease = CAMediaTimingFunction::functionWithName(kCAMediaTimingFunctionEaseOut);
+            NSAnimationContext::beginGrouping();
+            let ctx = NSAnimationContext::currentContext();
+            ctx.setDuration(0.32);
+            ctx.setTimingFunction(Some(&ease));
+            let proxy: Retained<AnyObject> = msg_send![nsw, animator];
+            let _: () = msg_send![&*proxy, setFrame: target, display: true];
+            NSAnimationContext::endGrouping();
+        }
+
+        // 恢复最小尺寸约束(不能提前恢复:动画中间帧会被 min clamp 住)
+        let h2 = h.clone();
+        let h2_run = h2.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(420));
+            let _ = h2_run.run_on_main_thread(move || {
+                let Some(tw) = h2.get_webview_window("review") else {
+                    return;
+                };
+                let Ok(ptr) = tw.ns_window() else {
+                    return;
+                };
+                let nsw: &NSWindow = unsafe { &*(ptr as *const NSWindow) };
+                nsw.setContentMinSize(NSSize::new(REVIEW_MIN_W, REVIEW_MIN_H));
+            });
+        });
+    });
 }
 
 fn write_history(h: &AppHandle, mode: &str, req: &ReviewRequest, final_text: &str) {

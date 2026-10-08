@@ -54,7 +54,7 @@ home = "0.5"
 objc2 = "0.6"
 objc2-app-kit = "0.3"
 objc2-foundation = { version = "0.3", features = ["NSString", "NSGeometry", "NSTimer"] }
-objc2-quartz-core = { version = "0.3", features = ["CALayer", "CABase", "CATransaction"] }
+objc2-quartz-core = { version = "0.3", features = ["CALayer", "CABase", "CATransaction", "CAMediaTimingFunction"] }
 objc2-core-graphics = { version = "0.3", features = ["CGColor"] }
 objc2-core-foundation = "0.3"
 
