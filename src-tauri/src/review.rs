@@ -189,13 +189,12 @@ fn animate_open(h: &AppHandle) {
         unsafe {
             // 展开起点(指示条尺寸)小于窗口最小尺寸约束,先放开,动画结束后恢复
             nsw.setContentMinSize(NSSize::new(0.0, 0.0));
-            // 无动画瞬移到指示条位置(不可见时无闪烁;复用时等效重新长出)
-            NSAnimationContext::beginGrouping();
-            NSAnimationContext::currentContext().setDuration(0.0);
-            let proxy: Retained<AnyObject> = msg_send![nsw, animator];
-            let _: () = msg_send![&*proxy, setFrame: anchor, display: false];
-            NSAnimationContext::endGrouping();
+            // 无动画瞬移到指示条位置(此时窗口仍隐藏,无闪烁;复用时等效重新长出)
+            nsw.setFrame_display(anchor, false);
 
+            // 走 Tauri 正规显示路径:同步 WRY webview 可见状态,
+            // 否则 hidden 建窗后直接 NSWindow 显示会导致 webview 不渲染(白屏)
+            let _ = tw.show();
             nsw.makeKeyAndOrderFront(None);
 
             // Dock 式展开:指示条胶囊 → 目标 frame(320ms ease-out)
