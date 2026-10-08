@@ -85,14 +85,19 @@
     }
   }
 
+  function scrollToBottom() {
+    if (!logContainer) return;
+    requestAnimationFrame(() => {
+      logContainer!.scrollTop = logContainer!.scrollHeight;
+    });
+  }
+
   async function pollCurrentLog() {
     const newEntries = await invokeWithError<LogEntry[]>('get_log_content', { sessionFile: null }) ?? [];
     if (newEntries.length !== entries.length) {
       entries = newEntries;
-      if (!isUserScrolledUp && logContainer) {
-        requestAnimationFrame(() => {
-          logContainer!.scrollTop = logContainer!.scrollHeight;
-        });
+      if (!isUserScrolledUp) {
+        scrollToBottom();
       }
     }
   }
@@ -123,6 +128,7 @@
     loading = true;
     entries = await invokeWithError<LogEntry[]>('get_log_content', { sessionFile: null }) ?? [];
     loading = false;
+    scrollToBottom();
   }
 
   async function loadSessionLog(filename: string) {
@@ -130,6 +136,7 @@
     selectedSession = filename;
     entries = await invokeWithError<LogEntry[]>('get_log_content', { sessionFile: filename }) ?? [];
     loading = false;
+    scrollToBottom();
   }
 
   async function switchTab(tab: 'current' | 'history') {
