@@ -107,16 +107,13 @@ pub fn open_review(h: &AppHandle, req: ReviewRequest) {
     crate::indicator::show_review(h);
 
     match h.get_webview_window("review") {
-        Some(_w) => {
-            #[cfg(not(target_os = "macos"))]
-            {
-                let _ = _w.show();
-                let _ = _w.set_focus();
-            }
+        Some(w) => {
+            let _ = w.show();
+            let _ = w.set_focus();
         }
         None => {
-            // 保持默认 visible 建窗:hidden 建窗 + NSWindow 直显会导致 WRY webview
-            // 不渲染(白屏),宁可首建闪一帧默认位置,由 animate_open 瞬移接管
+            // 透明窗口:内容层(圆角卡片+CSS 阴影)自绘,展开动画在前端 CSS 完成,
+            // 窗口 frame 永不动画(WKWebView 对 frame 动画/压缩敏感,会渲染挂起白屏)
             let _ = WebviewWindowBuilder::new(h, "review", WebviewUrl::App("index.html".into()))
                 .title("校对与发送")
                 .inner_size(560.0, 580.0)
@@ -125,28 +122,25 @@ pub fn open_review(h: &AppHandle, req: ReviewRequest) {
                 .always_on_top(true)
                 .resizable(true)
                 .skip_taskbar(true)
-                .shadow(true)
+                .transparent(true)
+                .shadow(false)
                 .focused(true)
                 .build();
         }
     }
-    // macOS:贴指示条上方居中 + Dock 式展开动效;其余平台走默认显示
+    // macOS:定位到录音指示条正上方居中(动效由前端 CSS 展开)
     #[cfg(target_os = "macos")]
-    animate_open(h);
+    position_near_indicator(h);
     let _ = h.emit("review:open", &req);
 }
 
-/// macOS 打开动效:锚定录音指示条,先瞬移到指示条位置,再以 animator
-/// setFrame 从胶囊尺寸展开到目标 frame(等效 Dock 点击展开)。同时完成
-/// 贴近指示条的定位(正上方居中,clamp 可视区)。
+/// macOS 定位:review 窗水平居中于录音指示条正上方(clamp 主屏可视区)。
+/// 坐标换算:AppKit(左下原点,y 向上) → Tauri Logical(左上原点,y 向下)。
 #[cfg(target_os = "macos")]
-fn animate_open(h: &AppHandle) {
-    use objc2::rc::Retained;
-    use objc2::runtime::AnyObject;
-    use objc2::{MainThreadMarker, msg_send};
-    use objc2_app_kit::{NSAnimationContext, NSScreen, NSWindow};
-    use objc2_foundation::{NSPoint, NSRect, NSSize};
-    use objc2_quartz_core::{CAMediaTimingFunction, kCAMediaTimingFunctionEaseOut};
+fn position_near_indicator(h: &AppHandle) {
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::NSScreen;
+    use tauri::{LogicalPosition, Manager};
 
     let h = h.clone();
     let h_run = h.clone();
@@ -157,74 +151,32 @@ fn animate_open(h: &AppHandle) {
         let Some(tw) = h.get_webview_window("review") else {
             return;
         };
-        let Ok(ptr) = tw.ns_window() else {
-            return;
-        };
-        // SAFETY: NSWindow 由 Tauri 持有,与 WebviewWindow 同生命周期
-        let nsw: &NSWindow = unsafe { &*(ptr as *const NSWindow) };
-
-        // 锚点 = 录音指示条;目标 = 指示条正上方居中(clamp 主屏可视区内)
         let anchor = crate::macos::indicator_panel::anchor_frame(mtm);
-        let cur = nsw.frame();
-        let (rw, rh) = (cur.size.width, cur.size.height);
         let Some(screen) = NSScreen::mainScreen(mtm) else {
             return;
         };
+        let sf = screen.frame();
         let vf = screen.visibleFrame();
+
+        // Tauri 逻辑尺寸(outer_size 为物理像素)
+        let scale = tw.scale_factor().unwrap_or(1.0);
+        let size = tw.outer_size().unwrap_or_default();
+        let lw = size.width as f64 / scale;
+        let lh = size.height as f64 / scale;
+
+        // 水平:指示条水平中心,clamp 可视区
         let cx = anchor.origin.x + anchor.size.width / 2.0;
-        let x = (cx - rw / 2.0).clamp(
+        let x = (cx - lw / 2.0).clamp(
             vf.origin.x,
-            (vf.origin.x + vf.size.width - rw).max(vf.origin.x),
+            (vf.origin.x + vf.size.width - lw).max(vf.origin.x),
         );
-        let y = (anchor.origin.y + anchor.size.height + 10.0)
-            .min(vf.origin.y + vf.size.height - rh)
+        // 垂直:指示条上方 10pt,超高顶到可视区顶
+        let top_appkit = (anchor.origin.y + anchor.size.height + 10.0)
+            .min(vf.origin.y + vf.size.height - lh)
             .max(vf.origin.y);
-        let target = NSRect::new(NSPoint::new(x, y), NSSize::new(rw, rh));
-
-        // 首建判定:show 前窗口已可见 = 本轮刚 build(默认可见建窗)
-        let first_open = tw.is_visible().unwrap_or(true);
-        let _ = tw.show();
-        unsafe {
-            nsw.makeKeyAndOrderFront(None);
-
-            if first_open {
-                // 首建:webview 首帧尚未完成,把窗口压到指示条尺寸再展开会让
-                // WebContent 首次布局发生在压缩态 → 渲染挂起(DOM 在但不 paint)。
-                // 仅做同尺寸移动(渲染安全),内容自然出现
-                nsw.setFrame_display(target, true);
-                return;
-            }
-
-            // 复用:webview 已渲染过,完整 Dock 式展开。
-            // 展开起点(指示条尺寸)小于最小尺寸约束,先放开,动画结束后恢复
-            nsw.setContentMinSize(NSSize::new(0.0, 0.0));
-            nsw.setFrame_display(anchor, false);
-            let ease = CAMediaTimingFunction::functionWithName(kCAMediaTimingFunctionEaseOut);
-            NSAnimationContext::beginGrouping();
-            let ctx = NSAnimationContext::currentContext();
-            ctx.setDuration(0.32);
-            ctx.setTimingFunction(Some(&ease));
-            let proxy: Retained<AnyObject> = msg_send![nsw, animator];
-            let _: () = msg_send![&*proxy, setFrame: target, display: true];
-            NSAnimationContext::endGrouping();
-        }
-
-        // 恢复最小尺寸约束(不能提前恢复:动画中间帧会被 min clamp 住)
-        let h2 = h.clone();
-        let h2_run = h2.clone();
-        std::thread::spawn(move || {
-            std::thread::sleep(std::time::Duration::from_millis(420));
-            let _ = h2_run.run_on_main_thread(move || {
-                let Some(tw) = h2.get_webview_window("review") else {
-                    return;
-                };
-                let Ok(ptr) = tw.ns_window() else {
-                    return;
-                };
-                let nsw: &NSWindow = unsafe { &*(ptr as *const NSWindow) };
-                nsw.setContentMinSize(NSSize::new(REVIEW_MIN_W, REVIEW_MIN_H));
-            });
-        });
+        // AppKit y(窗口底边) → Tauri y(窗口顶边,屏幕顶为 0)
+        let y = (sf.origin.y + sf.size.height) - (top_appkit + lh);
+        let _ = tw.set_position(tauri::Position::Logical(LogicalPosition::new(x, y)));
     });
 }
 
