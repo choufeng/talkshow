@@ -181,18 +181,24 @@ fn animate_open(h: &AppHandle) {
             .max(vf.origin.y);
         let target = NSRect::new(NSPoint::new(x, y), NSSize::new(rw, rh));
 
+        // 首建判定:show 前窗口已可见 = 本轮刚 build(默认可见建窗)
+        let first_open = tw.is_visible().unwrap_or(true);
+        let _ = tw.show();
         unsafe {
-            // 展开起点(指示条尺寸)小于窗口最小尺寸约束,先放开,动画结束后恢复
-            nsw.setContentMinSize(NSSize::new(0.0, 0.0));
-            // 无动画瞬移到指示条位置(此时窗口仍隐藏,无闪烁;复用时等效重新长出)
-            nsw.setFrame_display(anchor, false);
-
-            // 走 Tauri 正规显示路径:同步 WRY webview 可见状态,
-            // 否则 hidden 建窗后直接 NSWindow 显示会导致 webview 不渲染(白屏)
-            let _ = tw.show();
             nsw.makeKeyAndOrderFront(None);
 
-            // Dock 式展开:指示条胶囊 → 目标 frame(320ms ease-out)
+            if first_open {
+                // 首建:webview 首帧尚未完成,把窗口压到指示条尺寸再展开会让
+                // WebContent 首次布局发生在压缩态 → 渲染挂起(DOM 在但不 paint)。
+                // 仅做同尺寸移动(渲染安全),内容自然出现
+                nsw.setFrame_display(target, true);
+                return;
+            }
+
+            // 复用:webview 已渲染过,完整 Dock 式展开。
+            // 展开起点(指示条尺寸)小于最小尺寸约束,先放开,动画结束后恢复
+            nsw.setContentMinSize(NSSize::new(0.0, 0.0));
+            nsw.setFrame_display(anchor, false);
             let ease = CAMediaTimingFunction::functionWithName(kCAMediaTimingFunctionEaseOut);
             NSAnimationContext::beginGrouping();
             let ctx = NSAnimationContext::currentContext();
