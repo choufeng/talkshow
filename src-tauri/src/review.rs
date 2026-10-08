@@ -115,24 +115,19 @@ pub fn open_review(h: &AppHandle, req: ReviewRequest) {
             }
         }
         None => {
-            #[allow(unused_mut)]
-            let mut b =
-                WebviewWindowBuilder::new(h, "review", WebviewUrl::App("index.html".into()))
-                    .title("校对与发送")
-                    .inner_size(560.0, 580.0)
-                    .min_inner_size(REVIEW_MIN_W, REVIEW_MIN_H)
-                    .decorations(false)
-                    .always_on_top(true)
-                    .resizable(true)
-                    .skip_taskbar(true)
-                    .shadow(true)
-                    .focused(true);
-            // macOS 由 Dock 展开动画负责定位+显示,建窗先不可见避免默认位置闪帧
-            #[cfg(target_os = "macos")]
-            {
-                b = b.visible(false);
-            }
-            let _ = b.build();
+            // 保持默认 visible 建窗:hidden 建窗 + NSWindow 直显会导致 WRY webview
+            // 不渲染(白屏),宁可首建闪一帧默认位置,由 animate_open 瞬移接管
+            let _ = WebviewWindowBuilder::new(h, "review", WebviewUrl::App("index.html".into()))
+                .title("校对与发送")
+                .inner_size(560.0, 580.0)
+                .min_inner_size(REVIEW_MIN_W, REVIEW_MIN_H)
+                .decorations(false)
+                .always_on_top(true)
+                .resizable(true)
+                .skip_taskbar(true)
+                .shadow(true)
+                .focused(true)
+                .build();
         }
     }
     // macOS:贴指示条上方居中 + Dock 式展开动效;其余平台走默认显示
